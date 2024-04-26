@@ -1,0 +1,89 @@
+cmake_minimum_required (VERSION 3.27)
+project (MilanClient VERSION 0.1.0 LANGUAGES CXX)
+
+
+# ! Global configuration.
+# ========================================
+
+set (CMAKE_CXX_STANDARD 20)
+set (CMAKE_CXX_STANDARD_REQUIRED ON)
+
+cmake_policy (SET CMP0057 NEW)
+cmake_policy (SET CMP0077 NEW)
+
+set_property (GLOBAL PROPERTY USER_FOLDERS ON)
+
+
+# ! Build options.
+# ========================================
+
+option (MILAN_BUILD_HOST "Build the client host target" ON)
+option (MILAN_BUILD_UTILS "Build auxiliary targets" ON)
+
+if (DEFINED ENV{MILAN_CMAKE_PRESET})
+  set (MILAN_CMAKE_PRESET $ENV{MILAN_CMAKE_PRESET})
+  message ("-- Environment selected preset: ${MILAN_CMAKE_PRESET}")
+else ()
+  message (FATAL_ERROR "!! Environment does not select preset via MILAN_CMAKE_PRESET")
+endif ()
+
+
+# ! Build configuration.
+# ========================================
+
+list (APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/Build)
+include (MilanBuildConfig)
+
+
+# ! Output paths.
+# ========================================
+
+if (CMAKE_GENERATOR MATCHES "Visual Studio 17 2022")
+  message ("-- Detected supported generator: ${CMAKE_GENERATOR}")
+  set (MILAN_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/Build/${MILAN_CMAKE_PRESET}/$<CONFIG>)
+else ()
+  message (FATAL_ERROR "!! Detected unsupported generator: ${CMAKE_GENERATOR}")
+endif ()
+
+set (MILAN_OUTPUT_DIRECTORY_CLIENT      ${MILAN_OUTPUT_DIRECTORY})
+set (MILAN_OUTPUT_DIRECTORY_EXTERNAL    ${MILAN_OUTPUT_DIRECTORY}/ThirdParty)
+set (MILAN_OUTPUT_DIRECTORY_UTILITIES   ${MILAN_OUTPUT_DIRECTORY}/Utilities)
+
+message ("-- Configured output path (client):     ${MILAN_OUTPUT_DIRECTORY_CLIENT}")
+message ("-- Configured output path (external):   ${MILAN_OUTPUT_DIRECTORY_EXTERNAL}")
+message ("-- Configured output path (utilities):  ${MILAN_OUTPUT_DIRECTORY_UTILITIES}")
+
+
+# ! Project subtrees.
+# ========================================
+
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_EXTERNAL})
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_EXTERNAL})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_EXTERNAL})
+
+add_subdirectory ("ThirdParty")
+
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
+
+add_subdirectory ("MilanHost")
+
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
+
+add_subdirectory ("Utilities")
+
+
+add_custom_target (Repo
+  SOURCES
+    Build/.gitignore
+    Build/MilanBuildConfig.cmake
+    #.editorconfig
+    #.gitattributes
+    .gitignore
+    .gitmodules
+    CMakeLists.txt
+    CMakePresets.json
+)
