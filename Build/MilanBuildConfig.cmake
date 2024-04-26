@@ -12,12 +12,12 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND WIN32)
 
   add_compile_definitions ( "_CRT_SECURE_NO_WARNINGS" "NOMINMAX" )
 
-  add_compile_options ( "/MP" "/utf-8"
+  add_compile_options ( "/MP" "/utf-8" "/Zi"
     "$<$<IN_LIST:$<CONFIG>,MILAN-DEBUG>:/MDd;/Od;/JMC>"
     "$<$<IN_LIST:$<CONFIG>,MILAN-RELEASE;MILAN-FINAL>:/MD;/O2>"
   )
 
-  add_link_options ( "/DEBUG" "/Zi"
+  add_link_options ( "/DEBUG"
     "$<$<IN_LIST:$<CONFIG>,MILAN-DEBUG>:/OPT:NOREF;/OPT:NOICF>"
     "$<$<IN_LIST:$<CONFIG>,MILAN-RELEASE;MILAN-FINAL>:/OPT:REF;/OPT:ICF;/INCREMENTAL:NO>"
   )

@@ -76,14 +76,19 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
 add_subdirectory ("Utilities")
 
 
-add_custom_target (Repo
-  SOURCES
-    Build/.gitignore
-    Build/MilanBuildConfig.cmake
-    #.editorconfig
-    #.gitattributes
-    .gitignore
-    .gitmodules
-    CMakeLists.txt
-    CMakePresets.json
+# ! Bogus target for freestanding files.
+# ========================================
+
+set (REPO_SOURCES
+  Build/.gitignore
+  Build/MilanBuildConfig.cmake
+  .editorconfig
+  #.gitattributes
+  .gitignore
+  .gitmodules
+  CMakeLists.txt
+  CMakePresets.json
 )
+
+add_custom_target (Repo SOURCES ${REPO_SOURCES})
+source_group (TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${REPO_SOURCES})
