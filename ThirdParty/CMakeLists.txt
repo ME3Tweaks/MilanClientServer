@@ -78,3 +78,12 @@ set (LESDK_WITH_TESTS OFF)
 
 add_subdirectory ("LExSDKv2")
 set_target_properties (LESDK-LE3 PROPERTIES FOLDER "ThirdParty")
+
+
+# ! Corrosion scripts.
+# ========================================
+
+set (CORROSION_BUILD_TESTS OFF)
+set (CORROSION_INSTALL_ONLY OFF)
+
+add_subdirectory ("corrosion")

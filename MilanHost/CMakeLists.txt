@@ -10,12 +10,12 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Entry.hpp
 )
 
-set (PROJ_LINKS ImGui ImPlot LESDK-LE3)
+set (PROJ_LINKS ImGui ImPlot LESDK-LE3 MilanCore)
 
 add_library (${PROJ_TARGET} SHARED ${PROJ_SOURCES})
 source_group (TREE "${PROJ_FOLDER}" FILES ${PROJ_SOURCES})
 
-set_target_properties (${PROJ_TARGET} PROPERTIES OUTPUT_NAME "Milan" SUFFIX ".asi")
+set_target_properties (${PROJ_TARGET} PROPERTIES SUFFIX ".asi")
 
 target_compile_definitions (${PROJ_TARGET} PUBLIC ${MILAN_COMPILE_DEFINITIONS})
 target_compile_options (${PROJ_TARGET} PUBLIC ${MILAN_COMPILE_OPTIONS})

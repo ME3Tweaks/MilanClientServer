@@ -3,5 +3,6 @@ resolver = "2"
 members = [
     "Crates/milan_protocol",
     "Crates/milan_runtime",
-    "MilanCore/client_core"
+    "MilanCore/client_core",
+    "MilanCore/client_ffi",
 ]
