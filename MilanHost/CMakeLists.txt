@@ -10,10 +10,10 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Console.hpp
   ${PROJ_FOLDER}/Entry.cpp
   ${PROJ_FOLDER}/Entry.hpp
-  ${PROJ_FOLDER}/Logs.cpp
-  ${PROJ_FOLDER}/Logs.hpp
-  ${PROJ_FOLDER}/Profilers.cpp
-  ${PROJ_FOLDER}/Profilers.hpp
+  ${PROJ_FOLDER}/Output.cpp
+  ${PROJ_FOLDER}/Output.hpp
+  ${PROJ_FOLDER}/Profiler.cpp
+  ${PROJ_FOLDER}/Profiler.hpp
 )
 
 set (PROJ_LINKS
