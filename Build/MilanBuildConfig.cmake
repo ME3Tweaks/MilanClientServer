@@ -13,22 +13,23 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND WIN32)
   add_compile_definitions ( "_CRT_SECURE_NO_WARNINGS" "NOMINMAX" )
 
   add_compile_options ( "/MP" "/utf-8" "/Zi"
-    "$<$<IN_LIST:$<CONFIG>,MILAN_DEBUG>:/MDd;/Od;/JMC>"
-    "$<$<IN_LIST:$<CONFIG>,MILAN_RELEASE;MILAN_FINAL>:/MD;/O2>"
+    "$<$<IN_LIST:$<CONFIG>,DEBUG>:/MDd;/Od;/JMC>"
+    "$<$<IN_LIST:$<CONFIG>,RELEASE;FINAL>:/MD;/O2>"
   )
 
   add_link_options ( "/DEBUG"
-    "$<$<IN_LIST:$<CONFIG>,MILAN_DEBUG>:/OPT:NOREF;/OPT:NOICF>"
-    "$<$<IN_LIST:$<CONFIG>,MILAN_RELEASE;MILAN_FINAL>:/OPT:REF;/OPT:ICF;/INCREMENTAL:NO>"
+    "$<$<IN_LIST:$<CONFIG>,DEBUG>:/OPT:NOREF;/OPT:NOICF>"
+    "$<$<IN_LIST:$<CONFIG>,RELEASE;FINAL>:/OPT:REF;/OPT:ICF;/INCREMENTAL:NO>"
   )
 
   set (MILAN_COMPILE_DEFINITIONS
-    "$<$<IN_LIST:$<CONFIG>,MILAN_DEBUG>:_DEBUG>"
-    "$<$<IN_LIST:$<CONFIG>,MILAN_FINAL>:_FINAL_RELEASE>"
+    "$<$<IN_LIST:$<CONFIG>,DEBUG>:_DEBUG>"
+    "$<$<IN_LIST:$<CONFIG>,FINAL>:_FINAL_RELEASE>"
   )
 
   set (MILAN_COMPILE_OPTIONS
     "/W4" "/WX" "/Zc:__cplusplus" "/permissive"
+    "/wd4121"  # -warn: alignment of member was sensitive to padding
     "/wd4127"  # -warn: conditional expression is constant
   )
 
