@@ -6,11 +6,21 @@ set (PROJ_TARGET MilanHost)
 set (PROJ_FOLDER ${CMAKE_CURRENT_SOURCE_DIR})
 
 set (PROJ_SOURCES
+  ${PROJ_FOLDER}/Console.cpp
+  ${PROJ_FOLDER}/Console.hpp
   ${PROJ_FOLDER}/Entry.cpp
   ${PROJ_FOLDER}/Entry.hpp
+  ${PROJ_FOLDER}/Logs.cpp
+  ${PROJ_FOLDER}/Logs.hpp
+  ${PROJ_FOLDER}/Profilers.cpp
+  ${PROJ_FOLDER}/Profilers.hpp
 )
 
-set (PROJ_LINKS ImGui ImPlot LESDK-LE3 MilanCore)
+set (PROJ_LINKS
+  MilanCore  # ECSM FFI
+  ImGui ImPlot LESDK-LE3  # External libraries.
+  d3d11.lib dxgi.lib dxguid.lib  # DirectX 11 SDK.
+)
 
 add_library (${PROJ_TARGET} SHARED ${PROJ_SOURCES})
 source_group (TREE "${PROJ_FOLDER}" FILES ${PROJ_SOURCES})
