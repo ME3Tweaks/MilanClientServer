@@ -1,6 +1,3 @@
-// TODO(d00t): Remove this.
-#define SDK_TARGET_LE3
-
 #include <LESDK/Init.hpp>
 #include <LESDK/Headers.hpp>
 
