@@ -3,17 +3,30 @@
 # ========================================
 
 
+set (PROJ_TARGET MilanCore)
+
+set (FFI_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/milan_ecsm_ffi.h)
+set (FFI_CRATE client_ffi)
+
+
+# Ensure an empty ffi header updated by cbindgen later during build.
+
+file (TOUCH ${FFI_HEADER})
+
+
+# Import Rust crate as a CMake target and link it.
+
 corrosion_import_crate (
   MANIFEST_PATH "${CMAKE_SOURCE_DIR}/Cargo.toml"
   CRATE_TYPES "staticlib"
-  CRATES "client_ffi"
+  CRATES "${FFI_CRATE}"
 )
 
-add_library (MilanCore INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/milan_ecsm_ffi.h)
+add_library (${PROJ_TARGET} INTERFACE ${FFI_HEADER})
 
-target_compile_definitions (MilanCore INTERFACE ${MILAN_COMPILE_DEFINITIONS})
-target_include_directories (MilanCore INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries (MilanCore INTERFACE client_ffi)
+target_compile_definitions (${PROJ_TARGET} INTERFACE ${MILAN_COMPILE_DEFINITIONS})
+target_include_directories (${PROJ_TARGET} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries (${PROJ_TARGET} INTERFACE ${FFI_CRATE})
 
 
 # Group auto-generated cargo targets.
