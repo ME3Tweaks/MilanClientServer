@@ -6,14 +6,16 @@ set (PROJ_TARGET MilanHost)
 set (PROJ_FOLDER ${CMAKE_CURRENT_SOURCE_DIR})
 
 set (PROJ_SOURCES
+  ${PROJ_FOLDER}/Builtins.cpp
+  ${PROJ_FOLDER}/Builtins.hpp
   ${PROJ_FOLDER}/Console.cpp
   ${PROJ_FOLDER}/Console.hpp
   ${PROJ_FOLDER}/Entry.cpp
   ${PROJ_FOLDER}/Entry.hpp
   ${PROJ_FOLDER}/Output.cpp
   ${PROJ_FOLDER}/Output.hpp
-  ${PROJ_FOLDER}/Profiler.cpp
-  ${PROJ_FOLDER}/Profiler.hpp
+  ${PROJ_FOLDER}/Panels.cpp
+  ${PROJ_FOLDER}/Panels.hpp
 )
 
 set (PROJ_LINKS

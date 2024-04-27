@@ -1,8 +1,8 @@
 #include <LESDK/Init.hpp>
-#include "Profiler.hpp"
+#include "Panels.hpp"
 
 
-namespace Milan::Profiler
+namespace Milan::Panels
 {
     bool gb_debugPanelEnabled = false;
 
@@ -34,6 +34,18 @@ namespace Milan::Profiler
         ImGui::DestroyContext();
     }
 
+    void OpenInterface(wchar_t const* const Reason)
+    {
+        std::fwprintf(stdout, L"opening interface, reason = %s\n", Reason ? Reason : L"???");
+        gb_debugPanelEnabled = true;
+    }
+
+    void CloseInterface(wchar_t const* const Reason)
+    {
+        std::fwprintf(stdout, L"closing interface, reason = %s\n", Reason ? Reason : L"???");
+        gb_debugPanelEnabled = false;
+    }
+
 
     // ! Hooks to enable Imgui integration.
     // ========================================
@@ -50,7 +62,7 @@ namespace Milan::Profiler
         IO.MousePos.y = static_cast<float>(MousePosition.y);
 
         if (uMsg == WM_KEYUP && wParam == VK_DELETE && !gb_debugPanelEnabled)
-            gb_debugPanelEnabled = true;
+            OpenInterface(L"keybind (vk_delete)");
 
         if (gb_debugPanelEnabled)
         {
@@ -107,7 +119,11 @@ namespace Milan::Profiler
 
             if (gb_debugPanelEnabled)
             {
-                ImGui::ShowDemoWindow(&gb_debugPanelEnabled);
+                bool bShouldRemain = true;
+                ImGui::ShowDemoWindow(&bShouldRemain);
+
+                if (!bShouldRemain)
+                    CloseInterface(L"ui");
             }
 
             ImGui::EndFrame();

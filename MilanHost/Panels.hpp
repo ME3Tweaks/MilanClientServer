@@ -1,5 +1,5 @@
 /**
- * @file        MilanHost/Profiler.hpp
+ * @file        MilanHost/Panels.hpp
  * @header      Declarations for Imgui integration.
  */
 
@@ -20,7 +20,7 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #define GLOBAL_WNDPROC_RVA  ::LESDK::Address::FromOffset(0x99D2C0)
 
 
-namespace Milan::Profiler
+namespace Milan::Panels
 {
     extern bool gb_debugPanelEnabled;
 
@@ -40,6 +40,9 @@ namespace Milan::Profiler
 
     void Initialize(::LESDK::Initializer& Context);
     void Terminate();
+
+    void OpenInterface(wchar_t const* Reason);
+    void CloseInterface(wchar_t const* Reason);
 
 
     // ! Hooks to enable Imgui integration.
