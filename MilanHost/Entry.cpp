@@ -7,11 +7,11 @@
 #include <milan_ecsm_ffi.h>
 
 // Include our own stuff.
-#include "Builtins.hpp"
-#include "Console.hpp"
 #include "Entry.hpp"
-#include "Output.hpp"
-#include "Panels.hpp"
+#include "Systems/Builtins.hpp"
+#include "Systems/Console.hpp"
+#include "Systems/Output.hpp"
+#include "Systems/Panels.hpp"
 
 
 SPI_PLUGINSIDE_SUPPORT(L"MilanHost", L"Project Milan Team", L"0.1.0", SPI_GAME_LE3, SPI_VERSION_ANY);

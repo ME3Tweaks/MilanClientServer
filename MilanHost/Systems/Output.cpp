@@ -1,7 +1,7 @@
 #include <LESDK/Init.hpp>
 #include <LESDK/Headers.hpp>
 
-#include "Output.hpp"
+#include "Systems/Output.hpp"
 
 
 namespace Milan::Output

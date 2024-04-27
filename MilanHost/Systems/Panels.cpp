@@ -1,5 +1,5 @@
 #include <LESDK/Init.hpp>
-#include "Panels.hpp"
+#include "Systems/Panels.hpp"
 
 
 namespace Milan::Panels
