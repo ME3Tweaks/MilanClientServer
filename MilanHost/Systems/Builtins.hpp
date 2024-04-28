@@ -1,6 +1,6 @@
 /**
- * @file        MilanHost/Builtins.hpp
- * @header      Implementation of a fake subsystem wrapping SDK built-ins initialization.
+ * @file        MilanHost/Systems/Builtins.hpp
+ * @header      Implementation of a subsystem wrapping SDK built-ins initialization.
  */
 
 #pragma once

@@ -1,5 +1,5 @@
 /**
- * @file        MilanHost/Panels.hpp
+ * @file        MilanHost/Systems/Panels.hpp
  * @header      Declarations for Imgui integration.
  */
 

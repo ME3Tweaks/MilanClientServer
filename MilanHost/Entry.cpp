@@ -7,7 +7,9 @@
 #include <milan_ecsm_ffi.h>
 
 // Include our own stuff.
+#include "Base.hpp"
 #include "Entry.hpp"
+#include "Logger.hpp"
 #include "Systems/Builtins.hpp"
 #include "Systems/Console.hpp"
 #include "Systems/Output.hpp"

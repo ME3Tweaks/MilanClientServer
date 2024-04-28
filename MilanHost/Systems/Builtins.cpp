@@ -17,6 +17,16 @@ namespace Milan::Builtins
         UObject::GObjObjects = Context.ResolveTyped<TArray<UObject*>>(BUILTIN_GOBOBJECTS_RIP);
         SFXName::GBioNamePools = Context.ResolveTyped<SFXNameEntry const*>(BUILTIN_SFXNAMEPOOLS_RIP);
         SFXName::GInitMethod = Context.ResolveTyped<SFXName::tInitMethod>(BUILTIN_SFXNAMEINIT_PHOOK);
+
+
+        // There is one thing we absolutely MUST have, and it is GMalloc.
+        // If we failed to initialize GMalloc, just bail out early because we can't recover gracefully.
+
+        assert(GMalloc != nullptr && *GMalloc != nullptr);
+
+        void* const BogusAllocation = (*GMalloc)->Malloc(4, UN_DEFAULT_ALIGNMENT);
+        void* const BogusReallocation = (*GMalloc)->Realloc(BogusAllocation, 128, UN_DEFAULT_ALIGNMENT);
+        (*GMalloc)->Free(BogusReallocation);
     }
 
     void Terminate() {}

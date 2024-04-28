@@ -14,8 +14,12 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Systems/Output.hpp
   ${PROJ_FOLDER}/Systems/Panels.cpp
   ${PROJ_FOLDER}/Systems/Panels.hpp
+  ${PROJ_FOLDER}/Base.cpp
+  ${PROJ_FOLDER}/Base.hpp
   ${PROJ_FOLDER}/Entry.cpp
   ${PROJ_FOLDER}/Entry.hpp
+  ${PROJ_FOLDER}/Logger.cpp
+  ${PROJ_FOLDER}/Logger.hpp
 )
 
 set (PROJ_LINKS

@@ -19,6 +19,8 @@ namespace Milan::Panels
 
     void Initialize(::LESDK::Initializer& Context)
     {
+        // TODO: Use custom allocation functions.
+
         ImGui::CreateContext();
         ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
 
