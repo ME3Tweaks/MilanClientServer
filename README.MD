@@ -1,9 +1,9 @@
 MilanClientServer
 ===================
 
-You need to have the following installed:
+You need to have the following installed when building on Windows:
 
-   * Visual Studio 2022 with at least C++ workload.
+   * Visual Studio 2022 with at least C++ workload and Windows 10 / 11 SDK.
    * Reasonably up-to-date `stable-x86_64-pc-windows-msvc` Rust toolchain.
 
 Use the [official rustup-init](https://www.rust-lang.org/tools/install) tool
@@ -14,7 +14,7 @@ management tool.
 
 ## How to build:
 
-**Are you building client code?**
+### Are you building client code?
 
 ```
 > cmake --preset VisualStudio
@@ -25,7 +25,16 @@ Note that the client `MilanHost` ASI will invoke `cargo` as a part of its
 build process, but will only build the little subset of Rust code it requires.
 These commands **must** be run in Developer PowerShell / Command Prompt for VS 2022.
 
-**Are you building server code?**
+> **Important**
+>
+> Updating C++ project configuration, which includes changing / adding source files,
+> must be done through the CMakeLists.txt file for the project, and not Visual Studio
+> itself. Additionally, it is not recommended to *create* new files via Visual Studio
+> because it defaults to build root instead of source root. That makes it very easy
+> to leave your new file(s) in a temporary, git-ignored build directory.
+
+
+### Are you building server code?
 
 ```
 > cargo build [--release] [-p 'server_*']
