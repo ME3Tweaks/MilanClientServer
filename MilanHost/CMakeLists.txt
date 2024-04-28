@@ -6,6 +6,9 @@ set (PROJ_TARGET MilanHost)
 set (PROJ_FOLDER ${CMAKE_CURRENT_SOURCE_DIR})
 
 set (PROJ_SOURCES
+  ${PROJ_FOLDER}/Containers/string.hpp
+  ${PROJ_FOLDER}/Containers/unordered_map.hpp
+  ${PROJ_FOLDER}/Containers/vector.hpp
   ${PROJ_FOLDER}/Systems/Builtins.cpp
   ${PROJ_FOLDER}/Systems/Builtins.hpp
   ${PROJ_FOLDER}/Systems/Console.cpp

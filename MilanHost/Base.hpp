@@ -293,46 +293,44 @@ public:
 // ! Memory utilities.
 // ========================================
 
-/**
- * @brief       Duck-typed @c std::allocator implementation using the game's allocator.
- * @tparam      T Type being allocated, i.e. what the using container stores.
- */
-template<class T>
-struct game_alloc final
+namespace game
 {
-    using value_type = T;
-    using size_type = std::size_t;
-    using difference_type = std::ptrdiff_t;
-    using propagate_on_container_move_assignment = std::true_type;
-    using is_always_equal = std::true_type;
+    /**
+     * @brief       Duck-typed @c std::allocator implementation using the game's allocator.
+     * @tparam      T Type being allocated, i.e. what the using container stores.
+     */
+    template<class T>
+    struct allocator final
+    {
+        using value_type = T;
+        using size_type = std::size_t;
+        using difference_type = std::ptrdiff_t;
+        using propagate_on_container_move_assignment = std::true_type;
+        using is_always_equal = std::true_type;
 
-    game_alloc() noexcept = default;
-    game_alloc(game_alloc const&) noexcept = default;
+        allocator() noexcept = default;
+        allocator(allocator const&) noexcept = default;
 
-    template<class U> game_alloc(game_alloc<U> const&) noexcept {}
+        template<class U> allocator(allocator<U> const&) noexcept {}
 
-    T* allocate(std::size_t n);
-    void deallocate(T* p, std::size_t n);
-};
+        T* allocate(std::size_t n);
+        void deallocate(T* p, std::size_t n);
+    };
 
-template<class T>
-T* game_alloc<T>::allocate(std::size_t const n)
-{
-    auto const Size = static_cast<DWORD>(n * sizeof(T));
-    return reinterpret_cast<T*>((*GMalloc)->Malloc(Size, UN_DEFAULT_ALIGNMENT));
+    template<class T>
+    T* allocator<T>::allocate(std::size_t const n)
+    {
+        auto const Size = static_cast<DWORD>(n * sizeof(T));
+        return reinterpret_cast<T*>((*GMalloc)->Malloc(Size, UN_DEFAULT_ALIGNMENT));
+    }
+
+    template<class T>
+    void allocator<T>::deallocate(T* const p, std::size_t const n)
+    {
+        MILAN_UNUSED(n);
+        (*GMalloc)->Free(p);
+    }
 }
-
-template<class T>
-void game_alloc<T>::deallocate(T* const p, std::size_t const n)
-{
-    MILAN_UNUSED(n);
-    (*GMalloc)->Free(p);
-}
-
-// TODO: Define "game" namespace (lowercase!) with std container typedefs:
-//   - using string = std::basic_string<char, std::char_traits<char>, game_alloc<char>>;
-//   - using wstring = std::basic_string<wchar_t, std::char_traits<wchar_t>, game_alloc<wchar_t>>;
-//   - using unordered_map = std::unordered_map<Key, T, std::hash<Key>, std::equal_to<Key>, ::game_alloc<std::pair<const Key, T>>>;
 
 
 // ! Misc types.
