@@ -8,8 +8,10 @@
 #include <cstdio>
 #include <mutex>
 
-#include "Base.hpp"
 #include "Containers/vector.hpp"
+
+#include "Base.hpp"
+#include "Misc.hpp"
 
 
 // ! Output devices.
@@ -18,6 +20,8 @@
 class ConsoleLoggerOutput final : public ILoggerOutput
 {
 public:
+
+    ConsoleLoggerOutput();
 
     ~ConsoleLoggerOutput() noexcept override;
     void AcceptAnsi(ESeverity Severity, char const* Data, size_t Size) override;
@@ -31,7 +35,7 @@ class FileLoggerOutput final : public ILoggerOutput
 
 public:
 
-    FileLoggerOutput(std::string_view OutputPath);
+    FileLoggerOutput(std::string_view OutputPath, bool bAppend);
     bool Initialized() const noexcept;
 
     ~FileLoggerOutput() noexcept override;
@@ -44,15 +48,14 @@ public:
 // ! Logger implementation.
 // ========================================
 
-// TODO: Add relative timestamp once Timer subsystem is implemented.
-
 class MilanLogger final : public ILogger, public NonCopyable
 {
     // These unique_ptrs will allocate through GMalloc because ILoggerOutput specifies that.
     using SinkVector = game::vector<std::pair<std::unique_ptr<ILoggerOutput>, int>>;
 
-    SinkVector Sinks{};
-    std::mutex WriteMutex;
+    SinkVector      Sinks{};
+    std::mutex      WriteMutex;
+    RelativeTimer   MessageTimer{};
 
 public:
 

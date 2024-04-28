@@ -39,7 +39,7 @@ SPI_IMPLEMENT_ATTACH
     {
         ::MilanLogger Logger{};
         Logger.RegisterOutput(1, new ConsoleLoggerOutput());
-        Logger.RegisterOutput(2, new FileLoggerOutput("MilanLog.txt"));
+        Logger.RegisterOutput(2, new FileLoggerOutput("MilanLog.txt", true));
 
         Logger.WriteFormatUnicode(MILAN_HEREW, ESeverity::Trace, L"This is a very verbose line.");
         Logger.WriteFormatUnicode(MILAN_HEREW, ESeverity::Debug, L"Here's something you should know. %s", L"2 + 2 != 5");

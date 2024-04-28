@@ -23,6 +23,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Entry.hpp
   ${PROJ_FOLDER}/Logger.cpp
   ${PROJ_FOLDER}/Logger.hpp
+  ${PROJ_FOLDER}/Misc.cpp
+  ${PROJ_FOLDER}/Misc.hpp
 )
 
 set (PROJ_LINKS

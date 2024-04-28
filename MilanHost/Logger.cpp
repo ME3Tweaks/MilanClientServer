@@ -86,12 +86,12 @@ unsigned short MapSeverityToColor(ESeverity const Severity)
     {
     case ESeverity::Trace:  return FG_GRAY;
     case ESeverity::Debug:  return FG_CYAN;
-    case ESeverity::Info:   return FG_WHITE;
+    case ESeverity::Info:   return FG_LIGHTGRAY;
     case ESeverity::Warn:   return FG_YELLOW;
     case ESeverity::Error:  return FG_RED;
     };
 
-    return FG_RED;
+    return FG_LIGHTGRAY;
 }
 
 inline unsigned short ExchangeConsoleColor(unsigned short const Attributes)
@@ -102,10 +102,28 @@ inline unsigned short ExchangeConsoleColor(unsigned short const Attributes)
     if (::GetConsoleScreenBufferInfo(::GetStdHandle(STD_OUTPUT_HANDLE), &CSB_INFO))
         PREV_COLOR = CSB_INFO.wAttributes;
 
-    BOOL const RESULT = ::SetConsoleTextAttribute(::GetStdHandle(STD_OUTPUT_HANDLE), Attributes);
-    assert(RESULT == TRUE);
+    ::SetConsoleTextAttribute(::GetStdHandle(STD_OUTPUT_HANDLE), Attributes);
 
     return PREV_COLOR;
+}
+
+bool EnableVirtualTerminalMode(bool const bStandardError)
+{
+    DWORD const HandleIndex = bStandardError ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE;
+
+    HANDLE const StandardOutput = ::GetStdHandle(HandleIndex);
+    if (StandardOutput == INVALID_HANDLE_VALUE)
+        return false;
+
+    DWORD CurrentMode = 0u;
+    if (!::GetConsoleMode(StandardOutput, &CurrentMode))
+        return false;
+
+    CurrentMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    if (!::SetConsoleMode(StandardOutput, CurrentMode))
+        return false;
+
+    return true;
 }
 
 inline void WriteAnsiToStandard(std::FILE* const Stream,
@@ -129,6 +147,11 @@ inline void WriteUnicodeToStandard(std::FILE* const Stream,
 
 // ! ConsoleLoggerOutput impl.
 // ========================================
+
+ConsoleLoggerOutput::ConsoleLoggerOutput()
+{
+    // ...
+}
 
 ConsoleLoggerOutput::~ConsoleLoggerOutput() noexcept {}
 
@@ -163,9 +186,9 @@ void ConsoleLoggerOutput::Flush(bool const bError)
 // ! FileLoggerOutput impl.
 // ========================================
 
-FileLoggerOutput::FileLoggerOutput(std::string_view const OutputPath)
+FileLoggerOutput::FileLoggerOutput(std::string_view const OutputPath, bool const bAppend)
 {
-    OutputFile = std::fopen(OutputPath.data(), "wb");
+    OutputFile = std::fopen(OutputPath.data(), bAppend ? "ab" : "wb");
     if (OutputFile == nullptr)
     {
         std::string ErrorText{};
@@ -232,8 +255,8 @@ void MilanLogger::WriteAnsi(CodePlaceA const& Place,
     ESeverity const Severity, std::string_view const Message)
 {
     std::array<char, 4096> FormatBuffer{ '\0' };
-    int const Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(),
-        "[%s] %s  [%s:%d]", FormatSeverityAnsi(Severity), Message.data(), Place.File, Place.Line);
+    int const Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%.3f] [%s] %s  [%s:%d]",
+        MessageTimer.GetSeconds(), FormatSeverityAnsi(Severity), Message.data(), Place.File, Place.Line);
 
     assert(Result > 0);
 
@@ -249,8 +272,8 @@ void MilanLogger::WriteUnicode(CodePlaceW const& Place,
     ESeverity const Severity, std::wstring_view const Message)
 {
     std::array<wchar_t, 2048> FormatBuffer{ '\0' };
-    int const Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(),
-        L"[%s] %s  [%s:%d]", FormatSeverityUnicode(Severity), Message.data(), Place.File, Place.Line);
+    int const Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%.3f] [%s] %s  [%s:%d]",
+        MessageTimer.GetSeconds(), FormatSeverityUnicode(Severity), Message.data(), Place.File, Place.Line);
 
     assert(Result > 0);
 
