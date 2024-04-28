@@ -6,7 +6,10 @@
 #pragma once
 
 #include <cstdio>
+#include <mutex>
+
 #include "Base.hpp"
+#include "Containers/vector.hpp"
 
 
 // ! Output devices.
@@ -41,7 +44,24 @@ public:
 // ! Logger implementation.
 // ========================================
 
+// TODO: Add relative timestamp once Timer subsystem is implemented.
+
 class MilanLogger final : public ILogger, public NonCopyable
 {
+    // These unique_ptrs will allocate through GMalloc because ILoggerOutput specifies that.
+    using SinkVector = game::vector<std::pair<std::unique_ptr<ILoggerOutput>, int>>;
 
+    SinkVector Sinks{};
+    std::mutex WriteMutex;
+
+public:
+
+    MilanLogger();
+
+    ~MilanLogger() noexcept override;
+    void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view Message) override;
+    void WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Message) override;
+
+    void RegisterOutput(int Tag, ILoggerOutput* Output);
+    void UnregisterOutput(int Tag);
 };

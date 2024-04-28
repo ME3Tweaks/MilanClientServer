@@ -36,6 +36,18 @@ SPI_IMPLEMENT_ATTACH
     // This is linked to ecsm ffi.
     ::say_hello("stranger");
 
+    {
+        ::MilanLogger Logger{};
+        Logger.RegisterOutput(1, new ConsoleLoggerOutput());
+        Logger.RegisterOutput(2, new FileLoggerOutput("MilanLog.txt"));
+
+        Logger.WriteFormatUnicode(MILAN_HEREW, ESeverity::Trace, L"This is a very verbose line.");
+        Logger.WriteFormatUnicode(MILAN_HEREW, ESeverity::Debug, L"Here's something you should know. %s", L"2 + 2 != 5");
+        Logger.WriteFormatUnicode(MILAN_HEREW, ESeverity::Info, L"Hello there, %s!", L"someone");
+        Logger.WriteFormatUnicode(MILAN_HEREW, ESeverity::Warn, L"Careful out there");
+        Logger.WriteFormatUnicode(MILAN_HEREW, ESeverity::Error, L"Some error happened... %d", 42);
+    }
+
     return true;
 }
 

@@ -79,7 +79,7 @@ namespace Detail
                 if (FileStartsWithA("/MilanHost/", Chunk)
                     || FileStartsWithA("\\MilanHost\\", Chunk))
                 {
-                    return Chunk + 10;
+                    return Chunk + 11;
                 }
 
                 Chunk = Cursor;
@@ -107,7 +107,7 @@ namespace Detail
                 if (FileStartsWithW(L"/MilanHost/", Chunk)
                     || FileStartsWithW(L"\\MilanHost\\", Chunk))
                 {
-                    return Chunk + 10;
+                    return Chunk + 11;
                 }
 
                 Chunk = Cursor;
@@ -170,6 +170,88 @@ struct CodePlaceW final
 #define MILAN_HEREW  ::CodePlaceW { .Func = MILAN_FUNCW, .File = MILAN_FILEW, .Line = MILAN_LINEW }
 
 
+// ! Memory utilities.
+// ========================================
+
+namespace game
+{
+    /**
+     * @brief       Duck-typed @c std::allocator implementation using the game's allocator.
+     * @tparam      T Type being allocated, i.e. what the using container stores.
+     */
+    template<class T>
+    struct allocator final
+    {
+        using value_type = T;
+        using size_type = std::size_t;
+        using difference_type = std::ptrdiff_t;
+        using propagate_on_container_move_assignment = std::true_type;
+        using is_always_equal = std::true_type;
+
+        allocator() noexcept = default;
+        allocator(allocator const&) noexcept = default;
+
+        template<class U> allocator(allocator<U> const&) noexcept {}
+
+        T* allocate(std::size_t n);
+        void deallocate(T* p, std::size_t n);
+    };
+
+    template<class T>
+    T* allocator<T>::allocate(std::size_t const n)
+    {
+        auto const Size = static_cast<DWORD>(n * sizeof(T));
+        return reinterpret_cast<T*>((*GMalloc)->Malloc(Size, UN_DEFAULT_ALIGNMENT));
+    }
+
+    template<class T>
+    void allocator<T>::deallocate(T* const p, std::size_t const n)
+    {
+        MILAN_UNUSED(n);
+        (*GMalloc)->Free(p);
+    }
+}
+
+/**
+ * @brief
+ * A mixin class which ensures that derived types,
+ * when using new / delete operators, are (de)allocated
+ * through the game's allocator (GMalloc).
+ */
+class AllocateThroughEngine
+{
+public:
+    inline void* operator new(size_t s);
+    inline void* operator new[](size_t s);
+    inline void  operator delete(void* p);
+    inline void  operator delete[](void* p);
+};
+
+inline void* AllocateThroughEngine::operator new(size_t const s)
+{
+    assert(GMalloc != nullptr);
+    return (*GMalloc)->Malloc(static_cast<DWORD>(s), UN_DEFAULT_ALIGNMENT);
+}
+
+inline void* AllocateThroughEngine::operator new[](size_t s)
+{
+    assert(GMalloc != nullptr);
+    return (*GMalloc)->Malloc(static_cast<DWORD>(s), UN_DEFAULT_ALIGNMENT);
+}
+
+inline void AllocateThroughEngine::operator delete(void* const p)
+{
+    assert(GMalloc != nullptr);
+    (*GMalloc)->Free(p);
+}
+
+inline void AllocateThroughEngine::operator delete[](void* const p)
+{
+    assert(GMalloc != nullptr);
+    (*GMalloc)->Free(p);
+}
+
+
 // ! Core logging interfaces.
 // ========================================
 
@@ -190,7 +272,7 @@ enum struct ESeverity : int
  * @details
  * Both @c Accept* methods expect @c Size argument to exclude null termination!
  */
-class ILoggerOutput
+class ILoggerOutput : public AllocateThroughEngine
 {
 public:
 
@@ -210,7 +292,7 @@ public:
  * The design assumes that all output will be directed to one or more
  * instances of @ref ILoggerOutput class.
  */
-class ILogger
+class ILogger : public AllocateThroughEngine
 {
 public:
 
@@ -288,49 +370,6 @@ public:
     void WriteAnsi(CodePlaceA const&, ESeverity, std::string_view) override {}
     void WriteUnicode(CodePlaceW const&, ESeverity, std::wstring_view) override {}
 };
-
-
-// ! Memory utilities.
-// ========================================
-
-namespace game
-{
-    /**
-     * @brief       Duck-typed @c std::allocator implementation using the game's allocator.
-     * @tparam      T Type being allocated, i.e. what the using container stores.
-     */
-    template<class T>
-    struct allocator final
-    {
-        using value_type = T;
-        using size_type = std::size_t;
-        using difference_type = std::ptrdiff_t;
-        using propagate_on_container_move_assignment = std::true_type;
-        using is_always_equal = std::true_type;
-
-        allocator() noexcept = default;
-        allocator(allocator const&) noexcept = default;
-
-        template<class U> allocator(allocator<U> const&) noexcept {}
-
-        T* allocate(std::size_t n);
-        void deallocate(T* p, std::size_t n);
-    };
-
-    template<class T>
-    T* allocator<T>::allocate(std::size_t const n)
-    {
-        auto const Size = static_cast<DWORD>(n * sizeof(T));
-        return reinterpret_cast<T*>((*GMalloc)->Malloc(Size, UN_DEFAULT_ALIGNMENT));
-    }
-
-    template<class T>
-    void allocator<T>::deallocate(T* const p, std::size_t const n)
-    {
-        MILAN_UNUSED(n);
-        (*GMalloc)->Free(p);
-    }
-}
 
 
 // ! Misc types.
