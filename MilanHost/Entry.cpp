@@ -23,8 +23,9 @@ SPI_IMPLEMENT_ATTACH
     // Initialize subsystems.
     // ----------------------------------------
 
-    ::Milan::Builtins::Initialize(Context);
+    ::Milan::Allocator::Initialize(Context);
     ::Milan::Output::Initialize(Context);
+    ::Milan::Builtins::Initialize(Context);
     ::Milan::Panels::Initialize(Context);
 
     return true;
@@ -34,6 +35,7 @@ SPI_IMPLEMENT_DETACH
 {
     MILAN_UNUSED(InterfacePtr);
 
+    // Logging calls in system termination will not be flushed here.
     ::Milan::Output::FlushEverything();
 
 
@@ -41,8 +43,9 @@ SPI_IMPLEMENT_DETACH
     // ----------------------------------------
 
     ::Milan::Panels::Terminate();
-    ::Milan::Output::Terminate();
     ::Milan::Builtins::Terminate();
+    ::Milan::Output::Terminate();
+    ::Milan::Allocator::Terminate();
 
     return true;
 }

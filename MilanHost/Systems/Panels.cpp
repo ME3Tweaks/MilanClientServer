@@ -1,7 +1,9 @@
 #include <LESDK/Headers.hpp>
 #include <LESDK/Init.hpp>
 
+#include "Base.hpp"
 #include "Systems/Panels.hpp"
+#include "Systems/Output.hpp"
 
 
 namespace Milan::Panels
@@ -45,10 +47,14 @@ namespace Milan::Panels
         tSwapChainPresent* SwapChainPresent_target = FindSwapChainPresent();
         SwapChainPresent_orig = (tSwapChainPresent*)Context.InstallHook("SwapChainPresent", SwapChainPresent_target, SwapChainPresent_hook);
         WndProc_orig = Context.ResolveTyped<tWndProc>(GLOBAL_WNDPROC_RVA);
+
+        MILAN_INFOA("panels system initialized");
     }
 
     void Terminate()
     {
+        MILAN_INFOA("panels system terminating");
+
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
         ImGui::DestroyContext();
@@ -56,13 +62,13 @@ namespace Milan::Panels
 
     void OpenInterface(wchar_t const* const Reason)
     {
-        std::fwprintf(stdout, L"opening interface, reason = %s\n", Reason ? Reason : L"???");
+        MILAN_DEBUGW_FMT(L"opening interface, reason = %s", Reason ? Reason : L"???");
         gb_debugPanelEnabled = true;
     }
 
     void CloseInterface(wchar_t const* const Reason)
     {
-        std::fwprintf(stdout, L"closing interface, reason = %s\n", Reason ? Reason : L"???");
+        MILAN_DEBUGW_FMT(L"closing interface, reason = %s", Reason ? Reason : L"???");
         gb_debugPanelEnabled = false;
     }
 
@@ -109,7 +115,7 @@ namespace Milan::Panels
                 if (FAILED(GetDeviceAndContext(pChain, &gp_d3d11Device, &gp_d3d11DeviceContext)))
                 {
                     bFailedInternal = true;
-                    std::fwprintf(stdout, L"GetDeviceAndContext failed\n");
+                    MILAN_ERRORW(L"GetDeviceAndContext failed");
                     return SwapChainPresent_orig(pChain, SyncInterval, Flags);
                 }
 
@@ -196,7 +202,7 @@ namespace Milan::Panels
 
         if (FAILED(Result))
         {
-            std::fwprintf(stderr, L"D3D11CreateDeviceAndSwapChain failed: %d\n", Result);
+            MILAN_ERRORW_FMT(L"D3D11CreateDeviceAndSwapChain failed: %d", Result);
             return nullptr;
         }
 

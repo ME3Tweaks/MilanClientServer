@@ -5,6 +5,10 @@
 #include "Logger.hpp"
 
 
+static HANDLE STANDARD_OUTPUT_HANDLE = INVALID_HANDLE_VALUE;
+static HANDLE STANDARD_ERROR_HANDLE = INVALID_HANDLE_VALUE;
+
+
 // ! Windows console colors.
 // ! Taken from: https://stackoverflow.com/a/49929936
 //========================================
@@ -85,8 +89,8 @@ unsigned short MapSeverityToColor(ESeverity const Severity)
     switch (Severity)
     {
     case ESeverity::Trace:  return FG_GRAY;
-    case ESeverity::Debug:  return FG_CYAN;
-    case ESeverity::Info:   return FG_LIGHTGRAY;
+    case ESeverity::Debug:  return FG_LIGHTGRAY;
+    case ESeverity::Info:   return FG_CYAN;
     case ESeverity::Warn:   return FG_YELLOW;
     case ESeverity::Error:  return FG_RED;
     };
@@ -96,13 +100,16 @@ unsigned short MapSeverityToColor(ESeverity const Severity)
 
 inline unsigned short ExchangeConsoleColor(unsigned short const Attributes)
 {
-    CONSOLE_SCREEN_BUFFER_INFO CSB_INFO{};
     WORD PREV_COLOR = FG_WHITE;
+    CONSOLE_SCREEN_BUFFER_INFO CSB_INFO{};
 
-    if (::GetConsoleScreenBufferInfo(::GetStdHandle(STD_OUTPUT_HANDLE), &CSB_INFO))
+    HANDLE const OUTPUT_HANDLE = STANDARD_OUTPUT_HANDLE;
+
+    if (::GetConsoleScreenBufferInfo(OUTPUT_HANDLE, &CSB_INFO))
         PREV_COLOR = CSB_INFO.wAttributes;
 
-    ::SetConsoleTextAttribute(::GetStdHandle(STD_OUTPUT_HANDLE), Attributes);
+    [[maybe_unused]] BOOL const RESULT = ::SetConsoleTextAttribute(OUTPUT_HANDLE, Attributes);
+    assert(RESULT == TRUE && "SetConsoleTextAttribute failed");
 
     return PREV_COLOR;
 }
@@ -150,7 +157,18 @@ inline void WriteUnicodeToStandard(std::FILE* const Stream,
 
 ConsoleLoggerOutput::ConsoleLoggerOutput()
 {
-    // ...
+    STANDARD_OUTPUT_HANDLE = ::GetStdHandle(STD_OUTPUT_HANDLE);
+    STANDARD_ERROR_HANDLE = ::GetStdHandle(STD_ERROR_HANDLE);
+
+    if (STANDARD_OUTPUT_HANDLE == INVALID_HANDLE_VALUE)
+    {
+#ifndef _FINAL_RELEASE
+        std::array<char, 64> ERROR_BUFFER{ '\0' };
+        _snprintf(ERROR_BUFFER.data(), ERROR_BUFFER.size(), "GetStdHandle error = %d\n", ::GetLastError());
+        ::OutputDebugString(ERROR_BUFFER.data());
+        MILAN_BREAK_ATTACHED();
+#endif
+    }
 }
 
 ConsoleLoggerOutput::~ConsoleLoggerOutput() noexcept {}

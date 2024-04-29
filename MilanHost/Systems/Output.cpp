@@ -35,10 +35,16 @@ namespace Milan::Output
 
         if (gp_activeLogger == nullptr)
             gp_activeLogger = gp_mainLogger;
+
+        // From now on, it should be possible to use logging.
+
+        MILAN_INFOA("output system initialized");
     }
 
     void Terminate()
     {
+        MILAN_INFOA("output system terminating");
+
         if (gp_activeLogger != gp_mainLogger)
             delete gp_activeLogger;
 
