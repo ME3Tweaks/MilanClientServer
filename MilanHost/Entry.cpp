@@ -26,10 +26,11 @@ SPI_IMPLEMENT_ATTACH
     ::Milan::Allocator::Initialize(Context);
     ::Milan::Output::Initialize(Context);
     ::Milan::Builtins::Initialize(Context);
+    ::Milan::Console::Initialize(Context);
     ::Milan::Panels::Initialize(Context);
 
 
-    MILAN_WARNW(L"attach completed");
+    MILAN_INFOW(L"attach completed");
     ::Milan::Output::FlushEverything();
 
     return true;
@@ -38,6 +39,7 @@ SPI_IMPLEMENT_ATTACH
 SPI_IMPLEMENT_DETACH
 {
     MILAN_UNUSED(InterfacePtr);
+    MILAN_INFOW(L"detach starting");
 
     // Logging calls in system termination will not be flushed here.
     ::Milan::Output::FlushEverything();
@@ -47,6 +49,7 @@ SPI_IMPLEMENT_DETACH
     // ----------------------------------------
 
     ::Milan::Panels::Terminate();
+    ::Milan::Console::Terminate();
     ::Milan::Builtins::Terminate();
     ::Milan::Output::Terminate();
     ::Milan::Allocator::Terminate();

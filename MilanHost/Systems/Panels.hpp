@@ -11,14 +11,15 @@
 #include <backends/imgui_impl_dx11.h>
 
 
-namespace LESDK { class Initializer; }
-
 // Copied from <backends/imgui_impl_win32.h> according to the instructions found there.
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 
+// TODO: Replace this with a post-hook pattern search.
 #define GLOBAL_WNDPROC_RVA  ::LESDK::Address::FromOffset(0x99D2C0)
 
+
+namespace LESDK { class Initializer; }
 
 namespace Milan::Panels
 {
