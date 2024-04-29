@@ -22,6 +22,9 @@ corrosion_import_crate (
   CRATES "${FFI_CRATE}"
 )
 
+corrosion_add_target_local_rustflags ("${FFI_CRATE}" "-Cpanic=abort")
+corrosion_set_cargo_flags ("${FFI_CRATE}" "--verbose")
+
 add_library (${PROJ_TARGET} INTERFACE ${FFI_HEADER})
 
 target_compile_definitions (${PROJ_TARGET} INTERFACE ${MILAN_COMPILE_DEFINITIONS})
@@ -39,7 +42,7 @@ get_property (CARGO_TARGETS
 
 foreach (MY_CARGO_TARGET ${CARGO_TARGETS})
   if (MY_CARGO_TARGET MATCHES "cargo-")
-    message ("!! Grouping auto-generated '${MY_CARGO_TARGET}' target")
+    message ("-- Grouping auto-generated '${MY_CARGO_TARGET}' target")
     set_target_properties (${MY_CARGO_TARGET} PROPERTIES FOLDER "Cargo")
   endif ()
 endforeach ()
