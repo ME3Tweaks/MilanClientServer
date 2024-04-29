@@ -315,68 +315,130 @@ public:
     void WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Message, std::va_list Args);
 };
 
-/**
- * @brief
- * An ILogger proxy that filters messages based on their severity.
- *
- * @todo
- * Use bitmask for filtering severity to reduce hotpath.
- */
-class FilterLoggerProxy : public ILogger
-{
-    template<typename T>
-    struct RangePair final
-    {
-        T Min{}, Max{};
-    };
 
-    ILogger* Inner{};
-    RangePair<ESeverity> Accepted{};
+#define _MILAN_LOGA_INTO(Instance, Severity, Message) \
+    (Instance).WriteAnsi(MILAN_HEREA, Severity, Message)
 
-public:
+#define _MILAN_LOGA_FMT_INTO(Instance, Severity, Format, ...) \
+    (Instance).WriteFormatAnsi(MILAN_HEREA, Severity, Format, __VA_ARGS__)
 
-    ~FilterLoggerProxy() noexcept override {}
+#define _MILAN_LOGW_INTO(Instance, Severity, Message) \
+    (Instance).WriteUnicode(MILAN_HEREW, Severity, Message)
 
-    FilterLoggerProxy(ILogger* const pInner)
-        : FilterLoggerProxy{ pInner, ESeverity::Trace, ESeverity::Error }
-    {
-        // ...
-    }
+#define _MILAN_LOGW_FMT_INTO(Instance, Severity, Format, ...) \
+    (Instance).WriteFormatUnicode(MILAN_HEREW, Severity, Format, __VA_ARGS__)
 
-    FilterLoggerProxy(ILogger* const pInner, ESeverity const InMin, ESeverity InMax)
-        : Inner{ pInner }, Accepted{ .Min = InMin, .Max = InMax }
-    {
-        assert(pInner != nullptr);
-        assert(InMin >= ESeverity::Trace && InMin <= ESeverity::Error);
-        assert(InMax >= ESeverity::Trace && InMax <= ESeverity::Error);
-        assert(InMin < InMax && "can't heave empty or reverse filter range");
-    }
 
-    void WriteAnsi(CodePlaceA const& Place, ESeverity const Severity, std::string_view const Message) override
-    {
-        if (Severity >= Accepted.Min && Severity <= Accepted.Max)
-            Inner->WriteAnsi(Place, Severity, Message);
-    }
+#define MILAN_TRACEA_INTO(Instance, Message)            _MILAN_LOGA_INTO(Instance, ESeverity::Trace, Message)
+#define MILAN_TRACEW_INTO(Instance, Message)            _MILAN_LOGW_INTO(Instance, ESeverity::Trace, Message)
+#define MILAN_DEBUGA_INTO(Instance, Message)            _MILAN_LOGA_INTO(Instance, ESeverity::Debug, Message)
+#define MILAN_DEBUGW_INTO(Instance, Message)            _MILAN_LOGW_INTO(Instance, ESeverity::Debug, Message)
+#define MILAN_INFOA_INTO(Instance, Message)             _MILAN_LOGA_INTO(Instance, ESeverity::Info,  Message)
+#define MILAN_INFOW_INTO(Instance, Message)             _MILAN_LOGW_INTO(Instance, ESeverity::Info,  Message)
+#define MILAN_WARNA_INTO(Instance, Message)             _MILAN_LOGA_INTO(Instance, ESeverity::Warn,  Message)
+#define MILAN_WARNW_INTO(Instance, Message)             _MILAN_LOGW_INTO(Instance, ESeverity::Warn,  Message)
+#define MILAN_ERRORA_INTO(Instance, Message)            _MILAN_LOGA_INTO(Instance, ESeverity::Error, Message)
+#define MILAN_ERRORW_INTO(Instance, Message)            _MILAN_LOGW_INTO(Instance, ESeverity::Error, Message)
 
-    void WriteUnicode(CodePlaceW const& Place, ESeverity const Severity, std::wstring_view const Message) override
-    {
-        if (Severity >= Accepted.Min && Severity <= Accepted.Max)
-            Inner->WriteUnicode(Place, Severity, Message);
-    }
-};
+#define MILAN_TRACEA_FMT_INTO(Instance, Format, ...)    _MILAN_LOGA_FMT_INTO(Instance, ESeverity::Trace, Format, __VA_ARGS__)
+#define MILAN_TRACEW_FMT_INTO(Instance, Format, ...)    _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Trace, Format, __VA_ARGS__)
+#define MILAN_DEBUGA_FMT_INTO(Instance, Format, ...)    _MILAN_LOGA_FMT_INTO(Instance, ESeverity::Debug, Format, __VA_ARGS__)
+#define MILAN_DEBUGW_FMT_INTO(Instance, Format, ...)    _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Debug, Format, __VA_ARGS__)
+#define MILAN_INFOA_FMT_INTO(Instance, Format, ...)     _MILAN_LOGA_FMT_INTO(Instance, ESeverity::Info,  Format, __VA_ARGS__)
+#define MILAN_INFOW_FMT_INTO(Instance, Format, ...)     _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Info,  Format, __VA_ARGS__)
+#define MILAN_WARNA_FMT_INTO(Instance, Format, ...)     _MILAN_LOGA_FMT_INTO(Instance, ESeverity::Warn,  Format, __VA_ARGS__)
+#define MILAN_WARNW_FMT_INTO(Instance, Format, ...)     _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Warn,  Format, __VA_ARGS__)
+#define MILAN_ERRORA_FMT_INTO(Instance, Format, ...)    _MILAN_LOGA_FMT_INTO(Instance, ESeverity::Error, Format, __VA_ARGS__)
+#define MILAN_ERRORW_FMT_INTO(Instance, Format, ...)    _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Error, Format, __VA_ARGS__)
 
-/**
- * @brief
- * An ILogger implementation that does nothing.
- */
-class NopLogger final : public ILogger
-{
-public:
+#define MILAN_TRACEA(Message)               _MILAN_LOGA_INTO(::Milan::Output::GetMainLogger(), ESeverity::Trace, Message)
+#define MILAN_TRACEW(Message)               _MILAN_LOGW_INTO(::Milan::Output::GetMainLogger(), ESeverity::Trace, Message)
+#define MILAN_DEBUGA(Message)               _MILAN_LOGA_INTO(::Milan::Output::GetMainLogger(), ESeverity::Debug, Message)
+#define MILAN_DEBUGW(Message)               _MILAN_LOGW_INTO(::Milan::Output::GetMainLogger(), ESeverity::Debug, Message)
+#define MILAN_INFOA(Message)                _MILAN_LOGA_INTO(::Milan::Output::GetMainLogger(), ESeverity::Info,  Message)
+#define MILAN_INFOW(Message)                _MILAN_LOGW_INTO(::Milan::Output::GetMainLogger(), ESeverity::Info,  Message)
+#define MILAN_WARNA(Message)                _MILAN_LOGA_INTO(::Milan::Output::GetMainLogger(), ESeverity::Warn,  Message)
+#define MILAN_WARNW(Message)                _MILAN_LOGW_INTO(::Milan::Output::GetMainLogger(), ESeverity::Warn,  Message)
+#define MILAN_ERRORA(Message)               _MILAN_LOGA_INTO(::Milan::Output::GetMainLogger(), ESeverity::Error, Message)
+#define MILAN_ERRORW(Message)               _MILAN_LOGW_INTO(::Milan::Output::GetMainLogger(), ESeverity::Error, Message)
 
-    ~NopLogger() noexcept override {}
-    void WriteAnsi(CodePlaceA const&, ESeverity, std::string_view) override {}
-    void WriteUnicode(CodePlaceW const&, ESeverity, std::wstring_view) override {}
-};
+#define MILAN_TRACEA_FMT(Format, ...)       _MILAN_LOGA_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Trace, Format, __VA_ARGS__)
+#define MILAN_TRACEW_FMT(Format, ...)       _MILAN_LOGW_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Trace, Format, __VA_ARGS__)
+#define MILAN_DEBUGA_FMT(Format, ...)       _MILAN_LOGA_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Debug, Format, __VA_ARGS__)
+#define MILAN_DEBUGW_FMT(Format, ...)       _MILAN_LOGW_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Debug, Format, __VA_ARGS__)
+#define MILAN_INFOA_FMT(Format, ...)        _MILAN_LOGA_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Info,  Format, __VA_ARGS__)
+#define MILAN_INFOW_FMT(Format, ...)        _MILAN_LOGW_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Info,  Format, __VA_ARGS__)
+#define MILAN_WARNA_FMT(Format, ...)        _MILAN_LOGA_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Warn,  Format, __VA_ARGS__)
+#define MILAN_WARNW_FMT(Format, ...)        _MILAN_LOGW_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Warn,  Format, __VA_ARGS__)
+#define MILAN_ERRORA_FMT(Format, ...)       _MILAN_LOGA_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Error, Format, __VA_ARGS__)
+#define MILAN_ERRORW_FMT(Format, ...)       _MILAN_LOGW_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Error, Format, __VA_ARGS__)
+
+
+#ifndef _DEBUG
+
+    // In RELEASE and FINAL builds, disable TRACE.
+
+    #undef MILAN_TRACEA_INTO
+    #undef MILAN_TRACEW_INTO
+    #undef MILAN_TRACEA_FMT_INTO
+    #undef MILAN_TRACEW_FMT_INTO
+    #undef MILAN_TRACEA
+    #undef MILAN_TRACEW
+    #undef MILAN_TRACEA_FMT
+    #undef MILAN_TRACEW_FMT
+
+    #define MILAN_TRACEA_INTO(Instance, Message)            do { } while (false)
+    #define MILAN_TRACEW_INTO(Instance, Message)            do { } while (false)
+    #define MILAN_TRACEA_FMT_INTO(Instance, Format, ...)    do { } while (false)
+    #define MILAN_TRACEW_FMT_INTO(Instance, Format, ...)    do { } while (false)
+    #define MILAN_TRACEA(Message)                           do { } while (false)
+    #define MILAN_TRACEW(Message)                           do { } while (false)
+    #define MILAN_TRACEA_FMT(Format, ...)                   do { } while (false)
+    #define MILAN_TRACEW_FMT(Format, ...)                   do { } while (false)
+
+#ifdef _FINAL_RELEASE
+
+    // In FINAL builds, also disable DEBUG and INFO.
+
+    #undef MILAN_DEBUGA_INTO
+    #undef MILAN_DEBUGW_INTO
+    #undef MILAN_DEBUGA_FMT_INTO
+    #undef MILAN_DEBUGW_FMT_INTO
+    #undef MILAN_DEBUGA
+    #undef MILAN_DEBUGW
+    #undef MILAN_DEBUGA_FMT
+    #undef MILAN_DEBUGW_FMT
+
+    #define MILAN_DEBUGA_INTO(Instance, Message)            do { } while (false)
+    #define MILAN_DEBUGW_INTO(Instance, Message)            do { } while (false)
+    #define MILAN_DEBUGA_FMT_INTO(Instance, Format, ...)    do { } while (false)
+    #define MILAN_DEBUGW_FMT_INTO(Instance, Format, ...)    do { } while (false)
+    #define MILAN_DEBUGA(Message)                           do { } while (false)
+    #define MILAN_DEBUGW(Message)                           do { } while (false)
+    #define MILAN_DEBUGA_FMT(Format, ...)                   do { } while (false)
+    #define MILAN_DEBUGW_FMT(Format, ...)                   do { } while (false)
+
+    #undef MILAN_INFOA_INTO
+    #undef MILAN_INFOW_INTO
+    #undef MILAN_INFOA_FMT_INTO
+    #undef MILAN_INFOW_FMT_INTO
+    #undef MILAN_INFOA
+    #undef MILAN_INFOW
+    #undef MILAN_INFOA_FMT
+    #undef MILAN_INFOW_FMT
+
+    #define MILAN_INFOA_INTO(Instance, Message)             do { } while (false)
+    #define MILAN_INFOW_INTO(Instance, Message)             do { } while (false)
+    #define MILAN_INFOA_FMT_INTO(Instance, Format, ...)     do { } while (false)
+    #define MILAN_INFOW_FMT_INTO(Instance, Format, ...)     do { } while (false)
+    #define MILAN_INFOA(Message)                            do { } while (false)
+    #define MILAN_INFOW(Message)                            do { } while (false)
+    #define MILAN_INFOA_FMT(Format, ...)                    do { } while (false)
+    #define MILAN_INFOW_FMT(Format, ...)                    do { } while (false)
+
+#endif // _FINAL_RELEASE
+
+#endif // _DEBUG
 
 
 // ! Misc types.
