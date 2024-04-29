@@ -60,6 +60,7 @@ class MilanLogger final : public ILogger, public NonCopyable
 public:
 
     MilanLogger();
+    void ForceFlush();
 
     ~MilanLogger() noexcept override;
     void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view Message) override;

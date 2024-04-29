@@ -246,6 +246,15 @@ MilanLogger::MilanLogger()
     Sinks.reserve(8);
 }
 
+void MilanLogger::ForceFlush()
+{
+    for (auto& [Sink, Tag] : Sinks)
+    {
+        MILAN_UNUSED(Tag);
+        Sink->Flush(true);
+    }
+}
+
 MilanLogger::~MilanLogger() noexcept
 {
     // It should clean up Sinks automatically...
@@ -255,8 +264,15 @@ void MilanLogger::WriteAnsi(CodePlaceA const& Place,
     ESeverity const Severity, std::string_view const Message)
 {
     std::array<char, 4096> FormatBuffer{ '\0' };
+
+#ifndef _FINAL_RELEASE
     int const Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%.3f] [%s] %s  [%s:%d]",
         MessageTimer.GetSeconds(), FormatSeverityAnsi(Severity), Message.data(), Place.File, Place.Line);
+#else
+    int const Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%.3f] [%s] %s",
+        MessageTimer.GetSeconds(), FormatSeverityAnsi(Severity), Message.data());
+    MILAN_UNUSED(Place);
+#endif
 
     assert(Result > 0);
 
@@ -272,8 +288,15 @@ void MilanLogger::WriteUnicode(CodePlaceW const& Place,
     ESeverity const Severity, std::wstring_view const Message)
 {
     std::array<wchar_t, 2048> FormatBuffer{ '\0' };
+
+#ifndef _FINAL_RELEASE
     int const Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%.3f] [%s] %s  [%s:%d]",
         MessageTimer.GetSeconds(), FormatSeverityUnicode(Severity), Message.data(), Place.File, Place.Line);
+#else
+    int const Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%.3f] [%s] %s",
+        MessageTimer.GetSeconds(), FormatSeverityUnicode(Severity), Message.data());
+    MILAN_UNUSED(Place);
+#endif
 
     assert(Result > 0);
 
