@@ -45,6 +45,9 @@ namespace Milan::Output
         if (gp_mainLogger != nullptr)
             delete gp_mainLogger;
 
+        gp_activeLogger = nullptr;
+        gp_mainLogger = nullptr;
+
 #ifndef _FINAL_RELEASE
         ::LESDK::TerminateConsole();
 #endif

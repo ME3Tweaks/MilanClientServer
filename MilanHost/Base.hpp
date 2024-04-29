@@ -264,6 +264,13 @@ enum struct ESeverity : int
     Error = 5,
 };
 
+static constexpr ESeverity k_logTrace = ESeverity::Trace;
+static constexpr ESeverity k_logDebug = ESeverity::Debug;
+static constexpr ESeverity k_logInfo = ESeverity::Info;
+static constexpr ESeverity k_logWarn = ESeverity::Warn;
+static constexpr ESeverity k_logError = ESeverity::Error;
+
+
 /**
  * @brief
  * Interface for a type that persists pre-formatted logging output,

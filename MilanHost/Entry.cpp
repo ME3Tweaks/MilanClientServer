@@ -1,12 +1,7 @@
-// Include LESDK, with the SPI it ships.
-#include <LESDK/Headers.hpp>
+//#include <LESDK/Headers.hpp>
 #include <LESDK/Init.hpp>
 #include <SPI.h>
 
-// Include auto-generated ECSM bindings.
-#include <milan_ecsm_ffi.h>
-
-// Include our own stuff.
 #include "Base.hpp"
 #include "Entry.hpp"
 #include "Logger.hpp"
@@ -22,29 +17,23 @@ SPI_PLUGINSIDE_SEQATTACH;
 
 SPI_IMPLEMENT_ATTACH
 {
-    ::LESDK::Initializer Init{ InterfacePtr, "MilanHost" };
+    ::LESDK::Initializer Context{ InterfacePtr, "MilanHost" };
 
 
     // Initialize subsystems.
     // ----------------------------------------
 
-    ::Milan::Builtins::Initialize(Init);
-    ::Milan::Output::Initialize(Init);
-    ::Milan::Panels::Initialize(Init);
-
-
-    // This is linked to ecsm ffi.
-    ::say_hello("stranger");
+    ::Milan::Builtins::Initialize(Context);
+    ::Milan::Output::Initialize(Context);
+    ::Milan::Panels::Initialize(Context);
 
     return true;
 }
 
 SPI_IMPLEMENT_DETACH
 {
-    (void)InterfacePtr;
+    MILAN_UNUSED(InterfacePtr);
 
-
-    // Flush all sinks on the main logger, plus whatever else serves as output.
     ::Milan::Output::FlushEverything();
 
 

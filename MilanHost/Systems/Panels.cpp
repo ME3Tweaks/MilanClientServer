@@ -1,4 +1,6 @@
+#include <LESDK/Headers.hpp>
 #include <LESDK/Init.hpp>
+
 #include "Systems/Panels.hpp"
 
 
@@ -14,12 +16,28 @@ namespace Milan::Panels
     tSwapChainPresent* SwapChainPresent_orig = nullptr;
 
 
+    // Allocator callbacks for imgui.
+    // ========================================
+
+    void* MyImGuiAlloc(size_t const sz, void*)
+    {
+        assert(GMalloc != nullptr);
+        return (*GMalloc)->Malloc(static_cast<DWORD>(sz), UN_DEFAULT_ALIGNMENT);
+    }
+
+    void MyImGuiFree(void* const ptr, void*)
+    {
+        assert(GMalloc != nullptr);
+        return (*GMalloc)->Free(ptr);
+    }
+
+
     // ! Global subsystem functions.
     // ========================================
 
     void Initialize(::LESDK::Initializer& Context)
     {
-        // TODO: Use custom allocation functions.
+        ImGui::SetAllocatorFunctions(MyImGuiAlloc, MyImGuiFree);
 
         ImGui::CreateContext();
         ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
