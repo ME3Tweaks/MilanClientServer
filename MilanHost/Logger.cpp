@@ -5,10 +5,6 @@
 #include "Logger.hpp"
 
 
-static HANDLE STANDARD_OUTPUT_HANDLE = INVALID_HANDLE_VALUE;
-static HANDLE STANDARD_ERROR_HANDLE = INVALID_HANDLE_VALUE;
-
-
 // ! Windows console colors.
 // ! Taken from: https://stackoverflow.com/a/49929936
 //========================================
@@ -98,22 +94,6 @@ unsigned short MapSeverityToColor(ESeverity const Severity)
     return FG_LIGHTGRAY;
 }
 
-inline unsigned short ExchangeConsoleColor(unsigned short const Attributes)
-{
-    WORD PREV_COLOR = FG_WHITE;
-    CONSOLE_SCREEN_BUFFER_INFO CSB_INFO{};
-
-    HANDLE const OUTPUT_HANDLE = STANDARD_OUTPUT_HANDLE;
-
-    if (::GetConsoleScreenBufferInfo(OUTPUT_HANDLE, &CSB_INFO))
-        PREV_COLOR = CSB_INFO.wAttributes;
-
-    [[maybe_unused]] BOOL const RESULT = ::SetConsoleTextAttribute(OUTPUT_HANDLE, Attributes);
-    assert(RESULT == TRUE && "SetConsoleTextAttribute failed");
-
-    return PREV_COLOR;
-}
-
 bool EnableVirtualTerminalMode(bool const bStandardError)
 {
     DWORD const HandleIndex = bStandardError ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE;
@@ -133,64 +113,93 @@ bool EnableVirtualTerminalMode(bool const bStandardError)
     return true;
 }
 
-inline void WriteAnsiToStandard(std::FILE* const Stream,
-    ESeverity const Severity, char const* const Data, size_t const Size)
-{
-    MILAN_UNUSED(Size);
-    std::fprintf(Stream, "%s\n", Data);
-    if (Severity == ESeverity::Error)
-        std::fflush(Stream);
-}
-
-inline void WriteUnicodeToStandard(std::FILE* const Stream,
-    ESeverity const Severity, wchar_t const* const Data, size_t const Size)
-{
-    MILAN_UNUSED(Size);
-    std::fwprintf(Stream, L"%s\n", Data);
-    if (Severity == ESeverity::Error)
-        std::fflush(Stream);
-}
-
 
 // ! ConsoleLoggerOutput impl.
 // ========================================
 
-ConsoleLoggerOutput::ConsoleLoggerOutput()
+HANDLE ConsoleLoggerOutput::InitHandle(DWORD const Target)
 {
-    STANDARD_OUTPUT_HANDLE = ::GetStdHandle(STD_OUTPUT_HANDLE);
-    STANDARD_ERROR_HANDLE = ::GetStdHandle(STD_ERROR_HANDLE);
+    HANDLE const Handle = ::GetStdHandle(Target);
 
-    if (STANDARD_OUTPUT_HANDLE == INVALID_HANDLE_VALUE)
+    if (Handle == INVALID_HANDLE_VALUE)
     {
 #ifndef _FINAL_RELEASE
-        std::array<char, 64> ERROR_BUFFER{ '\0' };
-        _snprintf(ERROR_BUFFER.data(), ERROR_BUFFER.size(), "GetStdHandle error = %d\n", ::GetLastError());
-        ::OutputDebugString(ERROR_BUFFER.data());
+        std::array<char, 64> ErrorBuffer{ '\0' };
+        _snprintf(ErrorBuffer.data(), ErrorBuffer.size(),
+            "GetStdHandle(%d) error = %d\n", Target, ::GetLastError());
+        ::OutputDebugString(ErrorBuffer.data());
         MILAN_BREAK_ATTACHED();
 #endif
     }
+
+    return Handle;
+}
+
+unsigned short ConsoleLoggerOutput::ExchangeConsoleColor(unsigned short const Attributes, bool const bUseError)
+{
+    WORD PreviousAttributes = FG_WHITE;
+    CONSOLE_SCREEN_BUFFER_INFO ConsoleBufferInfo{};
+    HANDLE const Handle = !bUseError ? OutputHandle : ErrorHandle;
+
+    if (::GetConsoleScreenBufferInfo(Handle, &ConsoleBufferInfo))
+        PreviousAttributes = ConsoleBufferInfo.wAttributes;
+
+    [[maybe_unused]] BOOL const Result = ::SetConsoleTextAttribute(Handle, Attributes);
+    assert(Result == TRUE && "SetConsoleTextAttribute failed");
+
+    return PreviousAttributes;
+}
+
+ConsoleLoggerOutput::ConsoleLoggerOutput()
+{
+    OutputHandle = InitHandle(STD_OUTPUT_HANDLE);
+    ErrorHandle = InitHandle(STD_ERROR_HANDLE);
 }
 
 ConsoleLoggerOutput::~ConsoleLoggerOutput() noexcept {}
 
 void ConsoleLoggerOutput::AcceptAnsi(ESeverity const Severity,
-    char const* const Data, size_t const Size)
+    char const* const Data, [[maybe_unused]] size_t const Size)
 {
     assert(Data != nullptr && Size != 0);
-    auto const Stream = Severity < ESeverity::Error ? stdout : stderr;
-    auto const Previous = ExchangeConsoleColor(MapSeverityToColor(Severity));
-    WriteAnsiToStandard(Stream, Severity, Data, Size);
-    ExchangeConsoleColor(Previous);
+
+    FILE* Stream = stdout;
+    bool bUseError = false;
+    if (Severity == ESeverity::Error)
+    {
+        Stream = stderr;
+        bUseError = true;
+    }
+
+    auto const Attributes = ExchangeConsoleColor(MapSeverityToColor(Severity), bUseError);
+
+    std::fprintf(Stream, "%s\n", Data);
+    if (Severity == ESeverity::Error)
+        std::fflush(Stream);
+
+    ExchangeConsoleColor(Attributes, bUseError);
 }
 
 void ConsoleLoggerOutput::AcceptUnicode(ESeverity const Severity,
-    wchar_t const* const Data, size_t const Size)
+    wchar_t const* const Data, [[maybe_unused]] size_t const Size)
 {
     assert(Data != nullptr && Size != 0);
-    auto const Stream = Severity < ESeverity::Error ? stdout : stderr;
-    auto const Previous = ExchangeConsoleColor(MapSeverityToColor(Severity));
-    WriteUnicodeToStandard(Stream, Severity, Data, Size);
-    ExchangeConsoleColor(Previous);
+
+    FILE* Stream = stdout;
+    bool bUseError = false;
+    if (Severity == ESeverity::Error)
+    {
+        Stream = stderr;
+        bUseError = true;
+    }
+
+    auto const Attributes = ExchangeConsoleColor(MapSeverityToColor(Severity), bUseError);
+
+    std::fwprintf(Stream, L"%s\n", Data);
+    if (Severity == ESeverity::Error)
+        std::fflush(Stream);
+
+    ExchangeConsoleColor(Attributes, bUseError);
 }
 
 void ConsoleLoggerOutput::Flush(bool const bError)
@@ -206,10 +215,12 @@ void ConsoleLoggerOutput::Flush(bool const bError)
 
 FileLoggerOutput::FileLoggerOutput(std::string_view const OutputPath, bool const bAppend)
 {
-    OutputFile = std::fopen(OutputPath.data(), bAppend ? "ab" : "wb");
+    // Created file writes wide strings as utf-8, but only accepts wide strings.
+    OutputFile = fopen(OutputPath.data(), !bAppend ? "w,ccs=UTF-8" : "a,ccs=UTF-8");
+
     if (OutputFile == nullptr)
     {
-        std::string ErrorText{};
+        ::game::string ErrorText{};
         ErrorText += "FileLoggerOutput - std::fopen failed: ";
         ErrorText += std::strerror(errno);
 
@@ -237,15 +248,32 @@ void FileLoggerOutput::AcceptAnsi(ESeverity const Severity,
 {
     assert(Data != nullptr && Size != 0);
     assert(OutputFile != nullptr);
-    WriteAnsiToStandard(OutputFile, Severity, Data, Size);
+
+    if (Data != nullptr && Size != 0)
+    {
+        assert(Size < 8192);
+        thread_local std::array<wchar_t, 8192> UnicodeBuffer{ L'\0' };
+
+        [[maybe_unused]] int const UnicodeLength = ::MultiByteToWideChar(CP_ACP, 0u,
+            Data, static_cast<int>(Size + 1), UnicodeBuffer.data(), static_cast<int>(UnicodeBuffer.size()));
+
+        assert(UnicodeLength > 0 && UnicodeLength < UnicodeBuffer.size());
+        std::fwprintf(OutputFile, L"%s\n", UnicodeBuffer.data());
+    }
+
+    if (Severity == ESeverity::Error)
+        std::fflush(OutputFile);
 }
 
 void FileLoggerOutput::AcceptUnicode(ESeverity const Severity,
-    wchar_t const* const Data, size_t const Size)
+    wchar_t const* const Data, [[maybe_unused]] size_t const Size)
 {
     assert(Data != nullptr && Size != 0);
     assert(OutputFile != nullptr);
-    WriteUnicodeToStandard(OutputFile, Severity, Data, Size);
+
+    std::fwprintf(OutputFile, L"%s\n", Data);
+    if (Severity == ESeverity::Error)
+        std::fflush(OutputFile);
 }
 
 void FileLoggerOutput::Flush(bool const bError)

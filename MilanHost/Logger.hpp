@@ -19,6 +19,12 @@
 
 class ConsoleLoggerOutput final : public ILoggerOutput
 {
+    HANDLE OutputHandle{ INVALID_HANDLE_VALUE };
+    HANDLE ErrorHandle{ INVALID_HANDLE_VALUE };
+
+    static HANDLE InitHandle(DWORD Target);
+    unsigned short ExchangeConsoleColor(unsigned short Attributes, bool bUseError);
+
 public:
 
     ConsoleLoggerOutput();

@@ -28,6 +28,10 @@ SPI_IMPLEMENT_ATTACH
     ::Milan::Builtins::Initialize(Context);
     ::Milan::Panels::Initialize(Context);
 
+
+    MILAN_WARNW(L"attach completed");
+    ::Milan::Output::FlushEverything();
+
     return true;
 }
 

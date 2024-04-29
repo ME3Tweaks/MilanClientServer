@@ -38,11 +38,11 @@ namespace Milan::Builtins
         SFXName::GBioNamePools = Context.ResolveTyped<SFXNameEntry const*>(BUILTIN_SFXNAMEPOOLS_RIP);
         SFXName::GInitMethod = Context.ResolveTyped<SFXName::tInitMethod>(BUILTIN_SFXNAMEINIT_PHOOK);
 
-        MILAN_INFOA("builtins system initialized");
+        MILAN_INFOW(L"builtins system initialized");
     }
 
     void Terminate()
     {
-        MILAN_INFOA("builtins system terminating");
+        MILAN_INFOW(L"builtins system terminating");
     }
 }

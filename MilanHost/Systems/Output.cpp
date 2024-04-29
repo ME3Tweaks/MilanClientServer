@@ -38,12 +38,12 @@ namespace Milan::Output
 
         // From now on, it should be possible to use logging.
 
-        MILAN_INFOA("output system initialized");
+        MILAN_INFOW(L"output system initialized");
     }
 
     void Terminate()
     {
-        MILAN_INFOA("output system terminating");
+        MILAN_INFOW(L"output system terminating");
 
         if (gp_activeLogger != gp_mainLogger)
             delete gp_activeLogger;

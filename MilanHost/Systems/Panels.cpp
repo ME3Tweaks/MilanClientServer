@@ -48,12 +48,12 @@ namespace Milan::Panels
         SwapChainPresent_orig = (tSwapChainPresent*)Context.InstallHook("SwapChainPresent", SwapChainPresent_target, SwapChainPresent_hook);
         WndProc_orig = Context.ResolveTyped<tWndProc>(GLOBAL_WNDPROC_RVA);
 
-        MILAN_INFOA("panels system initialized");
+        MILAN_INFOW(L"panels system initialized");
     }
 
     void Terminate()
     {
-        MILAN_INFOA("panels system terminating");
+        MILAN_INFOW(L"panels system terminating");
 
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
