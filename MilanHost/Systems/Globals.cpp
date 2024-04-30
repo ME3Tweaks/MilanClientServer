@@ -30,25 +30,53 @@ namespace Milan::Globals
     void Initialize(::LESDK::Initializer& Context)
     {
         GEngine = Context.ResolveTyped<UEngine*>(BUILTIN_GENGINE_RIP);
+        MILAN_DEBUGW(L"GEngine found: %p (%p)", (void*)GEngine, (void*)*GEngine);
         GNatives = Context.ResolveTyped<tNative*>(BUILTIN_GNATIVES_RIP);
+        MILAN_DEBUGW(L"GNatives found: %p (%p)", (void*)GNatives, (void*)*GNatives);
         GSys = Context.ResolveTyped<USystem*>(BUILTIN_GSYS_RIP);
+        MILAN_DEBUGW(L"GSys found: %p (%p)", (void*)GSys, (void*)*GSys);
         GWorld = Context.ResolveTyped<UWorld*>(BUILTIN_GWORLD_RIP);
+        MILAN_DEBUGW(L"GWorld found: %p (%p)", (void*)GWorld, (void*)*GWorld);
 
         UObject::GObjObjects = Context.ResolveTyped<TArray<UObject*>>(BUILTIN_GOBOBJECTS_RIP);
+        MILAN_DEBUGW(L"UObject::GObjObjects found: %p", (void*)UObject::GObjObjects);
         SFXName::GBioNamePools = Context.ResolveTyped<SFXNameEntry const*>(BUILTIN_SFXNAMEPOOLS_RIP);
+        MILAN_DEBUGW(L"SFXName::GBioNamePools found: %p", (void*)SFXName::GBioNamePools);
         SFXName::GInitMethod = Context.ResolveTyped<SFXName::tInitMethod>(BUILTIN_SFXNAMEINIT_PHOOK);
+        MILAN_DEBUGW(L"SFXName::Init found: %p", (void*)SFXName::GInitMethod);
 
         t_IDXGISwapChain_Present* IDXGISwapChain_Present_target = ::Milan::Panels::FindSwapChainPresent();
         IDXGISwapChain_Present_orig = (t_IDXGISwapChain_Present*)Context.InstallHook("IDXGISwapChain::Present", IDXGISwapChain_Present_target, IDXGISwapChain_Present_hook);
         MILAN_DEBUGW(L"IDXGISwapChain::Present hooked: %p -> %p", (void*)IDXGISwapChain_Present_target, (void*)IDXGISwapChain_Present_orig);
 
         WndProc_orig = Context.ResolveTyped<tWndProc>(GLOBAL_WNDPROC_RVA);
+        MILAN_DEBUGW(L"WndProc found: %p", (void*)WndProc_orig);
+
         // WndProc is not hooked but replaced using Win32 mechanism,
         // see ::Milan::Panels::OnSwapChainPresent for more.
 
         t_UGameEngine_Exec* UGameEngine_Exec_target = Context.ResolveTyped<t_UGameEngine_Exec>(GLOBAL_UGAMEENGINE_EXEC_PHOOK);
         UGameEngine_Exec_orig = (t_UGameEngine_Exec*)Context.InstallHook("UGameEngine::Exec", UGameEngine_Exec_target, UGameEngine_Exec_hook);
         MILAN_DEBUGW(L"UGameEngine::Exec hooked: %p -> %p", (void*)UGameEngine_Exec_target, (void*)UGameEngine_Exec_orig);
+
+        t_UObject_CallFunction* UObject_CallFunction_target = Context.ResolveTyped<t_UObject_CallFunction>(BUILTIN_CALLFUNCTION_PHOOK);
+        UObject_CallFunction_orig = (t_UObject_CallFunction*)Context.InstallHook("UObject::CallFunction", UObject_CallFunction_target, UObject_CallFunction_hook);
+        MILAN_DEBUGW(L"UObject::CallFunction hooked: %p -> %p", (void*)UObject_CallFunction_target, (void*)UObject_CallFunction_orig);
+
+        t_UObject_ProcessEvent* UObject_ProcessEvent_target = Context.ResolveTyped<t_UObject_ProcessEvent>(BUILTIN_PROCESSEVENT_PHOOK);
+        UObject_ProcessEvent_orig = (t_UObject_ProcessEvent*)Context.InstallHook("UObject::ProcessEvent", UObject_ProcessEvent_target, UObject_ProcessEvent_hook);
+        MILAN_DEBUGW(L"UObject::ProcessEvent hooked: %p -> %p", (void*)UObject_ProcessEvent_target, (void*)UObject_ProcessEvent_orig);
+
+        t_UObject_ProcessInternal* UObject_ProcessInternal_target = Context.ResolveTyped<t_UObject_ProcessInternal>(BUILTIN_PROCESSINTERNAL_PHOOK);
+        UObject_ProcessInternal_orig = (t_UObject_ProcessInternal*)Context.InstallHook("UObject::ProcessInternal", UObject_ProcessInternal_target, UObject_ProcessInternal_hook);
+        MILAN_DEBUGW(L"UObject::ProcessInternal hooked: %p -> %p", (void*)UObject_ProcessInternal_target, (void*)UObject_ProcessInternal_orig);
+
+        UObject_SkipFunction = Context.ResolveTyped<t_UObject_SkipFunction>(GLOBAL_UOBJECT_SKIPFUNCTION_PHOOK);
+        MILAN_DEBUGW(L"UObject::SkipFunction found: %p", (void*)UObject_SkipFunction);
+
+        t_UWorld_Tick* UWorld_Tick_target = Context.ResolveTyped<t_UWorld_Tick>(GLOBAL_UWORLD_TICK_PHOOK);
+        UWorld_Tick_orig = (t_UWorld_Tick*)Context.InstallHook("UWorld::Tick", UWorld_Tick_target, UWorld_Tick_hook);
+        MILAN_DEBUGW(L"UWorld::Tick hooked: %p -> %p", (void*)UWorld_Tick_target, (void*)UWorld_Tick_orig);
 
         MILAN_INFOW(L"globals system initialized");
     }
