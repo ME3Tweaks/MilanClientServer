@@ -69,7 +69,7 @@ namespace Milan::Console
         ::StringToLower(NSCommand);
         gp_commands->push_back({ NSCommand, Callback });
 
-        MILAN_DEBUGW_FMT(L"registered command %s", NSCommand.c_str());
+        MILAN_DEBUGW(L"registered command %s", NSCommand.c_str());
     }
 
     bool OnUGameEngineExec(UGameEngine* const Context, WCHAR const* const Command, void* const Output)

@@ -32,7 +32,7 @@ HRESULT IDXGISwapChain_Present_hook(IDXGISwapChain* const pChain, UINT const Syn
 t_UGameEngine_Exec* UGameEngine_Exec_orig = nullptr;
 UBOOL UGameEngine_Exec_hook(UGameEngine* const Context, WCHAR const* const Command, void* const Output)
 {
-    MILAN_TRACEW_FMT(L"UGameEngine::Exec: %s", Command);
+    MILAN_TRACEW(L"UGameEngine::Exec: %s", Command);
 
     if (::Milan::Console::OnUGameEngineExec(Context, Command, Output))
         return TRUE;

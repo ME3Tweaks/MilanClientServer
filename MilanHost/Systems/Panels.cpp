@@ -67,13 +67,15 @@ namespace Milan::Panels
 
     void OpenInterface(wchar_t const* const Reason)
     {
-        MILAN_DEBUGW_FMT(L"opening interface, reason = %s", Reason ? Reason : L"???");
+        MILAN_UNUSED(Reason);
+        MILAN_DEBUGW(L"opening interface, reason = %s", Reason ? Reason : L"???");
         gb_debugPanelEnabled = true;
     }
 
     void CloseInterface(wchar_t const* const Reason)
     {
-        MILAN_DEBUGW_FMT(L"closing interface, reason = %s", Reason ? Reason : L"???");
+        MILAN_UNUSED(Reason);
+        MILAN_DEBUGW(L"closing interface, reason = %s", Reason ? Reason : L"???");
         gb_debugPanelEnabled = false;
     }
 
@@ -202,7 +204,7 @@ namespace Milan::Panels
 
         if (FAILED(Result))
         {
-            MILAN_ERRORW_FMT(L"D3D11CreateDeviceAndSwapChain failed: %d", Result);
+            MILAN_ERRORW(L"D3D11CreateDeviceAndSwapChain failed: %d", Result);
             return nullptr;
         }
 
