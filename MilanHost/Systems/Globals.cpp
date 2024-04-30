@@ -45,6 +45,9 @@ namespace Milan::Globals
         SFXName::GInitMethod = Context.ResolveTyped<SFXName::tInitMethod>(BUILTIN_SFXNAMEINIT_PHOOK);
         MILAN_DEBUGW(L"SFXName::Init found: %p", (void*)SFXName::GInitMethod);
 
+        BioRequestExit = Context.ResolveTyped<t_BioRequestExit>(GLOBAL_BIOREQUESTEXIT_PHOOK);
+        MILAN_DEBUGW(L"BioRequestExit found: %p", (void*)BioRequestExit);
+
         t_IDXGISwapChain_Present* IDXGISwapChain_Present_target = ::Milan::Panels::FindSwapChainPresent();
         IDXGISwapChain_Present_orig = (t_IDXGISwapChain_Present*)Context.InstallHook("IDXGISwapChain::Present", IDXGISwapChain_Present_target, IDXGISwapChain_Present_hook);
         MILAN_DEBUGW(L"IDXGISwapChain::Present hooked: %p -> %p", (void*)IDXGISwapChain_Present_target, (void*)IDXGISwapChain_Present_orig);

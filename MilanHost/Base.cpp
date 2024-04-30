@@ -3,6 +3,8 @@
 #include <cwchar>
 
 #include "Base.hpp"
+#include "Hooks.hpp"
+#include "Systems/Output.hpp"
 
 
 // ! ILogger implementation.
@@ -60,4 +62,64 @@ void ILogger::WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity Severi
 
     std::wstring_view const Message(FormatBuffer.data(), static_cast<size_t>(Result));
     WriteUnicode(Place, Severity, Message);
+}
+
+
+// ! Fatal error handling.
+// ========================================
+
+void Details::OnFatalErrorW(::CodePlaceW const& Place,
+    wchar_t const* const Expression, wchar_t const* const Format, ...)
+{
+    if (::Milan::Output::HasInitialized())
+    {
+        auto& Logger = ::Milan::Output::GetMainLogger();
+
+        std::va_list Args;
+        va_start(Args, Format);
+
+        bool const bWithExpression = Expression != nullptr && std::wcslen(Expression) > 0;
+        Logger.WriteFormatUnicode(Place, ESeverity::Error, L"fatal error: %s", bWithExpression ? Expression : L"???");
+        Logger.WriteFormatUnicodeVararg(Place, ESeverity::Error, Format, Args);
+
+        va_end(Args);
+
+        // TODO: Pop up a MessageBox of our own.
+
+        // Flush stuff just to be sure.
+        ::Milan::Output::FlushEverything();
+    }
+    else
+    {
+        thread_local std::array<wchar_t, 8192> AuxiliaryBuffer{ L'\0' };
+        signed int Offset = _snwprintf(AuxiliaryBuffer.data(), AuxiliaryBuffer.size(),
+            L"fatal error: %s\nlocation: %s:%d\nfunction: %s\n",
+            Expression, Place.File, Place.Line, Place.Func);
+
+        std::va_list Args;
+        va_start(Args, Format);
+
+        if (Offset < 0) Offset = 0;
+        _vsnwprintf(AuxiliaryBuffer.data() + Offset, static_cast<size_t>(AuxiliaryBuffer.size() - Offset), Format, Args);
+
+        va_end(Args);
+
+        ::OutputDebugStringW(AuxiliaryBuffer.data());
+
+        std::fwprintf(stderr, L"%s\n", AuxiliaryBuffer.data());
+        std::fflush(stderr);
+    }
+
+    if (BioRequestExit != nullptr)
+    {
+        // If available, call the engine's termination routine.
+        // Bioware seems to have added some logic of their own there.
+        (*BioRequestExit)(TRUE, 0, 0);
+        MILAN_UNREACHABLE;
+    }
+    else
+    {
+        _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+        std::abort();
+    }
 }

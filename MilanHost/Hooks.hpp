@@ -11,6 +11,9 @@
 #include <LESDK/Headers.hpp>
 
 
+#define GLOBAL_BIOREQUESTEXIT_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 89 5C 24 ?? */ "48 89 6C 24 ?? 48 89 74 24 ?? 57 48 81 EC 50 03 00 00")
+
  // TODO: Replace this with a post-hook pattern search.
 #define GLOBAL_WNDPROC_RVA  ::LESDK::Address::FromOffset(0x99D2C0)
 
@@ -36,6 +39,9 @@ using t_IDXGISwapChain_Present = HRESULT __stdcall(IDXGISwapChain*, UINT, UINT);
 extern t_IDXGISwapChain_Present* IDXGISwapChain_Present_orig;
 
 HRESULT __stdcall IDXGISwapChain_Present_hook(IDXGISwapChain* pChain, UINT SyncInterval, UINT Flags);
+
+using t_BioRequestExit = void(UBOOL bForce, INT ExitCode, INT Unused);
+extern t_BioRequestExit* BioRequestExit;
 
 
 // ! UGameEngine methods.

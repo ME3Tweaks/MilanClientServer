@@ -10,6 +10,8 @@ namespace Milan::Output
     ::MilanLogger*      gp_mainLogger = nullptr;
     ::ILogger*          gp_activeLogger = nullptr;
 
+    bool                gb_initialized = false;
+
 
     void Initialize(::LESDK::Initializer& Context)
     {
@@ -38,12 +40,14 @@ namespace Milan::Output
 
         // From now on, it should be possible to use logging.
 
+        gb_initialized = true;
         MILAN_INFOW(L"output system initialized");
     }
 
     void Terminate()
     {
         MILAN_INFOW(L"output system terminating");
+        gb_initialized = false;
 
         if (gp_activeLogger != gp_mainLogger)
             delete gp_activeLogger;
@@ -57,6 +61,12 @@ namespace Milan::Output
 #ifndef _FINAL_RELEASE
         ::LESDK::TerminateConsole();
 #endif
+    }
+
+
+    bool HasInitialized() noexcept
+    {
+        return gb_initialized;
     }
 
 

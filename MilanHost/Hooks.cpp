@@ -33,6 +33,8 @@ HRESULT IDXGISwapChain_Present_hook(IDXGISwapChain* const pChain, UINT const Syn
     return IDXGISwapChain_Present_orig(pChain, SyncInterval, Flags);
 }
 
+t_BioRequestExit* BioRequestExit = nullptr;
+
 t_UGameEngine_Exec* UGameEngine_Exec_orig = nullptr;
 UBOOL UGameEngine_Exec_hook(UGameEngine* const Context, WCHAR const* const Command, void* const Output)
 {

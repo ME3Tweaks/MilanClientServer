@@ -5,9 +5,11 @@
 
 #pragma once
 
+#include <bit>
 #include <cstdarg>
 #include <memory>
 #include <string_view>
+#include <type_traits>
 
 #include <LESDK/Headers.hpp>
 
@@ -168,6 +170,79 @@ struct CodePlaceW final
  * @brief       Generates a @ref CodePlace value at the place of invocation.
  */
 #define MILAN_HEREW  ::CodePlaceW { .Func = MILAN_FUNCW, .File = MILAN_FILEW, .Line = MILAN_LINEW }
+
+
+// ! Core type traits.
+//========================================
+
+/** Integer or a floating-point value type. */
+template<typename T>
+concept NumericType = std::is_integral<T>::value || std::is_floating_point<T>::value;
+
+/** Integer number `S` for which there is a standard integer type of size `S`. */
+template<int S>
+concept NumericRegularSize = S == 1 || S == 2 || S == 4 || S == 8;
+
+/** Integer or a floating-point value type with one of the common sizes. */
+template<typename T>
+concept NumericRegularType = NumericType<T> && NumericRegularSize<sizeof(T)>;
+
+/** Struct or a class of standard layout, i.e. "plain old data". */
+template<typename T>
+concept PlainOldType = std::is_class<T>::value && std::is_standard_layout<T>::value;
+
+/** Enum type concept. */
+template<typename T>
+concept EnumType = std::is_enum<T>::value;
+
+constexpr bool IsPowerOfTwoOrZero(std::size_t const N) noexcept { return (N & (N - 1)) == 0; }
+constexpr bool IsPowerOfTwo(std::size_t const N) noexcept { return (N != 0) && IsPowerOfTwoOrZero(N); }
+
+/** Named constraint for power-of-two numeric template parameters. */
+template<std::size_t Number>
+concept PowerOfTwo = IsPowerOfTwo(Number);
+
+
+// ! Endianness utilities.
+//========================================
+
+static constexpr std::endian NATIVE = std::endian::native;
+static constexpr std::endian LITTLE = std::endian::little;
+static constexpr std::endian BIG = std::endian::big;
+
+
+/**
+ * @brief       Reverse byte order of an integer or floating-point value.
+ * @tparam      T - Numeric type of 1 / 2 / 4 / 8 bytes.
+ * @returns     The reversed value.
+ */
+template<NumericRegularType T>
+inline T Byteswap(T const V) noexcept
+{
+    if constexpr (sizeof(V) == 1) { return V; }
+    if constexpr (sizeof(V) == 2) { return std::bit_cast<T>(_byteswap_ushort(std::bit_cast<uint16_t>(V))); }
+    if constexpr (sizeof(V) == 4) { return std::bit_cast<T>(_byteswap_ulong (std::bit_cast<uint32_t>(V))); }
+    if constexpr (sizeof(V) == 8) { return std::bit_cast<T>(_byteswap_uint64(std::bit_cast<uint64_t>(V))); }
+    // Other sizes are cut off by the type constraint.
+}
+
+/**
+ * @brief       Alternative to @ref Byteswap guaranteed to run in compile-time.
+ * @tparam      T - Numeric type of 1 / 2 / 4 / 8 bytes.
+ * @returns     The reversed value.
+ */
+template<NumericRegularType T>
+consteval T ConstevalByteswap(T const V) noexcept
+{
+    using UnsignedT = std::make_unsigned<T>::type;
+    UnsignedT const U = std::bit_cast<UnsignedT, T>(V);
+    UnsignedT const R =
+          ((U >> 0x18) & 0x000000ff)
+        | ((U << 0x08) & 0x00ff0000)
+        | ((U >> 0x08) & 0x0000ff00)
+        | ((U << 0x18) & 0xff000000);
+    return std::bit_cast<T, UnsignedT>(R);
+}
 
 
 // ! Memory utilities.
@@ -365,6 +440,54 @@ public:
 #endif // _FINAL_RELEASE
 
 #endif // _DEBUG
+
+
+namespace Details
+{
+    void OnFatalErrorW(::CodePlaceW const& Place, wchar_t const* Expression, wchar_t const* Format, ...);
+}
+
+#define _MILAN_FATALW_IMPL(Expression, Format, ...)                                 \
+    do {                                                                            \
+        MILAN_BREAK_ATTACHED();                                                     \
+        ::Details::OnFatalErrorW(MILAN_HEREW, Expression, Format, __VA_ARGS__);     \
+        MILAN_UNREACHABLE;                                                          \
+    } while (false)
+
+/**
+ * @def         MILAN_FATALW(Format, ...)
+ * @brief       Terminates this .asi module and the host game due to an error.
+ */
+#define MILAN_FATALW(Format, ...) \
+    _MILAN_FATALW_IMPL(L"", Format, __VA_ARGS__)
+
+/**
+ * @def         MILAN_VERIFYW(Expression, Format, ...)
+ * @brief       Calls @ref MILAN_FATALW if @c Expression evaluates false.
+ */
+#define MILAN_VERIFYW(Expression, Format, ...) \
+    do { if (!(Expression)) { \
+        _MILAN_FATALW_IMPL(L"" #Expression, Format, __VA_ARGS__); \
+    } } while (false)
+
+#ifndef _FINAL_RELEASE
+
+    /**
+     * @def         MILAN_CHECKW(Expression, Format, ...)
+     * @brief       Identical to @ref MILAN_VERIFYW in DEBUG and RELEASE builds.
+     */
+    #define MILAN_CHECKW(Expression, Format, ...) \
+        MILAN_VERIFYW(Expression, Format, __VA_ARGS__)
+#else
+
+    /**
+     * @def         MILAN_CHECKW(Expression, Format, ...)
+     * @brief       Resolves to a no-op in FINAL builds.
+     */
+    #define MILAN_CHECKW(Expression, Format, ...) \
+        do { } while (false)
+
+#endif
 
 
 // ! Misc types.

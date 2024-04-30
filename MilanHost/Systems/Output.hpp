@@ -14,6 +14,8 @@ namespace Milan::Output
     void Initialize(::LESDK::Initializer& Context);
     void Terminate();
 
+    bool HasInitialized() noexcept;
+
     ILogger& GetMainLogger();
     void FlushEverything();
 }
