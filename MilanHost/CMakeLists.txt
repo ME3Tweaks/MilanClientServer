@@ -9,10 +9,10 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Containers/string.hpp
   ${PROJ_FOLDER}/Containers/unordered_map.hpp
   ${PROJ_FOLDER}/Containers/vector.hpp
-  ${PROJ_FOLDER}/Systems/Builtins.cpp
-  ${PROJ_FOLDER}/Systems/Builtins.hpp
   ${PROJ_FOLDER}/Systems/Console.cpp
   ${PROJ_FOLDER}/Systems/Console.hpp
+  ${PROJ_FOLDER}/Systems/Globals.cpp
+  ${PROJ_FOLDER}/Systems/Globals.hpp
   ${PROJ_FOLDER}/Systems/Output.cpp
   ${PROJ_FOLDER}/Systems/Output.hpp
   ${PROJ_FOLDER}/Systems/Panels.cpp
@@ -21,6 +21,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Base.hpp
   ${PROJ_FOLDER}/Entry.cpp
   ${PROJ_FOLDER}/Entry.hpp
+  ${PROJ_FOLDER}/Hooks.cpp
+  ${PROJ_FOLDER}/Hooks.hpp
   ${PROJ_FOLDER}/Logger.cpp
   ${PROJ_FOLDER}/Logger.hpp
   ${PROJ_FOLDER}/Misc.cpp

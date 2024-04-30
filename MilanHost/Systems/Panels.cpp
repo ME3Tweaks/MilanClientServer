@@ -1,9 +1,16 @@
+#include <backends/imgui_impl_win32.h>
+#include <backends/imgui_impl_dx11.h>
+
 #include <LESDK/Headers.hpp>
 #include <LESDK/Init.hpp>
 
 #include "Base.hpp"
 #include "Systems/Panels.hpp"
 #include "Systems/Output.hpp"
+
+
+// Copied from <backends/imgui_impl_win32.h> according to the instructions found there.
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 
 namespace Milan::Panels
@@ -13,9 +20,6 @@ namespace Milan::Panels
     ID3D11Device* gp_d3d11Device = nullptr;
     ID3D11DeviceContext* gp_d3d11DeviceContext = nullptr;
     ID3D11RenderTargetView* gp_d3d11RenderTargetView = nullptr;
-
-    tWndProc* WndProc_orig = nullptr;
-    tSwapChainPresent* SwapChainPresent_orig = nullptr;
 
 
     // Allocator callbacks for imgui.
@@ -39,14 +43,11 @@ namespace Milan::Panels
 
     void Initialize(::LESDK::Initializer& Context)
     {
-        ImGui::SetAllocatorFunctions(MyImGuiAlloc, MyImGuiFree);
+        MILAN_UNUSED(Context);
 
+        ImGui::SetAllocatorFunctions(MyImGuiAlloc, MyImGuiFree);
         ImGui::CreateContext();
         ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
-
-        tSwapChainPresent* SwapChainPresent_target = FindSwapChainPresent();
-        SwapChainPresent_orig = (tSwapChainPresent*)Context.InstallHook("SwapChainPresent", SwapChainPresent_target, SwapChainPresent_hook);
-        WndProc_orig = Context.ResolveTyped<tWndProc>(GLOBAL_WNDPROC_RVA);
 
         MILAN_INFOW(L"panels system initialized");
     }
@@ -60,6 +61,10 @@ namespace Milan::Panels
         ImGui::DestroyContext();
     }
 
+
+    // ! Public interface.
+    // ========================================
+
     void OpenInterface(wchar_t const* const Reason)
     {
         MILAN_DEBUGW_FMT(L"opening interface, reason = %s", Reason ? Reason : L"???");
@@ -72,11 +77,7 @@ namespace Milan::Panels
         gb_debugPanelEnabled = false;
     }
 
-
-    // ! Hooks to enable Imgui integration.
-    // ========================================
-
-    LRESULT CALLBACK WndProc_hook(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
+    bool OnWndProc(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
     {
         ImGuiIO& IO = ImGui::GetIO();
         POINT MousePosition{};
@@ -97,14 +98,13 @@ namespace Milan::Panels
                 return true;
         }
 
-        if (WndProc_orig == nullptr)
-            return true;
-
-        return (*WndProc_orig)(hWnd, uMsg, wParam, lParam);
+        return false;
     }
 
-    HRESULT SwapChainPresent_hook(IDXGISwapChain* const pChain, UINT const SyncInterval, UINT const Flags)
+    bool OnSwapChainPresent(IDXGISwapChain* const pChain, UINT const SyncInterval, UINT const Flags)
     {
+        MILAN_UNUSED_2(SyncInterval, Flags);
+
         static bool bFailedInternal = false;
         static bool bSwapChainInitialized = false;
 
@@ -116,7 +116,7 @@ namespace Milan::Panels
                 {
                     bFailedInternal = true;
                     MILAN_ERRORW(L"GetDeviceAndContext failed");
-                    return SwapChainPresent_orig(pChain, SyncInterval, Flags);
+                    return false;
                 }
 
                 DXGI_SWAP_CHAIN_DESC SwapChainDescription{};
@@ -159,7 +159,7 @@ namespace Milan::Panels
             ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
         }
 
-        return SwapChainPresent_orig(pChain, SyncInterval, Flags);
+        return false;
     }
 
 
@@ -173,7 +173,7 @@ namespace Milan::Panels
         return Result;
     }
 
-    tSwapChainPresent* FindSwapChainPresent()
+    t_IDXGISwapChain_Present* FindSwapChainPresent()
     {
         DXGI_SWAP_CHAIN_DESC SCDesc{};
         std::memset(&SCDesc, 0, sizeof SCDesc);
@@ -209,7 +209,7 @@ namespace Milan::Panels
         void** pSwapChainVtable = *(void***)pSwapChain;
         pSwapChain->Release();
 
-        return (tSwapChainPresent*)pSwapChainVtable[8];
+        return (t_IDXGISwapChain_Present*)pSwapChainVtable[8];
     }
 
     bool MessageImguiPassthrough(UINT const uMsg, WPARAM const, LPARAM const)

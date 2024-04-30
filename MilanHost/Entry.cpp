@@ -5,8 +5,8 @@
 #include "Base.hpp"
 #include "Entry.hpp"
 #include "Logger.hpp"
-#include "Systems/Builtins.hpp"
 #include "Systems/Console.hpp"
+#include "Systems/Globals.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/Panels.hpp"
 
@@ -25,7 +25,7 @@ SPI_IMPLEMENT_ATTACH
 
     ::Milan::Allocator::Initialize(Context);
     ::Milan::Output::Initialize(Context);
-    ::Milan::Builtins::Initialize(Context);
+    ::Milan::Globals::Initialize(Context);
     ::Milan::Console::Initialize(Context);
     ::Milan::Panels::Initialize(Context);
 
@@ -50,7 +50,7 @@ SPI_IMPLEMENT_DETACH
 
     ::Milan::Panels::Terminate();
     ::Milan::Console::Terminate();
-    ::Milan::Builtins::Terminate();
+    ::Milan::Globals::Terminate();
     ::Milan::Output::Terminate();
     ::Milan::Allocator::Terminate();
 

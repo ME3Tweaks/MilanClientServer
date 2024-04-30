@@ -1,6 +1,6 @@
 /**
- * @file        MilanHost/Systems/Builtins.hpp
- * @header      Subsystems wrapping SDK built-ins initialization.
+ * @file        MilanHost/Systems/Globals.hpp
+ * @header      Subsystems for initializing global variables and hooks.
  */
 
 #pragma once
@@ -8,7 +8,6 @@
 
 namespace LESDK { class Initializer; }
 
-// GMalloc is initialized in a dedicated subsystem because that needs to happen before anything else.
 
 namespace Milan::Allocator
 {
@@ -16,7 +15,7 @@ namespace Milan::Allocator
     void Terminate();
 }
 
-namespace Milan::Builtins
+namespace Milan::Globals
 {
     void Initialize(::LESDK::Initializer& Context);
     void Terminate();
