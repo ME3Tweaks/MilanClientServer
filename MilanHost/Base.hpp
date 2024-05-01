@@ -490,6 +490,29 @@ namespace Details
 #endif
 
 
+// ! Input/output definitions.
+// ========================================
+
+enum struct IoMode : int {
+    Read = 1,
+    ReadWrite = 2,
+};
+
+static constexpr auto k_ioRead = IoMode::Read;
+static constexpr auto k_ioReadWrite = IoMode::ReadWrite;
+
+enum struct SeekOrigin : int
+{
+    Begin = 1,
+    Current = 2,
+    End = 3,
+};
+
+static constexpr auto k_seekBegin = SeekOrigin::Begin;
+static constexpr auto k_seekCurrent = SeekOrigin::Current;
+static constexpr auto k_seekEnd = SeekOrigin::End;
+
+
 // ! Misc types.
 // ========================================
 

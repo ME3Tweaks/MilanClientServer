@@ -55,6 +55,142 @@ void IOutputStream::WriteExact(std::span<BYTE const> const Input)
 }
 
 
+// ! MemoryInputStream implementation.
+// ========================================
+
+INT64 MemoryInputStream::Length() const
+{
+    return m_buffer.Length();
+}
+
+INT64 MemoryInputStream::Position() const
+{
+    return m_buffer.Position();
+}
+
+INT64 MemoryInputStream::Seek(SeekOrigin const Origin, INT64 const Offset)
+{
+    return m_buffer.Seek(Origin, Offset);
+}
+
+INT64 MemoryInputStream::Read(BYTE* const Output, INT64 const Length)
+{
+    MILAN_CHECKW(Output != nullptr, L"");
+    MILAN_CHECKW(Length > 0, L"");
+
+    std::span<BYTE> const Remaining = m_buffer.Remaining();
+    INT64 const Copied = std::min(Length, static_cast<INT64>(Remaining.size()));
+
+    std::copy_n(Remaining.begin(), Copied, Output);
+    return m_buffer.Advance(Copied);
+}
+
+MemoryInputStream::MemoryInputStream(std::span<BYTE> const Data)
+    : m_buffer{ Data } {}
+
+MemoryInputStream::MemoryInputStream(IInputStream& Source)
+    : m_buffer{}
+{
+    m_buffer.Buffer.resize(static_cast<std::size_t>(Source.Length()), 0u);
+    Source.ReadExact({ m_buffer.Buffer });
+    MILAN_CHECKW(Length() == Source.Length(), L"");
+}
+
+MemoryInputStream::MemoryInputStream(MemoryInputStream&& Other) noexcept
+    : m_buffer{ std::move(Other.m_buffer) } {}
+
+MemoryInputStream& MemoryInputStream::operator=(MemoryInputStream&& Other) noexcept
+{
+    if (this != &Other)
+        m_buffer = std::move(Other.m_buffer);
+
+    return *this;
+}
+
+
+// ! MemoryOutputStream implementation.
+// ========================================
+
+INT64 MemoryOutputStream::Length() const
+{
+    return m_buffer.Length();
+}
+
+INT64 MemoryOutputStream::Position() const
+{
+    return m_buffer.Position();
+}
+
+INT64 MemoryOutputStream::Seek(SeekOrigin const Origin, INT64 const Offset)
+{
+    return m_buffer.Seek(Origin, Offset);
+}
+
+INT64 MemoryOutputStream::Write(BYTE const* const Input, INT64 const Length)
+{
+    MILAN_CHECKW(Input != nullptr, L"");
+    MILAN_CHECKW(Length > 0, L"");
+    MILAN_CHECKW(m_buffer.Position() <= m_buffer.Length(), L"");
+
+    auto const WritePosition = m_buffer.Buffer.begin() + m_buffer.Position();
+    m_buffer.Buffer.insert(WritePosition, Input, Input + Length);
+    return m_buffer.Advance(Length);
+}
+
+MemoryOutputStream::MemoryOutputStream(std::size_t const Capacity)
+    : m_buffer{ Capacity } {}
+
+MemoryOutputStream::MemoryOutputStream(MemoryOutputStream&& Other) noexcept
+    : m_buffer{ std::move(Other.m_buffer) } {}
+
+MemoryOutputStream& MemoryOutputStream::operator=(MemoryOutputStream&& Other) noexcept
+{
+    if (this != &Other)
+        m_buffer = std::move(Other.m_buffer);
+
+    return *this;
+}
+
+
+// ! WeakInputStream implementation.
+// ========================================
+
+INT64 WeakInputStream::Length() const
+{
+    return m_buffer.Length();
+}
+
+INT64 WeakInputStream::Position() const
+{
+    return m_buffer.Position();
+}
+
+INT64 WeakInputStream::Seek(SeekOrigin const Origin, INT64 const Offset)
+{
+    return m_buffer.Seek(Origin, Offset);
+}
+
+INT64 WeakInputStream::Read(BYTE* const Output, INT64 const Length) {
+    MILAN_CHECKW(Output != nullptr, L"");
+    MILAN_CHECKW(Length > 0, L"");
+
+    auto const Remaining = m_buffer.Remaining();
+    auto const Copied = std::min(Length, static_cast<INT64>(Remaining.size()));
+
+    std::copy_n(Remaining.begin(), Copied, Output);
+    return m_buffer.Advance(Copied);
+}
+
+WeakInputStream::WeakInputStream(std::span<BYTE const> const Data)
+    : m_buffer{ Data }
+{
+    MILAN_CHECKW(!Data.empty(), L"");
+}
+
+
+
+
+
 
 void _Test_IInputStream_Builds_(IInputStream& Stream)
 {

@@ -8,31 +8,9 @@
 #include <span>
 
 #include "Base.hpp"
+#include "Buffers.hpp"
 #include "Containers/string.hpp"
 #include "Containers/vector.hpp"
-
-
-// ! Common definitions.
-// ========================================
-
-enum struct IoMode : int {
-    Read = 1,
-    ReadWrite = 2,
-};
-
-static constexpr auto k_ioRead = IoMode::Read;
-static constexpr auto k_ioReadWrite = IoMode::ReadWrite;
-
-enum struct SeekOrigin : int
-{
-    Begin = 1,
-    Current = 2,
-    End = 3,
-};
-
-static constexpr auto k_seekBegin = SeekOrigin::Begin;
-static constexpr auto k_seekCurrent = SeekOrigin::Current;
-static constexpr auto k_seekEnd = SeekOrigin::End;
 
 
 // ! Stream interfaces.
@@ -280,8 +258,90 @@ void IOutputStream::WriteString(FStringBase<bWithRaii>& InValue)
 }
 
 
-// ! File-backed streams.
-// ========================================
-
 // ! Memory-backed streams.
 // ========================================
+
+/** An @ref IInputStream backed by an internal fixed-size buffer. */
+class MemoryInputStream final
+    : public IInputStream, public NonCopyable
+{
+    MemoryBuffer m_buffer;
+
+public:
+
+    // IInputStream implementation.
+
+    ~MemoryInputStream() noexcept override = default;
+
+    INT64 Length() const override;
+    INT64 Position() const override;
+    INT64 Seek(SeekOrigin Origin, INT64 Offset) override;
+    INT64 Read(BYTE* Output, INT64 Length) override;
+
+    // Own interface.
+
+    explicit MemoryInputStream(std::span<BYTE> Data);
+    explicit MemoryInputStream(IInputStream& Source);
+
+    MemoryInputStream(MemoryInputStream&& Other) noexcept;
+    MemoryInputStream& operator=(MemoryInputStream&& Other) noexcept;
+
+    std::span<BYTE const> View() const noexcept
+    {
+        return std::span{ m_buffer.Buffer };
+    }
+};
+
+/** An @ref IOutputStream backed by an internal fixed-size buffer. */
+class MemoryOutputStream final
+    : public IOutputStream, public NonCopyable
+{
+    MemoryBuffer m_buffer;
+
+    // IOutputStream implementation.
+
+    ~MemoryOutputStream() noexcept override = default;
+
+    INT64 Length() const override;
+    INT64 Position() const override;
+    INT64 Seek(SeekOrigin Origin, INT64 Offset) override;
+    INT64 Write(BYTE const* Input, INT64 Length) override;
+
+    // Own interface.
+
+    MemoryOutputStream() = default;
+    explicit MemoryOutputStream(std::size_t Capacity);
+
+    MemoryOutputStream(MemoryOutputStream&& Other) noexcept;
+    MemoryOutputStream& operator=(MemoryOutputStream&& Other) noexcept;
+
+    std::span<BYTE const> View() const noexcept
+    {
+        return std::span{ m_buffer.Buffer };
+    }
+};
+
+/** An @ref IInputStream backed by an external fixed-size buffer. */
+class WeakInputStream final : public IInputStream
+{
+    WeakBuffer m_buffer;
+
+public:
+
+    // IInputStream implementation.
+
+    ~WeakInputStream() noexcept override = default;
+
+    INT64 Length() const override;
+    INT64 Position() const override;
+    INT64 Seek(SeekOrigin Origin, INT64 Offset) override;
+    INT64 Read(BYTE* Output, INT64 Length) override;
+
+    // Own interface.
+
+    explicit WeakInputStream(std::span<BYTE const> Data);
+
+    std::span<BYTE const> View() const noexcept {
+        return m_buffer.Buffer;
+    }
+};

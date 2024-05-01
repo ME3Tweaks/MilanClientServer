@@ -19,6 +19,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Systems/Panels.hpp
   ${PROJ_FOLDER}/Base.cpp
   ${PROJ_FOLDER}/Base.hpp
+  ${PROJ_FOLDER}/Buffers.cpp
+  ${PROJ_FOLDER}/Buffers.hpp
   ${PROJ_FOLDER}/Entry.cpp
   ${PROJ_FOLDER}/Entry.hpp
   ${PROJ_FOLDER}/Hooks.cpp
