@@ -9,6 +9,7 @@
 #include "Systems/Globals.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/Panels.hpp"
+#include "Systems/State.hpp"
 
 
 SPI_PLUGINSIDE_SUPPORT(L"MilanHost", L"Project Milan Team", L"0.1.0", SPI_GAME_LE3, SPI_VERSION_ANY);
@@ -28,6 +29,7 @@ SPI_IMPLEMENT_ATTACH
     ::Milan::Globals::Initialize(Context);
     ::Milan::Console::Initialize(Context);
     ::Milan::Panels::Initialize(Context);
+    ::Milan::State::Initialize(Context);
 
 
     MILAN_INFOW(L"attach completed");
@@ -48,6 +50,7 @@ SPI_IMPLEMENT_DETACH
     // Terminate subsystems in reverse.
     // ----------------------------------------
 
+    ::Milan::State::Terminate();
     ::Milan::Panels::Terminate();
     ::Milan::Console::Terminate();
     ::Milan::Globals::Terminate();

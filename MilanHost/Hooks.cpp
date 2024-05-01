@@ -1,6 +1,7 @@
 #include "Systems/Console.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/Panels.hpp"
+#include "Systems/State.hpp"
 
 #include "Hooks.hpp"
 #include "Logger.hpp"
@@ -137,7 +138,15 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
 #endif
 
-    (*UObject_ProcessInternal_orig)(Context, Stack, Result);
+    bool bCallOriginal = true;
+
+    if (!::Milan::State::On_UObject_ProcessInternal(Context, Stack, Result))
+        bCallOriginal = false;
+
+    if (bCallOriginal)
+    {
+        (*UObject_ProcessInternal_orig)(Context, Stack, Result);
+    }
 }
 
 t_UObject_SkipFunction* UObject_SkipFunction = nullptr;
@@ -150,4 +159,5 @@ t_UWorld_Tick* UWorld_Tick_orig = nullptr;
 void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delta)
 {
     (*UWorld_Tick_orig)(Context, Unknown, Delta);
+    ::Milan::State::On_UWorld_Tick(Context, Unknown, Delta);
 }
