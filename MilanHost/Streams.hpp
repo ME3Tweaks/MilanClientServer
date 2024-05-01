@@ -6,7 +6,10 @@
 #pragma once
 
 #include <span>
+
 #include "Base.hpp"
+#include "Containers/string.hpp"
+#include "Containers/vector.hpp"
 
 
 // ! Common definitions.
@@ -68,6 +71,9 @@ public:
     template<PlainOldType Type>
     void ReadPod(Type& OutValue);
 
+    template<bool bWithRaii>
+    void ReadString(FStringBase<bWithRaii>& OutValue);
+
 };
 
 template<std::endian Endian, NumericRegularType Type>
@@ -90,7 +96,7 @@ template<std::endian Endian, NumericRegularType Type>
 void IInputStream::ReadMultiple(Type* const OutArray, int const Count)
 {
     MILAN_CHECKW(OutArray != nullptr, L"");
-    MILAN_CHECKW(Count != 0, L"");
+    MILAN_CHECKW(Count > 0, L"");
 
     auto const ArraySize = static_cast<INT64>(sizeof(Type)) * Count;
     auto const ReadBytes = this->Read((BYTE*)OutArray, ArraySize);
@@ -110,7 +116,7 @@ void IInputStream::ReadMultiple(Type* const OutArray, int const Count)
 template<std::endian Endian, NumericRegularType Type>
 void IInputStream::ReadMultiple(std::span<Type> const Output)
 {
-    return this->ReadMultiple<Endian, Type>(Output.data(), static_cast<int>(Output.size()));
+    this->ReadMultiple<Endian, Type>(Output.data(), static_cast<int>(Output.size()));
 }
 
 template<PlainOldType Type>
@@ -120,3 +126,162 @@ void IInputStream::ReadPod(Type& OutValue)
     auto const ReadBytes = this->Read(reinterpret_cast<byte_t*>(&OutValue), ValueSize);
     MILAN_VERIFYW(ReadBytes == ValueSize, L"read %lld byte(s) of %lld expected", ReadBytes, ValueSize);
 }
+
+template<bool bWithRaii>
+void IInputStream::ReadString(FStringBase<bWithRaii>& OutValue)
+{
+    // Holds the number of *characters*.
+    // Includes the null-terminator if present.
+    INT32 Length = 0;
+    this->ReadNumeric<BIG>(Length);
+
+    if (Length == 0)
+    {
+        OutValue.Reset();
+    }
+    else if (Length < 0)
+    {
+        Length = -Length;
+
+        // TODO: Remove temporary string once FStringBase is updated in the SDK.
+        ::game::wstring Temporary(static_cast<size_t>(Length), L'\0');
+        this->ReadExact(std::span((BYTE*)Temporary.data(), Temporary.size() * 2));
+
+        MILAN_CHECKW(Temporary.back() == L'\0',
+            L"expected last char to be null-terminator, found %d",
+            static_cast<int>(Temporary.back()));
+
+        OutValue.Reset();
+        OutValue.Append(Temporary.begin(), Temporary.end() - 1);
+    }
+    else
+    {
+        MILAN_FATALW(L"only unicode strings are supported for serialization");
+    }
+
+    INT8 ExtraTerminator = 0;
+    this->ReadNumeric<BIG>(ExtraTerminator);
+    MILAN_VERIFYW(ExtraTerminator == 0, L"extra terminator not zero: {}", ExtraTerminator);
+}
+
+
+/** Stream interface for writing primitives. */
+class IOutputStream
+{
+public:
+
+    virtual             ~IOutputStream() noexcept = default;
+
+    virtual INT64       Length() const = 0;
+    virtual INT64       Position() const = 0;
+    virtual INT64       Seek(SeekOrigin Origin, INT64 Offset) = 0;
+
+    virtual INT64       Write(BYTE const* Input, INT64 Length) = 0;
+
+    // Shared implementation.
+
+    virtual INT64       Rewind();
+    virtual INT64       Skip(INT64 Forward);
+
+    virtual INT64       Write(std::span<BYTE const> Input);
+    virtual void        WriteExact(std::span<BYTE const> Input);
+
+    template<std::endian Endian, NumericRegularType Type>
+    void WriteNumeric(Type InValue);
+
+    template<std::endian Endian, NumericRegularType Type>
+    void WriteMultiple(Type const* InArray, int Count);
+
+    template<std::endian Endian, NumericRegularType Type>
+    void WriteMultiple(std::span<Type const> Input);
+
+    template<PlainOldType Type>
+    void WritePod(Type& Value);
+
+    template<bool bWithRaii>
+    void WriteString(FStringBase<bWithRaii>& InValue);
+
+};
+
+template<std::endian Endian, NumericRegularType Type>
+void IOutputStream::WriteNumeric(Type InValue)
+{
+    if constexpr (Endian != NATIVE)
+        InValue = Byteswap(InValue);
+
+    auto const ValueSize = static_cast<INT64>(sizeof InValue);
+    auto const WrittenBytes = this->Write((BYTE const*)&InValue, ValueSize);
+    MILAN_VERIFYW(WrittenBytes == ValueSize, L"wrote %lld byte(s) of %lld expected", WrittenBytes, ValueSize);
+}
+
+template<std::endian Endian, NumericRegularType Type>
+void IOutputStream::WriteMultiple(Type const* const InArray, int const Count)
+{
+    MILAN_CHECKW(InArray != nullptr, L"");
+    MILAN_CHECKW(Count > 0, L"");
+
+    auto const ValueSize = static_cast<INT64>(sizeof(Type));
+    auto const ArraySize = ValueSize * Count;
+
+    // Since manipulating InArray in-place is undesirable,
+    // all of its elements will need to be byteswapped one by one.
+
+    INT64 WrittenBytes = 0;
+
+    for (int i = 0; i < Count; ++i)
+    {
+        Type Value = InArray[i];
+        if constexpr (Endian != NATIVE)
+            Value = Byteswap(Value);
+
+        auto const IterWrittenBytes = this->Write((BYTE const*)&Value, ValueSize);
+        WrittenBytes += IterWrittenBytes;
+
+        if (IterWrittenBytes != ValueSize)
+            break;
+    }
+
+    MILAN_VERIFYW(WrittenBytes == ArraySize, L"wrote %lld byte(s) of %lld expected", WrittenBytes, ArraySize);
+}
+
+template<std::endian Endian, NumericRegularType Type>
+void IOutputStream::WriteMultiple(std::span<Type const> const Input)
+{
+    this->WriteMultiple(Input.data(), static_cast<int>(Input.size()));
+}
+
+template<PlainOldType Type>
+void IOutputStream::WritePod(Type& Value)
+{
+    auto const ValueSize = static_cast<INT64>(sizeof(Type));
+    auto const WrittenBytes = this->Write(reinterpret_cast<BYTE*>(&Value), ValueSize);
+    MILAN_VERIFYW(WrittenBytes == ValueSize, L"wrote %lld byte(s) of %lld expected", WrittenBytes, ValueSize);
+}
+
+template<bool bWithRaii>
+void IOutputStream::WriteString(FStringBase<bWithRaii>& InValue)
+{
+    if (InValue.Empty())
+    {
+        this->WriteNumeric<BIG, INT32>(0);
+    }
+    else
+    {
+        INT32 const Length = static_cast<INT32>(InValue.Length() + 1);
+
+        // Always serialize FString as unicode.
+        this->WriteNumeric<BIG, INT32>(Length * -2);
+        // This will write out the null-terminator, too.
+        this->WriteExact(std::span((BYTE*)InValue.Chars(), static_cast<size_t>(Length * 2)));
+    }
+
+    // Additional zero here?!...
+    this->WriteNumeric<BIG, INT8>(0);
+}
+
+
+// ! File-backed streams.
+// ========================================
+
+// ! Memory-backed streams.
+// ========================================
