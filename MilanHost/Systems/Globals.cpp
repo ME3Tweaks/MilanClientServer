@@ -66,6 +66,10 @@ namespace Milan::Globals
         UObject_CallFunction_orig = (t_UObject_CallFunction*)Context.InstallHook("UObject::CallFunction", UObject_CallFunction_target, UObject_CallFunction_hook);
         MILAN_DEBUGW(L"UObject::CallFunction hooked: %p -> %p", (void*)UObject_CallFunction_target, (void*)UObject_CallFunction_orig);
 
+        t_UObject_ProcessDelegate* UObject_ProcessDelegate_target = Context.ResolveTyped<t_UObject_ProcessDelegate>(GLOBAL_UOBJECT_PROCESSDELEGATE_PHOOK);
+        UObject_ProcessDelegate_orig = (t_UObject_ProcessDelegate*)Context.InstallHook("UObject::ProcessDelegate", UObject_ProcessDelegate_target, UObject_ProcessDelegate_hook);
+        MILAN_DEBUGW(L"UObject::ProcessDelegate hooked: %p -> %p", (void*)UObject_ProcessDelegate_target, (void*)UObject_ProcessDelegate_orig);
+
         t_UObject_ProcessEvent* UObject_ProcessEvent_target = Context.ResolveTyped<t_UObject_ProcessEvent>(BUILTIN_PROCESSEVENT_PHOOK);
         UObject_ProcessEvent_orig = (t_UObject_ProcessEvent*)Context.InstallHook("UObject::ProcessEvent", UObject_ProcessEvent_target, UObject_ProcessEvent_hook);
         MILAN_DEBUGW(L"UObject::ProcessEvent hooked: %p -> %p", (void*)UObject_ProcessEvent_target, (void*)UObject_ProcessEvent_orig);

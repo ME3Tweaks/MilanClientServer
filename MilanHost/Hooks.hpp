@@ -20,6 +20,9 @@
 #define GLOBAL_UGAMEENGINE_EXEC_PHOOK \
     ::LESDK::Address::FromPostHook(/* 40 55 56 57 41 */ "54 41 55 41 56 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC 40 0A 00 00")
 
+#define GLOBAL_UOBJECT_PROCESSDELEGATE_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 89 5C 24 ?? */ "48 89 54 24 ?? 55 57 41 54 41 56 41 57 48 83 EC 20 49 63 40 08")
+
 #define GLOBAL_UOBJECT_SKIPFUNCTION_PHOOK \
     ::LESDK::Address::FromPostHook(/* 40 55 41 54 41 */ "55 41 56 41 57 48 83 EC 30 48 8D 6C 24 ?? 48 89 5D ?? 48 89 75 ?? 48 89 7D ?? 48 8B 05 ?? ?? ?? ?? 48 33 C5 48 89 45 00 48 8B DA")
 
@@ -60,6 +63,11 @@ using t_UObject_CallFunction = tCallFunction;
 extern t_UObject_CallFunction* UObject_CallFunction_orig;
 
 void UObject_CallFunction_hook(UObject* Context, FFrame* Stack, void* Result, UFunction* Function);
+
+using t_UObject_ProcessDelegate = void(UObject* Context, SFXName DelegateName, FScriptDelegate* Delegate, void* Parms, void* Result);
+extern t_UObject_ProcessDelegate* UObject_ProcessDelegate_orig;
+
+void UObject_ProcessDelegate_hook(UObject* Context, SFXName DelegateName, FScriptDelegate* Delegate, void* Parms, void* Result);
 
 using t_UObject_ProcessEvent = tProcessEvent;
 extern t_UObject_ProcessEvent* UObject_ProcessEvent_orig;

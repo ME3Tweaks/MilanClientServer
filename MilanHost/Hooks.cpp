@@ -7,6 +7,7 @@
 
 
 static bool gb_logCallFunction = false;
+static bool gb_logProcessDelegate = false;
 static bool gb_logProcessEvent = false;
 static bool gb_logProcessInternal = false;
 
@@ -65,6 +66,36 @@ void UObject_CallFunction_hook(UObject* const Context, FFrame* const Stack, void
 #endif
 
     (*UObject_CallFunction_orig)(Context, Stack, Result, Function);
+}
+
+t_UObject_ProcessDelegate* UObject_ProcessDelegate_orig = nullptr;
+void UObject_ProcessDelegate_hook(UObject* const Context, SFXName const DelegateName,
+    FScriptDelegate* const Delegate, void* const Parms, void* const Result)
+{
+#ifndef _FINAL_RELEASE
+    if (gb_logProcessDelegate)
+    {
+        static FStringRAII ContextName{}, StrDelegateName{}, DelegateContextName{}, StrDelegateFunctionName{};
+
+        ContextName.Clear();
+        StrDelegateName.Clear();
+        DelegateContextName.Clear();
+        StrDelegateFunctionName.Clear();
+
+        Context->AppendName(ContextName, SFXName::k_formatBasic);
+        DelegateName.AppendToString(StrDelegateName, SFXName::k_formatBasic);
+        if (Delegate->Object) Delegate->Object->AppendName(DelegateContextName, SFXName::k_formatBasic);
+        Delegate->FunctionName.AppendToString(StrDelegateFunctionName, SFXName::k_formatBasic);
+
+        MILAN_TRACEW(L"UObject::ProcessDelegate:");
+        MILAN_TRACEW(L"  Context: %s", *ContextName);
+        MILAN_TRACEW(L"  DelegateName: %s", *StrDelegateName);
+        MILAN_TRACEW(L"  Delegate.Object: %s", *DelegateContextName);
+        MILAN_TRACEW(L"  Delegate.Function: %s", *StrDelegateFunctionName);
+    }
+#endif
+
+    (*UObject_ProcessDelegate_orig)(Context, DelegateName, Delegate, Parms, Result);
 }
 
 t_UObject_ProcessEvent* UObject_ProcessEvent_orig = nullptr;
