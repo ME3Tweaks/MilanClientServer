@@ -17,6 +17,9 @@
  // TODO: Replace this with a post-hook pattern search.
 #define GLOBAL_WNDPROC_RVA  ::LESDK::Address::FromOffset(0x99D2C0)
 
+#define GLOBAL_UFUNCTION_BIND_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 8B C4 55 41 */ "56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 70 08 00 00 48 C7 44 24 50 ?? ?? ?? ??")
+
 #define GLOBAL_UGAMEENGINE_EXEC_PHOOK \
     ::LESDK::Address::FromPostHook(/* 40 55 56 57 41 */ "54 41 55 41 56 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC 40 0A 00 00")
 
@@ -45,6 +48,15 @@ HRESULT __stdcall IDXGISwapChain_Present_hook(IDXGISwapChain* pChain, UINT SyncI
 
 using t_BioRequestExit = void(UBOOL bForce, INT ExitCode, INT Unused);
 extern t_BioRequestExit* BioRequestExit;
+
+
+// ! UFunction methods.
+// ========================================
+
+using t_UFunction_Bind = void(UFunction* Context);
+extern t_UFunction_Bind* UFunction_Bind_orig;
+
+void UFunction_Bind_hook(UFunction* Context);
 
 
 // ! UGameEngine methods.

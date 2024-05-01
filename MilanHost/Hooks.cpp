@@ -37,6 +37,17 @@ HRESULT IDXGISwapChain_Present_hook(IDXGISwapChain* const pChain, UINT const Syn
 
 t_BioRequestExit* BioRequestExit = nullptr;
 
+t_UFunction_Bind* UFunction_Bind_orig = nullptr;
+void UFunction_Bind_hook(UFunction* const Context)
+{
+    (*UFunction_Bind_orig)(Context);
+
+    if (Context->Func == nullptr)
+    {
+        MILAN_WARNW(L"UFunction::Bind failed to bind %s", *Context->StaticFullName());
+    }
+}
+
 t_UGameEngine_Exec* UGameEngine_Exec_orig = nullptr;
 UBOOL UGameEngine_Exec_hook(UGameEngine* const Context, WCHAR const* const Command, void* const Output)
 {

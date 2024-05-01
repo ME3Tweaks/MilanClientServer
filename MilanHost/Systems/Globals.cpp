@@ -58,6 +58,10 @@ namespace Milan::Globals
         // WndProc is not hooked but replaced using Win32 mechanism,
         // see ::Milan::Panels::OnSwapChainPresent for more.
 
+        t_UFunction_Bind* UFunction_Bind_target = Context.ResolveTyped<t_UFunction_Bind>(GLOBAL_UFUNCTION_BIND_PHOOK);
+        UFunction_Bind_orig = (t_UFunction_Bind*)Context.InstallHook("UFunction::Bind", UFunction_Bind_target, UFunction_Bind_hook);
+        MILAN_DEBUGW(L"UFunction::Bind hooked: %p -> %p", (void*)UFunction_Bind_target, (void*)UFunction_Bind_orig);
+
         t_UGameEngine_Exec* UGameEngine_Exec_target = Context.ResolveTyped<t_UGameEngine_Exec>(GLOBAL_UGAMEENGINE_EXEC_PHOOK);
         UGameEngine_Exec_orig = (t_UGameEngine_Exec*)Context.InstallHook("UGameEngine::Exec", UGameEngine_Exec_target, UGameEngine_Exec_hook);
         MILAN_DEBUGW(L"UGameEngine::Exec hooked: %p -> %p", (void*)UGameEngine_Exec_target, (void*)UGameEngine_Exec_orig);
