@@ -27,6 +27,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Logger.hpp
   ${PROJ_FOLDER}/Misc.cpp
   ${PROJ_FOLDER}/Misc.hpp
+  ${PROJ_FOLDER}/Streams.cpp
+  ${PROJ_FOLDER}/Streams.hpp
 )
 
 set (PROJ_LINKS
