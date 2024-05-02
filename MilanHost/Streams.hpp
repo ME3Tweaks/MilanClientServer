@@ -136,10 +136,6 @@ void IInputStream::ReadString(FStringBase<bWithRaii>& OutValue)
     {
         MILAN_FATALW(L"only unicode strings are supported for serialization");
     }
-
-    INT8 ExtraTerminator = 0;
-    this->ReadNumeric<BIG>(ExtraTerminator);
-    MILAN_VERIFYW(ExtraTerminator == 0, L"extra terminator not zero: {}", ExtraTerminator);
 }
 
 
@@ -177,7 +173,7 @@ public:
     void WritePod(Type& Value);
 
     template<bool bWithRaii>
-    void WriteString(FStringBase<bWithRaii>& InValue);
+    void WriteString(FStringBase<bWithRaii> const& InValue);
 
 };
 
@@ -237,7 +233,7 @@ void IOutputStream::WritePod(Type& Value)
 }
 
 template<bool bWithRaii>
-void IOutputStream::WriteString(FStringBase<bWithRaii>& InValue)
+void IOutputStream::WriteString(FStringBase<bWithRaii> const& InValue)
 {
     if (InValue.Empty())
     {
@@ -253,9 +249,6 @@ void IOutputStream::WriteString(FStringBase<bWithRaii>& InValue)
         this->WriteNumeric<BIG, INT32>(Length * -2);
         this->WriteExact(Bytes);
     }
-
-    // Additional zero here?!...
-    this->WriteNumeric<BIG, INT8>(0);
 }
 
 

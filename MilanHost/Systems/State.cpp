@@ -4,45 +4,10 @@
 #include <milan_ecsm_ffi.h>
 
 #include "Base.hpp"
+#include "Intercept.hpp"
+#include "MPProfile.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/State.hpp"
-
-
-class FunctionInterceptLegacy
-{
-    UStruct* TargetNode{ nullptr };
-    wchar_t const* TargetFullName{ nullptr };
-
-    // This type more-or-less assumes that the intercepted function
-    // is never unloaded from memory. Ideally, we need some kind of
-    // a way to invalidate all registered intercepts at some point,
-    // for instance during level reload.
-
-public:
-
-    FunctionInterceptLegacy() = default;
-
-    bool Applies(UStruct* const Node, wchar_t const* const FullName)
-    {
-        MILAN_CHECKW(Node != nullptr, L"");
-
-        if (TargetFullName == nullptr)
-        {
-            MILAN_CHECKW(FullName != nullptr, L"");
-            MILAN_CHECKW(::wcslen(FullName) > 0, L"");
-            TargetFullName = FullName;
-        }
-
-        if (TargetNode == nullptr)
-        {
-            MILAN_CHECKW(TargetFullName != nullptr, L"");
-            TargetNode = UObject::FindObject<UStruct>(TargetFullName);
-        }
-
-        return TargetNode == Node;
-    }
-
-};
 
 
 void* ecsm_alloc(unsigned long long const size, unsigned long long const align)
@@ -85,6 +50,7 @@ namespace Milan::State
     void Terminate()
     {
         MILAN_INFOW(L"state system terminating");
+        FunctionInterceptLegacy::CleanupRegistered();
 
         ::ecsm::uninit_state();
     }
@@ -97,6 +63,7 @@ namespace Milan::State
         if (SFXSaveManagerMP_Initialize.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.Initialize"))
         {
             MILAN_WARNW(L"SFXGame.SFXSaveManagerMP.Initialize");
+            //MILAN_INFOW(L"MP_Profile path: %s", MPProfile::GetProfilePath());
         }
 
         static FunctionInterceptLegacy SFXSaveManagerMP_SaveRecordsImpl{};

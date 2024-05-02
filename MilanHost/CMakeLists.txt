@@ -27,10 +27,14 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Entry.hpp
   ${PROJ_FOLDER}/Hooks.cpp
   ${PROJ_FOLDER}/Hooks.hpp
+  ${PROJ_FOLDER}/Intercept.cpp
+  ${PROJ_FOLDER}/Intercept.hpp
   ${PROJ_FOLDER}/Logger.cpp
   ${PROJ_FOLDER}/Logger.hpp
   ${PROJ_FOLDER}/Misc.cpp
   ${PROJ_FOLDER}/Misc.hpp
+  ${PROJ_FOLDER}/MPProfile.cpp
+  ${PROJ_FOLDER}/MPProfile.hpp
   ${PROJ_FOLDER}/Streams.cpp
   ${PROJ_FOLDER}/Streams.hpp
 )
