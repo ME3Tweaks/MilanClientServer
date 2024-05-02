@@ -5,6 +5,7 @@
 #include "Base.hpp"
 #include "Entry.hpp"
 #include "Logger.hpp"
+#include "Misc.hpp"
 #include "Systems/Console.hpp"
 #include "Systems/Globals.hpp"
 #include "Systems/Output.hpp"
@@ -18,6 +19,7 @@ SPI_PLUGINSIDE_SEQATTACH;
 
 SPI_IMPLEMENT_ATTACH
 {
+    ::RelativeTimer AttachTimer{};
     ::LESDK::Initializer Context{ InterfacePtr, "MilanHost" };
 
 
@@ -32,7 +34,7 @@ SPI_IMPLEMENT_ATTACH
     ::Milan::State::Initialize(Context);
 
 
-    MILAN_INFOW(L"attach completed");
+    MILAN_INFOW(L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
     ::Milan::Output::FlushEverything();
 
     return true;

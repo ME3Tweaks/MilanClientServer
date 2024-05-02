@@ -88,10 +88,18 @@ INT64 MemoryInputStream::Read(BYTE* const Output, INT64 const Length)
 MemoryInputStream::MemoryInputStream(std::span<BYTE> const Data)
     : m_buffer{ Data } {}
 
+MemoryInputStream::MemoryInputStream(game::vector<BYTE>&& Buffer)
+    : m_buffer{ }
+{
+    MILAN_CHECKW(!Buffer.empty(), L"");
+    m_buffer.Buffer = std::move(Buffer);
+}
+
 MemoryInputStream::MemoryInputStream(IInputStream& Source)
     : m_buffer{}
 {
-    m_buffer.Buffer.resize(static_cast<std::size_t>(Source.Length()), 0u);
+    auto const SourceLength = static_cast<std::size_t>(Source.Length());
+    m_buffer.Buffer.resize(SourceLength, 0u);
     Source.ReadExact({ m_buffer.Buffer });
     MILAN_CHECKW(Length() == Source.Length(), L"");
 }

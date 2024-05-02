@@ -125,7 +125,7 @@ void IInputStream::ReadString(FStringBase<bWithRaii>& OutValue)
         ::game::wstring Temporary(static_cast<size_t>(Length), L'\0');
         this->ReadExact(std::span((BYTE*)Temporary.data(), Temporary.size() * 2));
 
-        MILAN_CHECKW(Temporary.back() == L'\0',
+        MILAN_VERIFYW(Temporary.back() == L'\0',
             L"expected last char to be null-terminator, found %d",
             static_cast<int>(Temporary.back()));
 
@@ -245,12 +245,13 @@ void IOutputStream::WriteString(FStringBase<bWithRaii>& InValue)
     }
     else
     {
+        // Always serialize the null-terminator.
         INT32 const Length = static_cast<INT32>(InValue.Length() + 1);
+        std::span<BYTE> const Bytes{ (BYTE*)InValue.Chars(), static_cast<size_t>(Length * 2) };
 
-        // Always serialize FString as unicode.
+        // Always serialize as unicode.
         this->WriteNumeric<BIG, INT32>(Length * -2);
-        // This will write out the null-terminator, too.
-        this->WriteExact(std::span((BYTE*)InValue.Chars(), static_cast<size_t>(Length * 2)));
+        this->WriteExact(Bytes);
     }
 
     // Additional zero here?!...
@@ -281,6 +282,7 @@ public:
     // Own interface.
 
     explicit MemoryInputStream(std::span<BYTE> Data);
+    explicit MemoryInputStream(game::vector<BYTE>&& Buffer);
     explicit MemoryInputStream(IInputStream& Source);
 
     MemoryInputStream(MemoryInputStream&& Other) noexcept;
