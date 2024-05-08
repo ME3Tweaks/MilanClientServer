@@ -81,8 +81,9 @@ ProfileSetting ProfileSetting::Construct(int const InId, FString& InValue)
 
 wchar_t const* MPProfile::GetProfilePath()
 {
+    // This will leak memory.
     static bool Initialized = false;
-    static FStringRAII ProfilePath{};
+    static FStringView ProfilePath{};
 
     if (!Initialized)
     {

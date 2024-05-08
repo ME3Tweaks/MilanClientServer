@@ -65,7 +65,7 @@ void UObject_CallFunction_hook(UObject* const Context, FFrame* const Stack, void
 #ifndef _FINAL_RELEASE
     if (gb_logCallFunction)
     {
-        static FStringRAII ObjectName{}, FunctionName{};
+        static FString ObjectName{}, FunctionName{};
 
         ObjectName.Clear();
         FunctionName.Clear();
@@ -87,7 +87,7 @@ void UObject_ProcessDelegate_hook(UObject* const Context, SFXName const Delegate
 #ifndef _FINAL_RELEASE
     if (gb_logProcessDelegate)
     {
-        static FStringRAII ContextName{}, StrDelegateName{}, DelegateContextName{}, StrDelegateFunctionName{};
+        static FString ContextName{}, StrDelegateName{}, DelegateContextName{}, StrDelegateFunctionName{};
 
         ContextName.Clear();
         StrDelegateName.Clear();
@@ -116,7 +116,7 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
 #ifndef _FINAL_RELEASE
     if (gb_logProcessEvent)
     {
-        static FStringRAII ObjectName{}, FunctionName{};
+        static FString ObjectName{}, FunctionName{};
 
         ObjectName.Clear();
         FunctionName.Clear();
@@ -137,7 +137,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
 #ifndef _FINAL_RELEASE
     if (gb_logProcessInternal)
     {
-        static FStringRAII ObjectName{}, FunctionName{};
+        static FString ObjectName{}, FunctionName{};
 
         ObjectName.Clear();
         FunctionName.Clear();

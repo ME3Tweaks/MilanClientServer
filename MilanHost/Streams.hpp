@@ -121,7 +121,6 @@ void IInputStream::ReadString(FStringBase<bWithRaii>& OutValue)
     {
         Length = -Length;
 
-        // TODO: Remove temporary string once FStringBase is updated in the SDK.
         ::game::wstring Temporary(static_cast<size_t>(Length), L'\0');
         this->ReadExact(std::span((BYTE*)Temporary.data(), Temporary.size() * 2));
 
