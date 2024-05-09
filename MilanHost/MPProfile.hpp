@@ -141,6 +141,7 @@ struct ProfileSetting final : public NonCopyable
 
     static ProfileSetting Construct(int InId, int& InValue);
     static ProfileSetting Construct(int InId, FString& InValue);
+    static ProfileSetting Construct(int InId, FString const& InValue);
 };
 
 
@@ -151,8 +152,8 @@ class MPProfile final
 
 public:
 
-    /** Retrieves a singleton path to MP_Profile. */
-    static wchar_t const* GetProfilePath();
+    /** Retrieves full path to MP_Profile file. */
+    static FString GetProfilePath();
 
     MPProfile(USFXEngine* Engine);
 

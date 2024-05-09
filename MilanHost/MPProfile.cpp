@@ -1,4 +1,6 @@
 #include <Shlobj.h>
+
+#include "Systems/Output.hpp"
 #include "MPProfile.hpp"
 
 
@@ -75,24 +77,30 @@ ProfileSetting ProfileSetting::Construct(int const InId, FString& InValue)
     };
 }
 
+ProfileSetting ProfileSetting::Construct(int const InId, FString const& InValue)
+{
+    return ProfileSetting {
+        .Id = InId,
+        .IdType = PST_STRING,
+        .DataType = PST_STRING,
+        .CaseString = InValue,
+        .CaseInt = {},
+    };
+}
+
 
 // ! MPProfile implementation.
 // ========================================
 
-wchar_t const* MPProfile::GetProfilePath()
+FString MPProfile::GetProfilePath()
 {
-    // This will leak memory.
-    static bool Initialized = false;
-    static FStringView ProfilePath{};
+    FString ProfilePath{};
+    WCHAR* DocumentPath = nullptr;
 
-    if (!Initialized)
-    {
-        WCHAR* DocumentPath = nullptr;
-        ::SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &DocumentPath);
-        ProfilePath.AppendFormat(L"%s\\BioWare\\Mass Effect Legendary Edition\\Save\\ME3\\%s", DocumentPath, L"MP_Profile");
-        ::CoTaskMemFree(DocumentPath);
-    }
+    ::SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &DocumentPath);
+    ProfilePath.AppendFormat(L"%s\\BioWare\\Mass Effect Legendary Edition\\Save\\ME3\\%s", DocumentPath, L"MP_Profile");
 
+    ::CoTaskMemFree(DocumentPath);
     return *ProfilePath;
 }
 
@@ -117,6 +125,7 @@ void MPProfile::Deserialize(IInputStream& Stream)
 
     int SettingsCount = 0;
     Stream.ReadNumeric<BIG>(SettingsCount);
+
     MILAN_CHECKW(SettingsCount > 0, L"");
 
     OnlineSave->ServerClassStrings.Clear();
@@ -189,6 +198,10 @@ void MPProfile::Deserialize(IInputStream& Stream)
             MILAN_CHECKW(Setting.DataType == PST_STRING, L"");
             AccomplishmentStorage->ServerCompletionTimes3String = Setting.CaseString;
         }
+        else
+        {
+            MILAN_WARNW(L"unknown profile setting id = %d", Setting.Id);
+        }
     }
 
     AccomplishmentStorage->ReadFromStorage(AccomplishmentManager);
@@ -203,5 +216,103 @@ void MPProfile::Serialize(IOutputStream& Stream) const
     MILAN_CHECKW(OnlineSave != nullptr, L"");
     MILAN_CHECKW(AccomplishmentStorage != nullptr, L"");
 
-    MILAN_UNUSED(Stream);
+    int SettingsCount = 0;
+
+    // Write empty count now, update later.
+    auto const CountOffset = Stream.Position();
+    Stream.WriteNumeric<BIG, INT32>(0);
+
+    for (int i = 0; i < EStorageField_MAX; ++i)
+    {
+        if (i == SGF_Base)
+        {
+            ProfileSetting::Construct(i, OnlineSave->ServerBaseString).Serialize(Stream);
+            SettingsCount++;
+        }
+        else if (i >= SGF_Class00 && i <= SGF_Class07)
+        {
+            auto const ClassIndex = i - SGF_Class00;
+            if (static_cast<UINT>(ClassIndex) >= OnlineSave->ServerClassStrings.Count())
+                continue;
+
+            auto const& ClassString = OnlineSave->ServerClassStrings(ClassIndex);
+            MILAN_CHECKW(!ClassString.Empty(), L"");
+
+            ProfileSetting::Construct(i, ClassString).Serialize(Stream);
+            SettingsCount++;
+        }
+        else if (i >= SGF_Character00 && i <= SGF_Character77)
+        {
+            auto const CharIndex = i - SGF_Character00;
+            if (static_cast<UINT>(CharIndex) >= OnlineSave->ServerCharacterStrings.Count())
+                continue;
+
+            auto const& CharString = OnlineSave->ServerCharacterStrings(CharIndex);
+            MILAN_CHECKW(!CharString.Empty(), L"");
+
+            ProfileSetting::Construct(i, CharString).Serialize(Stream);
+            SettingsCount++;
+        }
+        else if (i == SGF_FaceCodes)
+        {
+            ProfileSetting::Construct(i, OnlineSave->ServerFaceCodesString).Serialize(Stream);
+            SettingsCount++;
+        }
+        else if (i == SGF_NewReinforcements)
+        {
+            ProfileSetting::Construct(i, OnlineSave->ServerNewReinforcementsString).Serialize(Stream);
+            SettingsCount++;
+        }
+        else if (i == ASF_Completion)
+        {
+            ProfileSetting::Construct(i, AccomplishmentStorage->ServerCompletionString).Serialize(Stream);
+            SettingsCount++;
+        }
+        else if (i == ASF_Progress)
+        {
+            ProfileSetting::Construct(i, AccomplishmentStorage->ServerProgressString).Serialize(Stream);
+            SettingsCount++;
+        }
+        else if (i == CSF_RewardCompletion)
+        {
+            ProfileSetting::Construct(i, AccomplishmentStorage->ServerRewardLevelString).Serialize(Stream);
+            SettingsCount++;
+        }
+        else if (i == CSF_CurrentReward)
+        {
+            // Mgamerz:  I don't think levels are actually used. If they were,
+            //   it was for the timed operation missions that had tiers for banners.
+
+            int Reward = 0, RewardLevel = 0;
+            AccomplishmentStorage->GetCurrentReward(&Reward, &RewardLevel);
+
+            // d00t:  Why is RewardLevel unused? It shouldn't matter, but are we missing something?
+
+            ProfileSetting::Construct(i, Reward);
+            SettingsCount++;
+        }
+        else if (i == CSF_CompletionTimes)
+        {
+            ProfileSetting::Construct(i, AccomplishmentStorage->ServerCompletionTimesString).Serialize(Stream);
+            SettingsCount++;
+        }
+        else if (i == CSF_CompletionTimes2)
+        {
+            ProfileSetting::Construct(i, AccomplishmentStorage->ServerCompletionTimes2String).Serialize(Stream);
+            SettingsCount++;
+        }
+        else if (i == CSF_CompletionTimes3)
+        {
+            ProfileSetting::Construct(i, AccomplishmentStorage->ServerCompletionTimes3String).Serialize(Stream);
+            SettingsCount++;
+        }
+        else
+        {
+            // This should never be hit I think.
+            MILAN_WARNW(L"invalid profile setting id = %d", i);
+        }
+    }
+
+    Stream.Seek(SeekOrigin::Begin, CountOffset);
+    Stream.WriteNumeric<BIG, INT32>(SettingsCount);
 }

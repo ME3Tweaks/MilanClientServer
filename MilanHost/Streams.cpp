@@ -140,8 +140,12 @@ INT64 MemoryOutputStream::Write(BYTE const* const Input, INT64 const Length)
     MILAN_CHECKW(Length > 0, L"");
     MILAN_CHECKW(m_buffer.Position() <= m_buffer.Length(), L"");
 
+    // TODO(critical): Update this to overwrite previously written contents.
+    //   As it is now it breaks profile serialization.
+
     auto const WritePosition = m_buffer.Buffer.begin() + m_buffer.Position();
     m_buffer.Buffer.insert(WritePosition, Input, Input + Length);
+
     return m_buffer.Advance(Length);
 }
 
