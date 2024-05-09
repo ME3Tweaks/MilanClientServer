@@ -151,12 +151,13 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
 
     bool bCallOriginal = true;
 
-    if (!::Milan::State::On_UObject_ProcessInternal(Context, Stack, Result))
+    if (!::Milan::State::On_UObject_ProcessInternal_Pre(Context, Stack, Result))
         bCallOriginal = false;
 
     if (bCallOriginal)
     {
         (*UObject_ProcessInternal_orig)(Context, Stack, Result);
+        ::Milan::State::On_UObject_ProcessInternal_Post(Context, Stack, Result);
     }
 }
 

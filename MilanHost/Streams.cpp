@@ -140,11 +140,14 @@ INT64 MemoryOutputStream::Write(BYTE const* const Input, INT64 const Length)
     MILAN_CHECKW(Length > 0, L"");
     MILAN_CHECKW(m_buffer.Position() <= m_buffer.Length(), L"");
 
-    // TODO(critical): Update this to overwrite previously written contents.
-    //   As it is now it breaks profile serialization.
+    // Ensure the buffer is big enough for our overwrite.
+    auto const WriteEndPosition = m_buffer.Position() + Length;
+    if (WriteEndPosition > m_buffer.Length())
+        m_buffer.Buffer.resize(static_cast<size_t>(WriteEndPosition));
 
-    auto const WritePosition = m_buffer.Buffer.begin() + m_buffer.Position();
-    m_buffer.Buffer.insert(WritePosition, Input, Input + Length);
+    // Insert, or possibly overwrite the buffer.
+    auto const WriteBegin = m_buffer.Remaining().begin();
+    std::copy(Input, Input + Length, WriteBegin);
 
     return m_buffer.Advance(Length);
 }
@@ -161,6 +164,11 @@ MemoryOutputStream& MemoryOutputStream::operator=(MemoryOutputStream&& Other) no
         m_buffer = std::move(Other.m_buffer);
 
     return *this;
+}
+
+void MemoryOutputStream::Reserve(std::size_t const Capacity)
+{
+    m_buffer.Buffer.reserve(Capacity);
 }
 
 

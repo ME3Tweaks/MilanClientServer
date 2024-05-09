@@ -245,7 +245,7 @@ void IOutputStream::WriteString(FStringBase<bWithRaii> const& InValue)
         std::span<BYTE> const Bytes{ (BYTE*)InValue.Chars(), static_cast<size_t>(Length * 2) };
 
         // Always serialize as unicode.
-        this->WriteNumeric<BIG, INT32>(Length * -2);
+        this->WriteNumeric<BIG, INT32>(Length * -1);
         this->WriteExact(Bytes);
     }
 }
@@ -292,6 +292,8 @@ class MemoryOutputStream final
 {
     MemoryBuffer m_buffer;
 
+public:
+
     // IOutputStream implementation.
 
     ~MemoryOutputStream() noexcept override = default;
@@ -305,6 +307,8 @@ class MemoryOutputStream final
 
     MemoryOutputStream() = default;
     explicit MemoryOutputStream(std::size_t Capacity);
+
+    void Reserve(std::size_t Capacity);
 
     MemoryOutputStream(MemoryOutputStream&& Other) noexcept;
     MemoryOutputStream& operator=(MemoryOutputStream&& Other) noexcept;

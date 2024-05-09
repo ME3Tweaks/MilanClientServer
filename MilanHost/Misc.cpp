@@ -1,4 +1,7 @@
 #include <Windows.h>
+#include <fstream>
+
+#include "Systems/Output.hpp"
 #include "Misc.hpp"
 
 
@@ -27,4 +30,26 @@ float RelativeTimer::GetSeconds() const
 float RelativeTimer::GetMilliseconds() const
 {
     return GetSeconds() * 1000;
+}
+
+void ReadFileFull(std::wstring_view const InPath, ::game::vector<byte>& OutBuffer)
+{
+    std::ifstream Stream{ InPath.data(), std::ios::binary | std::ios::ate };
+    MILAN_CHECKW(Stream.is_open(), L"failed to open file at %s", InPath.data());
+
+    std::streamsize const Length = Stream.tellg();
+
+    OutBuffer.clear();
+    OutBuffer.resize(static_cast<size_t>(Length));
+
+    Stream.seekg(0, std::ios::beg);
+    Stream.read(reinterpret_cast<char*>(OutBuffer.data()), Length);
+}
+
+void WriteFileFull(std::wstring_view const InPath, std::span<byte const> const InBuffer)
+{
+    std::ofstream Stream{ InPath.data(), std::ios::binary | std::ios::out | std::ios::trunc };
+    MILAN_CHECKW(Stream.is_open(), L"failed to open or create file at %s", InPath.data());
+
+    Stream.write(reinterpret_cast<char const*>(InBuffer.data()), static_cast<std::streamsize>(InBuffer.size()));
 }

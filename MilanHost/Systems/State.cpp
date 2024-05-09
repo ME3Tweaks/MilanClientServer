@@ -5,7 +5,9 @@
 
 #include "Base.hpp"
 #include "Intercept.hpp"
+#include "Misc.hpp"
 #include "MPProfile.hpp"
+#include "Streams.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/State.hpp"
 
@@ -55,24 +57,54 @@ namespace Milan::State
         ::ecsm::uninit_state();
     }
 
-    bool On_UObject_ProcessInternal(UObject* const Context, FFrame* const Stack, void* const Result)
+    bool On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* const Stack, void* const Result)
     {
         MILAN_UNUSED_3(Context, Stack, Result);
-
-        static FunctionInterceptLegacy SFXSaveManagerMP_Initialize{};
-        if (SFXSaveManagerMP_Initialize.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.Initialize"))
-        {
-            MILAN_WARNW(L"SFXGame.SFXSaveManagerMP.Initialize");
-            //MILAN_INFOW(L"MP_Profile path: %s", MPProfile::GetProfilePath());
-        }
 
         static FunctionInterceptLegacy SFXSaveManagerMP_SaveRecordsImpl{};
         if (SFXSaveManagerMP_SaveRecordsImpl.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.SaveRecordsImpl"))
         {
-            MILAN_WARNW(L"SFXGame.SFXSaveManagerMP.SaveRecordsImpl");
+            MILAN_DEBUGW(L"intercepted SFXGame.SFXSaveManagerMP.SaveRecordsImpl (pi pre)");
+
+            MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
+            MILAN_DEBUGW(L"profile path: %s", *Profile.GetProfilePath());
+
+            ::RelativeTimer ProfileTimer{};
+
+            MemoryOutputStream ProfileStream{ 204800 };  // reserve 200kb
+            Profile.Serialize(ProfileStream);
+
+            MILAN_DEBUGW(L"profile serialized in %.3f ms.", ProfileTimer.GetMilliseconds());
+
+            ::WriteFileFull(static_cast<std::wstring_view>(Profile.GetProfilePath()), ProfileStream.View());
         }
 
         return true;
+    }
+
+    void On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* const Stack, void* const Result)
+    {
+        MILAN_UNUSED_3(Context, Stack, Result);
+
+        // This needs to be done after ProcessInternal is called so that OnlineSave and friends will have been created.
+        static FunctionInterceptLegacy SFXSaveManagerMP_Initialize{};
+        if (SFXSaveManagerMP_Initialize.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.Initialize"))
+        {
+            MILAN_DEBUGW(L"intercepted SFXGame.SFXSaveManagerMP.Initialize (pi post)");
+
+            MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
+            MILAN_DEBUGW(L"profile path: %s", *Profile.GetProfilePath());
+
+            ::game::vector<BYTE> ProfileBuffer{};
+            ::ReadFileFull(static_cast<std::wstring_view>(Profile.GetProfilePath()), ProfileBuffer);
+
+            ::RelativeTimer ProfileTimer{};
+
+            MemoryInputStream ProfileStream{ std::move(ProfileBuffer) };
+            Profile.Deserialize(ProfileStream);
+
+            MILAN_DEBUGW(L"profile deserialized in %.3f ms.", ProfileTimer.GetMilliseconds());
+        }
     }
 
     void On_UWorld_Tick(UWorld* const Context, int const Unknown, float const Delta)

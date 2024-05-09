@@ -145,18 +145,19 @@ struct ProfileSetting final : public NonCopyable
 };
 
 
-class MPProfile final
+class MPProfile final : public NonCopyable
 {
     USFXSaveManagerMP* SaveManager{ nullptr };
     USFXAccomplishmentManager* AccomplishmentManager{ nullptr };
+    FString ProfilePath{};
 
 public:
-
-    /** Retrieves full path to MP_Profile file. */
-    static FString GetProfilePath();
 
     MPProfile(USFXEngine* Engine);
 
     void Deserialize(IInputStream& Stream);
     void Serialize(IOutputStream& Stream) const;
+
+    static FString GetProfilePathStatic();
+    FString const& GetProfilePath() const noexcept;
 };

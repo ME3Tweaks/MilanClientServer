@@ -24,6 +24,7 @@ namespace Milan::State
     // ! Public interface.
     // ========================================
 
-    bool On_UObject_ProcessInternal(UObject* Context, FFrame* Stack, void* Result);
+    bool On_UObject_ProcessInternal_Pre(UObject* Context, FFrame* Stack, void* Result);
+    void On_UObject_ProcessInternal_Post(UObject* Context, FFrame* Stack, void* Result);
     void On_UWorld_Tick(UWorld* Context, int Unknown, float Delta);
 }

@@ -92,7 +92,7 @@ ProfileSetting ProfileSetting::Construct(int const InId, FString const& InValue)
 // ! MPProfile implementation.
 // ========================================
 
-FString MPProfile::GetProfilePath()
+FString MPProfile::GetProfilePathStatic()
 {
     FString ProfilePath{};
     WCHAR* DocumentPath = nullptr;
@@ -104,6 +104,11 @@ FString MPProfile::GetProfilePath()
     return *ProfilePath;
 }
 
+FString const& MPProfile::GetProfilePath() const noexcept
+{
+    return ProfilePath;
+}
+
 MPProfile::MPProfile(USFXEngine* const Engine)
 {
     MILAN_CHECKW(Engine != nullptr, L"");
@@ -113,6 +118,8 @@ MPProfile::MPProfile(USFXEngine* const Engine)
 
     MILAN_CHECKW(SaveManager != nullptr, L"");
     MILAN_CHECKW(AccomplishmentManager != nullptr, L"");
+
+    ProfilePath = GetProfilePathStatic();
 }
 
 void MPProfile::Deserialize(IInputStream& Stream)
@@ -236,7 +243,8 @@ void MPProfile::Serialize(IOutputStream& Stream) const
                 continue;
 
             auto const& ClassString = OnlineSave->ServerClassStrings(ClassIndex);
-            MILAN_CHECKW(!ClassString.Empty(), L"");
+            if (ClassString.Empty())
+                continue;
 
             ProfileSetting::Construct(i, ClassString).Serialize(Stream);
             SettingsCount++;
@@ -248,7 +256,8 @@ void MPProfile::Serialize(IOutputStream& Stream) const
                 continue;
 
             auto const& CharString = OnlineSave->ServerCharacterStrings(CharIndex);
-            MILAN_CHECKW(!CharString.Empty(), L"");
+            if (CharString.Empty())
+                continue;
 
             ProfileSetting::Construct(i, CharString).Serialize(Stream);
             SettingsCount++;
