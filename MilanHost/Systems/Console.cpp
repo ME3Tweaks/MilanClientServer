@@ -87,8 +87,9 @@ namespace Milan::Console
             if (ScopedCommand.starts_with(NSCommand))
             {
                 wchar_t const* Params = ScopedCommand.c_str() + NSCommand.length();
+                wchar_t const* const ParamsEnd = ScopedCommand.c_str() + ScopedCommand.size();
 
-                while (*Params != L' ')
+                while (*Params != L' ' && Params != ParamsEnd)
                     ++Params;
 
                 if (Callback(Params))
