@@ -77,6 +77,24 @@ void UObject_CallFunction_hook(UObject* const Context, FFrame* const Stack, void
     }
 #endif
 
+#ifndef _FINAL_RELEASE
+    if (Function == nullptr)
+    {
+        MILAN_ERRORW(L"UObject::CallFunction: %s", *Context->StaticFullName());
+        MILAN_ERRORW(L"  Function is null, stack dumped:");
+
+        int i = 0;
+        for (FFrame* Current = Stack; Current; Current = Current->PreviousFrame)
+        {
+            MILAN_WARNW(L"%3d Stack.Object = %s\n", i, Current->Object ? *Current->Object->StaticFullName() : L"???");
+            MILAN_WARNW(L"    Stack.Node = %s\n", Current->Node ? *Current->Node->StaticFullName() : L"???");
+            --i;
+        }
+
+        MILAN_BREAK_ATTACHED();
+    }
+#endif
+
     (*UObject_CallFunction_orig)(Context, Stack, Result, Function);
 }
 
