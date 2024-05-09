@@ -310,15 +310,25 @@ void MilanLogger::WriteAnsi(CodePlaceA const& Place,
     ESeverity const Severity, std::string_view const Message)
 {
     std::array<char, 4096> FormatBuffer{ '\0' };
+    int Result = 0;
 
 #ifndef _FINAL_RELEASE
-    int const Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%.3f] [%s] %s  [%s:%d]",
-        MessageTimer.GetSeconds(), FormatSeverityAnsi(Severity), Message.data(), Place.File, Place.Line);
+    bool const bWritePlace = Severity > ESeverity::Info;
 #else
-    int const Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%.3f] [%s] %s",
-        MessageTimer.GetSeconds(), FormatSeverityAnsi(Severity), Message.data());
-    MILAN_UNUSED(Place);
+    static constexpr bool bWritePlace = false;
 #endif
+
+    if (bWritePlace)
+    {
+        Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%.3f] [%s] %s  [%s:%d]",
+            MessageTimer.GetSeconds(), FormatSeverityAnsi(Severity), Message.data(), Place.File, Place.Line);
+    }
+    else
+    {
+        Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%.3f] [%s] %s",
+            MessageTimer.GetSeconds(), FormatSeverityAnsi(Severity), Message.data());
+        MILAN_UNUSED(Place);
+    }
 
     assert(Result > 0);
 
@@ -334,15 +344,25 @@ void MilanLogger::WriteUnicode(CodePlaceW const& Place,
     ESeverity const Severity, std::wstring_view const Message)
 {
     std::array<wchar_t, 2048> FormatBuffer{ '\0' };
+    int Result = 0;
 
 #ifndef _FINAL_RELEASE
-    int const Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%.3f] [%s] %s  [%s:%d]",
-        MessageTimer.GetSeconds(), FormatSeverityUnicode(Severity), Message.data(), Place.File, Place.Line);
+    bool const bWritePlace = Severity > ESeverity::Info;
 #else
-    int const Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%.3f] [%s] %s",
-        MessageTimer.GetSeconds(), FormatSeverityUnicode(Severity), Message.data());
-    MILAN_UNUSED(Place);
+    static constexpr bool bWritePlace = false;
 #endif
+
+    if (bWritePlace)
+    {
+        Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%.3f] [%s] %s  [%s:%d]",
+            MessageTimer.GetSeconds(), FormatSeverityUnicode(Severity), Message.data(), Place.File, Place.Line);
+    }
+    else
+    {
+        Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%.3f] [%s] %s",
+            MessageTimer.GetSeconds(), FormatSeverityUnicode(Severity), Message.data());
+        MILAN_UNUSED(Place);
+    }
 
     assert(Result > 0);
 
