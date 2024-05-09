@@ -9,6 +9,9 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Containers/string.hpp
   ${PROJ_FOLDER}/Containers/unordered_map.hpp
   ${PROJ_FOLDER}/Containers/vector.hpp
+  ${PROJ_FOLDER}/Proxies/Core.hpp
+  ${PROJ_FOLDER}/Proxies/Engine.hpp
+  ${PROJ_FOLDER}/Proxies/SFXGame.hpp
   ${PROJ_FOLDER}/Systems/Console.cpp
   ${PROJ_FOLDER}/Systems/Console.hpp
   ${PROJ_FOLDER}/Systems/Globals.cpp
