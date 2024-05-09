@@ -9,9 +9,9 @@
 
 void ProfileSetting::Deserialize(IInputStream& Stream)
 {
-    Stream.ReadNumeric<BIG>(*(char*)&this->IdType);
-    Stream.ReadNumeric<BIG>(this->Id);
-    Stream.ReadNumeric<BIG>(*(char*)&this->DataType);
+    Stream.ReadNumeric<BIG, CHAR>(*(char*)&this->IdType);
+    Stream.ReadNumeric<BIG, INT32>(this->Id);
+    Stream.ReadNumeric<BIG, CHAR>(*(char*)&this->DataType);
 
     // Actually not sure about this...
     MILAN_CHECKW(this->IdType == this->DataType, L"");
@@ -19,7 +19,7 @@ void ProfileSetting::Deserialize(IInputStream& Stream)
     switch (this->DataType)
     {
     case PST_INT:
-        Stream.ReadNumeric<BIG>(this->CaseInt);
+        Stream.ReadNumeric<BIG, INT>(this->CaseInt);
         break;
     case PST_STRING:
         Stream.ReadString(this->CaseString);
@@ -29,7 +29,7 @@ void ProfileSetting::Deserialize(IInputStream& Stream)
     }
 
     char ExtraTerminator = 0;
-    Stream.ReadNumeric<BIG>(ExtraTerminator);
+    Stream.ReadNumeric<BIG, CHAR>(ExtraTerminator);
 
     MILAN_VERIFYW(ExtraTerminator == 0, L"extra terminator not zero: %d", ExtraTerminator);
 }
@@ -297,7 +297,7 @@ void MPProfile::Serialize(IOutputStream& Stream) const
 
             // d00t:  Why is RewardLevel unused? It shouldn't matter, but are we missing something?
 
-            ProfileSetting::Construct(i, Reward);
+            ProfileSetting::Construct(i, Reward).Serialize(Stream);
             SettingsCount++;
         }
         else if (i == CSF_CompletionTimes)

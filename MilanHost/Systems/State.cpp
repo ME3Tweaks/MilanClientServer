@@ -64,7 +64,7 @@ namespace Milan::State
         static FunctionInterceptLegacy SFXSaveManagerMP_SaveRecordsImpl{};
         if (SFXSaveManagerMP_SaveRecordsImpl.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.SaveRecordsImpl"))
         {
-            MILAN_DEBUGW(L"intercepted SFXGame.SFXSaveManagerMP.SaveRecordsImpl (pi pre)");
+            MILAN_DEBUGW(L"intercepted SFXGame.SFXSaveManagerMP.SaveRecordsImpl");
 
             MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
             MILAN_DEBUGW(L"profile path: %s", *Profile.GetProfilePath());
@@ -90,7 +90,7 @@ namespace Milan::State
         static FunctionInterceptLegacy SFXSaveManagerMP_Initialize{};
         if (SFXSaveManagerMP_Initialize.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.Initialize"))
         {
-            MILAN_DEBUGW(L"intercepted SFXGame.SFXSaveManagerMP.Initialize (pi post)");
+            MILAN_DEBUGW(L"intercepted SFXGame.SFXSaveManagerMP.Initialize");
 
             MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
             MILAN_DEBUGW(L"profile path: %s", *Profile.GetProfilePath());
