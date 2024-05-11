@@ -10,6 +10,17 @@
 #include <LESDK/Headers.hpp>
 
 
+enum EChannelType
+{
+    CHTYPE_None                     = 0,  // Invalid
+    CHTYPE_Control                  = 1,  // Control channel for client-server comms
+    CHTYPE_Actor                    = 2,  // Channels for a specific actor
+    CHTYPE_File                     = 3,  // Unlikely to be used - file transfer
+    CHTYPE_Voice                    = 4,  // Voice traffic
+    CHTYPE_MAX                      = 8,
+};
+
+
 class FArchive
 {
     // Mgamerz:  Built from Ghidra decompilation, FArchive size appears to be 0x8C.
@@ -88,6 +99,46 @@ public:
 static_assert(offsetof(FBitWriter, Buffer) == 0x8C);
 static_assert(offsetof(FBitWriter, Num) == 0x9C);
 static_assert(offsetof(FBitWriter, Max) == 0xA0);
+
+
+// Incoming bunch of information
+class FInBunch : public FBitReader
+{
+public:
+
+    int                             PacketId;
+    FInBunch*                       Next;
+    UNetConnection*                 Connection;
+    int                             ChannelIndex;
+    EChannelType                    ChannelType;
+    int                             ChannelSequence;
+    bool                            bOpen;
+    bool                            bClose;
+    bool                            bReliable;
+};
+
+static_assert(offsetof(FInBunch, PacketId) == 0xA4);
+
+
+// Outgoing bunch of information
+class FOutBunch : public FBitWriter
+{
+public:
+
+    FOutBunch*                      Next;
+    UChannel*                       Channel;
+    double                          Time;
+    BOOL                            ReceivedAck;
+    int                             ChannelIndex;
+    EChannelType                    ChannelType;
+    int                             ChannelSequence;
+    int                             PacketId;
+    bool                            bOpen;
+    bool                            bClose;
+    bool                            bReliable;
+};
+
+static_assert(offsetof(FOutBunch, Next) == 0xA4);
 
 
 class FPackageInfo

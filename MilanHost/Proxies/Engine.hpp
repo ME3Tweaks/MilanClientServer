@@ -182,7 +182,9 @@ static_assert(offsetof(UWorld_Proxy, Unknown_360) == 0x360);
 static_assert(sizeof(UWorld_Proxy) == sizeof(UWorld));
 
 
+class UNetDriver_Proxy;
 class UChildConnection_Proxy;
+
 class UNetConnection_Proxy : public UPlayer
 {
 public:
@@ -225,7 +227,7 @@ public:
     SFXName                         ClientWorldPackageName;     //   checks out: 0x6020
     TArray<SFXName>                 ClientVisibleLevelNames;    //   checks out: 0x6028
     TArray<FGuid>                   PendingRemovePackageGuids;  //   checks out: 0x6038
-    TArray<UChildConnection_Proxy*> Children;                   // 0x6048
+    TArray<UChildConnection*>       Children;                   // 0x6048
     unsigned char                   Unknown_6058[0x14];         // 0x6058
 };
 
@@ -255,5 +257,46 @@ public:
 
 static_assert(offsetof(UChildConnection_Proxy, Parent) == 0x606C);
 static_assert(sizeof(UChildConnection_Proxy) == sizeof(UChildConnection));
+
+
+class UNetDriver_Proxy : public USubsystem
+{
+public:
+
+    // Ghidra Decomp 01/16/2024.
+
+    void*                           FObjectNotify_VTable;       // 0x68
+    TArray<UNetConnection*>         ChildConnections;           // 0x70
+    UNetConnection*                 ServerConnection;           // 0x80
+    void*                           Notify;                     // 0x88   // we have no C++ class for this
+    UPackageMap*                    MasterMap;                  // 0x90
+    float                           Time;                       // 0x98
+
+    // Generated members from SDK.
+
+    float                           ConnectionTimeout;          // 0x9C
+    float                           InitialConnectTimeout;      // 0xA0
+    float                           KeepAliveTime;              // 0xA4
+    float                           RelevantTimeout;            // 0xA8
+    float                           SpawnPrioritySeconds;       // 0xAC
+    float                           ServerTravelPause;          // 0xB0
+    int                             MaxClientRate;              // 0xB4
+    int                             MaxInternetClientRate;      // 0xB8
+    int                             NetServerMaxTickRate;       // 0xBC
+    unsigned long                   bClampListenServerTickRate; // 0xC0
+    unsigned long                   AllowDownloads;             // 0xC4
+    unsigned char                   Unknown_C8[0x1C];           // 0xC8
+    int                             MaxDownloadSize;            // 0xE4
+    TArray<FString>                 DownloadManagers;           // 0xE8
+    unsigned char                   Unknown_F8[0xA4];           // 0xF8
+    FString                         NetConnectionClassName;     // 0x19C
+    unsigned char                   Unknown_1AC[0x30];          // 0x1AC
+};
+
+static_assert(offsetof(UNetDriver_Proxy, ChildConnections) == 0x70);
+static_assert(offsetof(UNetDriver_Proxy, ConnectionTimeout) == 0x9C);
+static_assert(offsetof(UNetDriver_Proxy, Unknown_1AC) == 0x1AC);
+// This checks must add '4' to original size until sdk fixes not-bitfield bools.
+static_assert(sizeof(UNetDriver_Proxy) == sizeof(UNetDriver) + 4);
 
 #pragma pack(pop)
