@@ -98,4 +98,88 @@ static_assert(offsetof(UControlChannel_Proxy, Unknown_A8) == 0xA8);
 static_assert(sizeof(UControlChannel_Proxy) == sizeof(UControlChannel));
 
 
+class ULevelBase_Proxy : public UObject
+{
+public:
+
+    TArray<AActor*>                 Actors;
+    UObject*                        MaybeOwner;
+    FURL                            URL;
+};
+
+static_assert(offsetof(ULevelBase_Proxy, Actors) == 0x60);
+static_assert(sizeof(ULevelBase_Proxy) == sizeof(ULevelBase));
+
+
+class ULevel_Proxy : public ULevelBase_Proxy
+{
+public:
+
+    unsigned char                   UnknownData_D0[0xB8];       // 0xD0
+    int                             FirstNetRelevantActor;      // 0x188
+    int                             FirstDynamicActor;          // 0x18C
+    float                           LightmapTotalSize;          // 0x190
+    float                           ShadowmapTotalSize;         // 0x194
+    unsigned char                   UnknownData_198[0x20C];     // 0x198
+};
+
+static_assert(offsetof(ULevel_Proxy, UnknownData_D0) == 0xD0);
+static_assert(offsetof(ULevel_Proxy, FirstDynamicActor) == 0x18C);
+static_assert(offsetof(ULevel_Proxy, UnknownData_198) == 0x198);
+static_assert(sizeof(ULevel_Proxy) == sizeof(ULevel));
+
+
+class UWorld_Proxy : public UObject
+{
+
+    // Note: 01/09/2024 Mgamerz
+    // Offsets for objects here were calculated using EmitObjectReference in static constructor hooks.
+    // Some objects were not loaded so they could not have their type determined.
+
+public:
+
+    unsigned char                                      Unknown_60[0x18];       // 0x60
+    TArray<ULevel*>                                    Levels;                 // 0x78
+    ULevel*                                            PersistentLevel;        // 0x88
+    UObject*                                           Unknown_90;             // 0x90
+    ULevel*                                            CurrentLevel;           // 0x98
+    UObject*                                           Unknown_A0;             // 0xA0
+    unsigned char                                      Unknown_A8[0x70];       // 0xA8
+    UObject*                                           Unknown_118;            // 0x118
+    UNetDriver*                                        NetDriver;              // 0x120
+    unsigned char                                      Unknown_128[0x58];      // 0x128
+    UObject*                                           Unknown_180;            // 0x180
+    unsigned char                                      Unknown_188[0x28];      // 0x188
+    TArray<UObject*>                                   Unknown_1B0;            // 0x1B0
+    unsigned char                                      Unknown_1C0[0x18];      // 0x1C0
+    ULineBatchComponent*                               LineBatcher;            // 0x1D8
+    ULineBatchComponent*                               PersistentLineBatcher;  // 0x1E0
+    unsigned char                                      Unknown_1E8[0x1C];      // 0x1E8
+    TArray<UObject*>                                   Unknown_204;            // 0x204
+    TArray<UObject*>                                   Unknown_214;            // 0x214
+    unsigned char                                      Unknown_224[0x13C];     // 0x224
+    TArray<UObject*>                                   Unknown_360;            // 0x360
+    unsigned char                                      Unknown_370[0x28];      // 0x370
+
+    // Other offsets noted in Ghidra:
+    //  - 0x2D8 => DominantDirectionalLight (UDominantDirectionalLightComponent*)
+
+};
+
+static_assert(offsetof(UWorld_Proxy, Levels) == 0x78);
+static_assert(offsetof(UWorld_Proxy, PersistentLevel) == 0x88);
+static_assert(offsetof(UWorld_Proxy, CurrentLevel) == 0x98);
+static_assert(offsetof(UWorld_Proxy, Unknown_A0) == 0xA0);
+static_assert(offsetof(UWorld_Proxy, Unknown_118) == 0x118);
+static_assert(offsetof(UWorld_Proxy, NetDriver) == 0x120);
+static_assert(offsetof(UWorld_Proxy, Unknown_180) == 0x180);
+static_assert(offsetof(UWorld_Proxy, Unknown_1B0) == 0x1B0);
+static_assert(offsetof(UWorld_Proxy, LineBatcher) == 0x1D8);
+static_assert(offsetof(UWorld_Proxy, PersistentLineBatcher) == 0x1E0);
+static_assert(offsetof(UWorld_Proxy, Unknown_204) == 0x204);
+static_assert(offsetof(UWorld_Proxy, Unknown_214) == 0x214);
+static_assert(offsetof(UWorld_Proxy, Unknown_360) == 0x360);
+static_assert(sizeof(UWorld_Proxy) == sizeof(UWorld));
+
+
 #pragma pack(pop)

@@ -12,8 +12,8 @@
 
 class FArchive
 {
-    // Mgamerz:  built from Ghidra decompilation, FArchive size appears to be 0x8C.
-    // d00t:  some offsets have not verified while porting.
+    // Mgamerz:  Built from Ghidra decompilation, FArchive size appears to be 0x8C.
+    // d00t:  Some offsets have not verified while porting.
 
 public:
 
@@ -44,6 +44,7 @@ public:
 
     int                             Unknown_70[4];
 
+    // Note: 01/22/2024 Mgamerz
     // Decomp shows this might be 32 or 64 bit, unsure if a second property follows and it's 2 32-bits.
     // It would make sense to be a 32 bit as max file size is 2GiB in Legendary Edition.
 
