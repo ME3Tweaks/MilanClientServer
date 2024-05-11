@@ -69,6 +69,31 @@ SPI_IMPLEMENT_ATTACH
             return true;
         });
 
+    ::Milan::Console::RegisterCommand(L"dbg", L"dumpsfxuid",
+        [](wchar_t const*)
+        {
+            MILAN_INFOW(L"dumping SFXUniqueID map");
+            ::RelativeTimer Timer{};
+
+            USFXEngine* const Engine = (*GEngine)->Cast<USFXEngine>();
+            MILAN_CHECKW(Engine != nullptr, L"");
+
+            auto const LookupAddress = (std::intptr_t)::LESDK::GetMainModuleBase() + 0x1CBC7F8;
+            auto const LookupPtr = (TMap<INT32, INT32>*)LookupAddress;
+
+            for (auto const [Hash, Index] : *LookupPtr)
+            {
+                wchar_t const* StringValue = L"n/a";
+                if (Index >= 0 && Index < (INT32)Engine->SFXUniqueIDs.Count())
+                    StringValue = *Engine->SFXUniqueIDs(Index);
+
+                MILAN_INFOW(L" Hash = %d, Index = %d  =>  Value = %s", Hash, Index, StringValue);
+            }
+
+            MILAN_INFOW(L"dumping SFXUniqueID map - done in %.3f ms.", Timer.GetMilliseconds());
+            return true;
+        });
+
 
     MILAN_INFOW(L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
     ::Milan::Output::FlushEverything();
