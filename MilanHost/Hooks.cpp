@@ -5,6 +5,7 @@
 #include "Systems/State.hpp"
 
 #include "Hooks.hpp"
+#include "Intercept.hpp"
 #include "Logger.hpp"
 
 
@@ -186,6 +187,26 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
         MILAN_TRACEW(L"UObject::ProcessInternal: %s.%s", *ObjectName, *FunctionName);
     }
 #endif
+
+//#ifndef _FINAL_RELEASE
+//    auto const& FullName = Stack->Node->StaticFullName();
+//    if (FullName.Equals(L"Function SFXGameMPContent.SFXPRIMP.SetPower"))
+//    {
+//        struct USFXPRIMP_SetPower_Parms
+//        {
+//            INT         PowerIndex;             // 0x0000 (0x0004)
+//            SFXName     PowerClassPath;         // 0x0004 (0x0008)
+//            INT         EvolvedChoices[6];      // 0x000C (0x0018)
+//            INT         CurrentRank;            // 0x0024 (0x0004)
+//            UBOOL       ReturnValue;            // 0x0028
+//        };
+//
+//        auto const TParms = (USFXPRIMP_SetPower_Parms*)Stack->Locals;
+//
+//        MILAN_DEBUGW(L"intercepted SFXPRIMP.SetPower:");
+//        MILAN_DEBUGW(L"  power index = %d, power class path = %s", TParms->PowerIndex, *TParms->PowerClassPath.ToString());
+//    }
+//#endif
 
     bool bCallOriginal = true;
 
