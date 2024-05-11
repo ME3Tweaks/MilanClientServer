@@ -1,6 +1,7 @@
 #include "Systems/Console.hpp"
+#include "Systems/Imgui.hpp"
 #include "Systems/Output.hpp"
-#include "Systems/Panels.hpp"
+#include "Systems/Profilers.hpp"
 #include "Systems/State.hpp"
 
 #include "Hooks.hpp"
@@ -16,7 +17,7 @@ static bool gb_logProcessInternal = false;
 tWndProc* WndProc_orig = nullptr;
 LRESULT CALLBACK WndProc_hook(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
 {
-    if (::Milan::Panels::OnWndProc(hWnd, uMsg, wParam, lParam))
+    if (::Milan::Imgui::OnWndProc(hWnd, uMsg, wParam, lParam))
         return true;
 
     //if (WndProc_orig == nullptr)
@@ -29,13 +30,23 @@ t_IDXGISwapChain_Present* IDXGISwapChain_Present_orig = nullptr;
 HRESULT IDXGISwapChain_Present_hook(IDXGISwapChain* const pChain, UINT const SyncInterval, UINT const Flags)
 {
     // This should never return true.
-    if (::Milan::Panels::OnSwapChainPresent(pChain, SyncInterval, Flags))
+    if (::Milan::Imgui::OnSwapChainPresent(pChain, SyncInterval, Flags))
         return S_OK;
 
     return IDXGISwapChain_Present_orig(pChain, SyncInterval, Flags);
 }
 
 t_BioRequestExit* BioRequestExit = nullptr;
+
+
+// ! UCanvas methods.
+// ========================================
+
+t_UCanvas_WrappedPrint* UCanvas_WrappedPrint = nullptr;
+
+
+// ! UFunction methods.
+// ========================================
 
 t_UFunction_Bind* UFunction_Bind_orig = nullptr;
 void UFunction_Bind_hook(UFunction* const Context)
@@ -48,6 +59,10 @@ void UFunction_Bind_hook(UFunction* const Context)
     }
 }
 
+
+// ! UGameEngine methods.
+// ========================================
+
 t_UGameEngine_Exec* UGameEngine_Exec_orig = nullptr;
 UBOOL UGameEngine_Exec_hook(UGameEngine* const Context, WCHAR const* const Command, void* const Output)
 {
@@ -58,6 +73,10 @@ UBOOL UGameEngine_Exec_hook(UGameEngine* const Context, WCHAR const* const Comma
 
     return (*UGameEngine_Exec_orig)(Context, Command, Output);
 }
+
+
+// ! UObject methods.
+// ========================================
 
 t_UObject_CallFunction* UObject_CallFunction_orig = nullptr;
 void UObject_CallFunction_hook(UObject* const Context, FFrame* const Stack, void* const Result, UFunction* const Function)
@@ -146,6 +165,7 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     }
 #endif
 
+    ::Milan::Profilers::On_UObject_ProcessEvent(Context, Function, Parms, Result);
     (*UObject_ProcessEvent_orig)(Context, Function, Parms, Result);
 }
 

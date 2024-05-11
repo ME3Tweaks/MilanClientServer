@@ -17,6 +17,9 @@
  // TODO: Replace this with a post-hook pattern search.
 #define GLOBAL_WNDPROC_RVA  ::LESDK::Address::FromOffset(0x99D2C0)
 
+#define GLOBAL_UCANVAS_WRAPPEDPRINT_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 8B C4 55 56 */ "57 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 90 02 00 00 48 C7 45 ?? FE FF FF FF")
+
 #define GLOBAL_UFUNCTION_BIND_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 55 41 */ "56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 70 08 00 00 48 C7 44 24 50 ?? ?? ?? ??")
 
@@ -48,6 +51,13 @@ HRESULT __stdcall IDXGISwapChain_Present_hook(IDXGISwapChain* pChain, UINT SyncI
 
 using t_BioRequestExit = void(UBOOL bForce, INT ExitCode, INT Unused);
 extern t_BioRequestExit* BioRequestExit;
+
+
+// ! UCanvas methods.
+// ========================================
+
+using t_UCanvas_WrappedPrint = int(UCanvas* Context, UBOOL Draw, INT* OutX, INT* OutY, UFont* Font, float ScaleX, float ScaleY, UBOOL Center, WCHAR const* Text, FFontRenderInfo const* RenderInfo);
+extern t_UCanvas_WrappedPrint* UCanvas_WrappedPrint;
 
 
 // ! UFunction methods.

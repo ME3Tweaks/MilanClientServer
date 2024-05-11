@@ -13,8 +13,9 @@
 #include "Proxies/SFXGame.hpp"
 #include "Systems/Console.hpp"
 #include "Systems/Globals.hpp"
+#include "Systems/Imgui.hpp"
 #include "Systems/Output.hpp"
-#include "Systems/Panels.hpp"
+#include "Systems/Profilers.hpp"
 #include "Systems/State.hpp"
 
 
@@ -35,7 +36,8 @@ SPI_IMPLEMENT_ATTACH
     ::Milan::Output::Initialize(Context);
     ::Milan::Globals::Initialize(Context);
     ::Milan::Console::Initialize(Context);
-    ::Milan::Panels::Initialize(Context);
+    ::Milan::Profilers::Initialize(Context);
+    ::Milan::Imgui::Initialize(Context);
     ::Milan::State::Initialize(Context);
 
 
@@ -87,7 +89,8 @@ SPI_IMPLEMENT_DETACH
     // ----------------------------------------
 
     ::Milan::State::Terminate();
-    ::Milan::Panels::Terminate();
+    ::Milan::Imgui::Terminate();
+    ::Milan::Profilers::Terminate();
     ::Milan::Console::Terminate();
     ::Milan::Globals::Terminate();
     ::Milan::Output::Terminate();

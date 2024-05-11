@@ -1,5 +1,5 @@
 /**
- * @file        MilanHost/Systems/Panels.hpp
+ * @file        MilanHost/Systems/Imgui.hpp
  * @header      Declarations for Imgui integration.
  */
 
@@ -9,7 +9,7 @@
 
 namespace LESDK { class Initializer; }
 
-namespace Milan::Panels
+namespace Milan::Imgui
 {
     // ! Global subsystem functions.
     // ========================================

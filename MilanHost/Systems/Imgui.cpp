@@ -5,7 +5,7 @@
 #include <LESDK/Init.hpp>
 
 #include "Base.hpp"
-#include "Systems/Panels.hpp"
+#include "Systems/Imgui.hpp"
 #include "Systems/Output.hpp"
 
 
@@ -13,7 +13,7 @@
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 
-namespace Milan::Panels
+namespace Milan::Imgui
 {
     bool gb_debugPanelEnabled = false;
 
@@ -49,12 +49,12 @@ namespace Milan::Panels
         ImGui::CreateContext();
         ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
 
-        MILAN_INFOW(L"panels system initialized");
+        MILAN_INFOW(L"imgui system initialized");
     }
 
     void Terminate()
     {
-        MILAN_INFOW(L"panels system terminating");
+        MILAN_INFOW(L"imgui system terminating");
 
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();

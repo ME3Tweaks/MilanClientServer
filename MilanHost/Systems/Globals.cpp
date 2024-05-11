@@ -5,7 +5,7 @@
 #include "Hooks.hpp"
 #include "Systems/Globals.hpp"
 #include "Systems/Output.hpp"
-#include "Systems/Panels.hpp"
+#include "Systems/Imgui.hpp"
 
 
 namespace Milan::Allocator
@@ -29,6 +29,8 @@ namespace Milan::Globals
 {
     void Initialize(::LESDK::Initializer& Context)
     {
+        MILAN_INFOW(L"base address = %p", (void*)::LESDK::GetMainModuleBase());
+
         GEngine = Context.ResolveTyped<UEngine*>(BUILTIN_GENGINE_RIP);
         MILAN_DEBUGW(L"GEngine found: %p (%p)", (void*)GEngine, (void*)*GEngine);
         GNatives = Context.ResolveTyped<tNative*>(BUILTIN_GNATIVES_RIP);
@@ -48,7 +50,7 @@ namespace Milan::Globals
         BioRequestExit = Context.ResolveTyped<t_BioRequestExit>(GLOBAL_BIOREQUESTEXIT_PHOOK);
         MILAN_DEBUGW(L"BioRequestExit found: %p", (void*)BioRequestExit);
 
-        t_IDXGISwapChain_Present* IDXGISwapChain_Present_target = ::Milan::Panels::FindSwapChainPresent();
+        t_IDXGISwapChain_Present* IDXGISwapChain_Present_target = ::Milan::Imgui::FindSwapChainPresent();
         IDXGISwapChain_Present_orig = (t_IDXGISwapChain_Present*)Context.InstallHook("IDXGISwapChain::Present", IDXGISwapChain_Present_target, IDXGISwapChain_Present_hook);
         MILAN_DEBUGW(L"IDXGISwapChain::Present hooked: %p -> %p", (void*)IDXGISwapChain_Present_target, (void*)IDXGISwapChain_Present_orig);
 
@@ -56,7 +58,10 @@ namespace Milan::Globals
         MILAN_DEBUGW(L"WndProc found: %p", (void*)WndProc_orig);
 
         // WndProc is not hooked but replaced using Win32 mechanism,
-        // see ::Milan::Panels::OnSwapChainPresent for more.
+        // see ::Milan::Imgui::OnSwapChainPresent for more.
+
+        UCanvas_WrappedPrint = Context.ResolveTyped<t_UCanvas_WrappedPrint>(GLOBAL_UCANVAS_WRAPPEDPRINT_PHOOK);
+        MILAN_DEBUGW(L"UCanvas::WrappedPrint found: %p", (void*)UCanvas_WrappedPrint);
 
         t_UFunction_Bind* UFunction_Bind_target = Context.ResolveTyped<t_UFunction_Bind>(GLOBAL_UFUNCTION_BIND_PHOOK);
         UFunction_Bind_orig = (t_UFunction_Bind*)Context.InstallHook("UFunction::Bind", UFunction_Bind_target, UFunction_Bind_hook);
