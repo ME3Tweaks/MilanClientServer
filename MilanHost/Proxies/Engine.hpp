@@ -138,28 +138,28 @@ class UWorld_Proxy : public UObject
 
 public:
 
-    unsigned char                                      Unknown_60[0x18];       // 0x60
-    TArray<ULevel*>                                    Levels;                 // 0x78
-    ULevel*                                            PersistentLevel;        // 0x88
-    UObject*                                           Unknown_90;             // 0x90
-    ULevel*                                            CurrentLevel;           // 0x98
-    UObject*                                           Unknown_A0;             // 0xA0
-    unsigned char                                      Unknown_A8[0x70];       // 0xA8
-    UObject*                                           Unknown_118;            // 0x118
-    UNetDriver*                                        NetDriver;              // 0x120
-    unsigned char                                      Unknown_128[0x58];      // 0x128
-    UObject*                                           Unknown_180;            // 0x180
-    unsigned char                                      Unknown_188[0x28];      // 0x188
-    TArray<UObject*>                                   Unknown_1B0;            // 0x1B0
-    unsigned char                                      Unknown_1C0[0x18];      // 0x1C0
-    ULineBatchComponent*                               LineBatcher;            // 0x1D8
-    ULineBatchComponent*                               PersistentLineBatcher;  // 0x1E0
-    unsigned char                                      Unknown_1E8[0x1C];      // 0x1E8
-    TArray<UObject*>                                   Unknown_204;            // 0x204
-    TArray<UObject*>                                   Unknown_214;            // 0x214
-    unsigned char                                      Unknown_224[0x13C];     // 0x224
-    TArray<UObject*>                                   Unknown_360;            // 0x360
-    unsigned char                                      Unknown_370[0x28];      // 0x370
+    unsigned char                   Unknown_60[0x18];           // 0x60
+    TArray<ULevel*>                 Levels;                     // 0x78
+    ULevel*                         PersistentLevel;            // 0x88
+    UObject*                        Unknown_90;                 // 0x90
+    ULevel*                         CurrentLevel;               // 0x98
+    UObject*                        Unknown_A0;                 // 0xA0
+    unsigned char                   Unknown_A8[0x70];           // 0xA8
+    UObject*                        Unknown_118;                // 0x118
+    UNetDriver*                     NetDriver;                  // 0x120
+    unsigned char                   Unknown_128[0x58];          // 0x128
+    UObject*                        Unknown_180;                // 0x180
+    unsigned char                   Unknown_188[0x28];          // 0x188
+    TArray<UObject*>                Unknown_1B0;                // 0x1B0
+    unsigned char                   Unknown_1C0[0x18];          // 0x1C0
+    ULineBatchComponent*            LineBatcher;                // 0x1D8
+    ULineBatchComponent*            PersistentLineBatcher;      // 0x1E0
+    unsigned char                   Unknown_1E8[0x1C];          // 0x1E8
+    TArray<UObject*>                Unknown_204;                // 0x204
+    TArray<UObject*>                Unknown_214;                // 0x214
+    unsigned char                   Unknown_224[0x13C];         // 0x224
+    TArray<UObject*>                Unknown_360;                // 0x360
+    unsigned char                   Unknown_370[0x28];          // 0x370
 
     // Other offsets noted in Ghidra:
     //  - 0x2D8 => DominantDirectionalLight (UDominantDirectionalLightComponent*)
@@ -181,5 +181,79 @@ static_assert(offsetof(UWorld_Proxy, Unknown_214) == 0x214);
 static_assert(offsetof(UWorld_Proxy, Unknown_360) == 0x360);
 static_assert(sizeof(UWorld_Proxy) == sizeof(UWorld));
 
+
+class UChildConnection_Proxy;
+class UNetConnection_Proxy : public UPlayer
+{
+public:
+
+    UNetDriver*                     Driver;                     // 0x8C
+    EConnectionState                ConnectionState;            // 0x94
+    FURL                            URL;                        // 0x98
+    UPackageMap*                    PackageMap;                 // 0xF0
+    int                             Unknown_F8[3];              // 0xF8
+    int                             MaxPacket;                  // 0x104
+    int                             PacketOverhead;             // 0x108
+    int                             Unknown_10C;                // 0x10C
+    FString                         Challenge;                  // 0x110
+    FString                         ClientResponse;             // 0x120
+    int                             ResponseId;                 // 0x130
+    int                             NegotiatedVer;              // 0x134
+    unsigned char                   Unknown_138[0x2c4 - 0x138]; // 0x138
+    int                             InBytes;                    // 0x2C4
+    int                             OutBytes;                   // 0x2C8
+    int                             InPacketsLost;              // 0x2CC
+    int                             OutPacketsLost;             // 0x2D0
+    FBitWriter                      Out;                        // 0x2D4
+    double                          OutLagTime[256];            //   checks out: 0x378
+    int                             OutLagPacketId[256];        //   checks out: 0xB78
+    int                             InPacketId;                 // 0xF78
+    int                             OutPacketId;                // 0xF7C
+    int                             OutAckPacketId;             // 0xF80
+    UChannel*                       Channels[1023];             // 0xF84
+    int                             OutReliable[1023];          //   checks out: 0x2F7C
+    int                             InReliable[1023];           //   checks out: 0x3F78
+    int                             PendingOutRec[1023];        //   checks out: 0x4F74
+    TArray<int>                     QueuedAcknowledgements;     //   checks out: 0x5F70
+    TArray<int>                     ResendAcknowledgements;     //   checks out: 0x5F80
+    TArray<UChannel*>               OpenChannels;               // 0x5F90
+    TArray<AActor*>                 SendTemporaries;            //   checks out: 0x5FA0
+    TMap<AActor*, UActorChannel*>   ActorChannels;              //   checks out: 0x5FB0
+    UDownload*                      Download;                   // 0x5FF8
+    TArray<void*>                   DownloadInfo;               // 0x6000
+    TArray<FPackageInfo*>           PendingPackageInfos;        //   checks out: 0x6010
+    SFXName                         ClientWorldPackageName;     //   checks out: 0x6020
+    TArray<SFXName>                 ClientVisibleLevelNames;    //   checks out: 0x6028
+    TArray<FGuid>                   PendingRemovePackageGuids;  //   checks out: 0x6038
+    TArray<UChildConnection_Proxy*> Children;                   // 0x6048
+    unsigned char                   Unknown_6058[0x14];         // 0x6058
+};
+
+static_assert(offsetof(UNetConnection_Proxy, PackageMap) == 0xF0);
+static_assert(offsetof(UNetConnection_Proxy, MaxPacket) == 0x104);
+static_assert(offsetof(UNetConnection_Proxy, PacketOverhead) == 0x108);
+static_assert(offsetof(UNetConnection_Proxy, NegotiatedVer) == 0x134);
+static_assert(offsetof(UNetConnection_Proxy, InBytes) == 0x2C4);
+static_assert(offsetof(UNetConnection_Proxy, InPacketsLost) == 0x2CC);
+static_assert(offsetof(UNetConnection_Proxy, Out) == 0x2D4);
+static_assert(offsetof(UNetConnection_Proxy, InPacketId) == 0xF78);
+static_assert(offsetof(UNetConnection_Proxy, Channels) == 0xF84);
+static_assert(offsetof(UNetConnection_Proxy, OpenChannels) == 0x5f90);
+static_assert(offsetof(UNetConnection_Proxy, Download) == 0x5ff8);
+static_assert(offsetof(UNetConnection_Proxy, DownloadInfo) == 0x6000);
+static_assert(offsetof(UNetConnection_Proxy, Children) == 0x6048);
+static_assert(offsetof(UNetConnection_Proxy, Unknown_6058) == 0x6058);
+static_assert(sizeof(UNetConnection_Proxy) == sizeof(UNetConnection));
+
+
+class UChildConnection_Proxy : public UNetConnection_Proxy
+{
+public:
+
+    UNetConnection*                 Parent;                     // 0x606C
+};
+
+static_assert(offsetof(UChildConnection_Proxy, Parent) == 0x606C);
+static_assert(sizeof(UChildConnection_Proxy) == sizeof(UChildConnection));
 
 #pragma pack(pop)
