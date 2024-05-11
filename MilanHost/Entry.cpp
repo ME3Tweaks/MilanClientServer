@@ -1,3 +1,5 @@
+#include <fstream>
+
 //#include <LESDK/Headers.hpp>
 #include <LESDK/Init.hpp>
 #include <SPI.h>
@@ -35,6 +37,35 @@ SPI_IMPLEMENT_ATTACH
     ::Milan::Console::Initialize(Context);
     ::Milan::Panels::Initialize(Context);
     ::Milan::State::Initialize(Context);
+
+
+    // Register miscellaneous commands.
+    // ----------------------------------------
+
+    ::Milan::Console::RegisterCommand(L"dbg", L"dumpnatives",
+        [](wchar_t const*)
+        {
+            MILAN_INFOW(L"dumping native ufuncs");
+            ::RelativeTimer Timer{};
+
+            std::wofstream Stream{ L"MilanHost-natives.csv" };
+            Stream << L"FullName;RVA;Address\n" << std::hex;
+
+            auto const Base = reinterpret_cast<std::ptrdiff_t>(::LESDK::GetMainModuleBase());
+
+            for (TypedObjectIterator<UFunction, false, false> Iter{}; Iter; ++Iter)
+            {
+                // TODO: Port select FUNC flags.
+                if (((*Iter)->FunctionFlags & 0x400) == 0)
+                    continue;
+
+                auto const Address = reinterpret_cast<std::ptrdiff_t>((*Iter)->Func);
+                Stream << *(*Iter)->StaticFullName() << L";0x" << Address - Base << L";0x" << Address << L"\n";
+            }
+
+            MILAN_INFOW(L"dumping native ufuncs - done in %.3f ms.", Timer.GetMilliseconds());
+            return true;
+        });
 
 
     MILAN_INFOW(L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
