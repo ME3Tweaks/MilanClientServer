@@ -122,8 +122,8 @@ namespace Milan::Profilers
 
         Drawer.PushIndent();
         Drawer.DrawProperty(L"URL", WorldInfo->GetLocalURL());
-        Drawer.DrawProperty(L"GameInfo", WorldInfo->Game ? WorldInfo->Game->StaticName() : L"");
-        Drawer.DrawProperty(L"ReplicationInfo", WorldInfo->GRI ? WorldInfo->GRI->StaticName() : L"");
+        Drawer.DrawProperty(L"GameInfo", WorldInfo->Game ? WorldInfo->Game->StaticName() : L"n/a");
+        Drawer.DrawProperty(L"ReplicationInfo", WorldInfo->GRI ? WorldInfo->GRI->StaticName() : L"n/a");
         Drawer.DrawProperty(L"NetMode", FString::Printf(L"%d (%s)", WorldInfo->NetMode, NetModeString(WorldInfo->NetMode)));
         Drawer.PopIndent();
 
@@ -215,13 +215,12 @@ namespace Milan::Profilers
 
     void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel_Proxy* const Channel, unsigned int const Index)
     {
-        Drawer.DrawString(FString::Printf(L"Channel %d:", Index));
+        Drawer.DrawString(FString::Printf(L"Channel %d: %s", Index, Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a"));
         Drawer.PushIndent();
-        Drawer.DrawProperty(L"Actor", Channel->Actor ? Channel->Actor->StaticFullName() : L"n/a");
         Drawer.DrawProperty(L"Flags (base)", FString::Printf(L"bOpenAcked=%d, bClosing=%d, bOpenTemporary=%d, bBroken=%d, bTornOff=%d",
-            Channel->bOpenAcked, Channel->bClosing, Channel->bOpenTemporary, Channel->bBroken, Channel->bTornOff));
+            !!Channel->bOpenAcked, !!Channel->bClosing, !!Channel->bOpenTemporary, !!Channel->bBroken, !!Channel->bTornOff));
         Drawer.DrawProperty(L"Flags (derived)", FString::Printf(L"SpawnAcked=%d, ActorDirty=%d, MustStayDirty=%d, StillInitial=%d, IsReplicating=%d",
-            Channel->SpawnAcked, Channel->ActorDirty, Channel->bActorMustStayDirty, Channel->bActorStillInitial, Channel->bIsReplicatingActor));
+            !!Channel->SpawnAcked, !!Channel->ActorDirty, !!Channel->bActorMustStayDirty, !!Channel->bActorStillInitial, !!Channel->bIsReplicatingActor));
         Drawer.PopIndent();
     }
 }

@@ -20,7 +20,7 @@ void CanvasDrawer::Reset()
 
 void CanvasDrawer::DrawText(std::wstring_view const Text, bool const bNewLine, ETextAlign const Align, float const Scale)
 {
-    MILAN_CHECKW(!Text.empty(), L"");
+    //MILAN_CHECKW(!Text.empty(), L"");
     MILAN_CHECKW(IsValidAlign(Align), L"");
     MILAN_CHECKW(Scale > 0.f, L"");
 
@@ -225,7 +225,7 @@ void MilanCanvasDrawer::DrawProperty(std::wstring_view const Name, std::wstring_
 
     PopColor();
 
-    SetPosX(k_canvasPadding + 180.f);
+    SetPosX(k_canvasPadding + 220.f);
     DrawText(String, true);
 }
 
