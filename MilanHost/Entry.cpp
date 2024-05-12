@@ -41,8 +41,48 @@ SPI_IMPLEMENT_ATTACH
     ::Milan::State::Initialize(Context);
 
 
-    // Register miscellaneous commands.
+    // Run additional startup logic.
     // ----------------------------------------
+
+    RegisterNonshipCommands();
+
+
+    MILAN_INFOW(L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
+    ::Milan::Output::FlushEverything();
+
+    return true;
+}
+
+SPI_IMPLEMENT_DETACH
+{
+    MILAN_UNUSED(InterfacePtr);
+    MILAN_INFOW(L"detach starting");
+
+    // Logging calls in system termination will not be flushed here.
+    ::Milan::Output::FlushEverything();
+
+
+    // Terminate subsystems in reverse.
+    // ----------------------------------------
+
+    ::Milan::State::Terminate();
+    ::Milan::Imgui::Terminate();
+    ::Milan::Profilers::Terminate();
+    ::Milan::Console::Terminate();
+    ::Milan::Globals::Terminate();
+    ::Milan::Output::Terminate();
+    ::Milan::Allocator::Terminate();
+
+    return true;
+}
+
+
+// ! Local functions.
+// ========================================
+
+void RegisterNonshipCommands()
+{
+#ifndef _FINAL_RELEASE
 
     ::Milan::Console::RegisterCommand(L"dbg", L"dumpnatives",
         [](wchar_t const*)
@@ -94,32 +134,5 @@ SPI_IMPLEMENT_ATTACH
             return true;
         });
 
-
-    MILAN_INFOW(L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
-    ::Milan::Output::FlushEverything();
-
-    return true;
-}
-
-SPI_IMPLEMENT_DETACH
-{
-    MILAN_UNUSED(InterfacePtr);
-    MILAN_INFOW(L"detach starting");
-
-    // Logging calls in system termination will not be flushed here.
-    ::Milan::Output::FlushEverything();
-
-
-    // Terminate subsystems in reverse.
-    // ----------------------------------------
-
-    ::Milan::State::Terminate();
-    ::Milan::Imgui::Terminate();
-    ::Milan::Profilers::Terminate();
-    ::Milan::Console::Terminate();
-    ::Milan::Globals::Terminate();
-    ::Milan::Output::Terminate();
-    ::Milan::Allocator::Terminate();
-
-    return true;
+#endif
 }
