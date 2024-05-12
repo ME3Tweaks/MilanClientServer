@@ -43,6 +43,7 @@ t_BioRequestExit* BioRequestExit = nullptr;
 // ! UCanvas methods.
 // ========================================
 
+t_UUIString_StringSize* UUIString_StringSize = nullptr;
 t_UCanvas_WrappedPrint* UCanvas_WrappedPrint = nullptr;
 
 

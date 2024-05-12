@@ -60,6 +60,9 @@ namespace Milan::Globals
         // WndProc is not hooked but replaced using Win32 mechanism,
         // see ::Milan::Imgui::OnSwapChainPresent for more.
 
+        UUIString_StringSize = Context.ResolveTyped<t_UUIString_StringSize>(GLOBAL_UUISTRING_STRINGSIZE_PHOOK);
+        MILAN_DEBUGW(L"UUIString::StringSize found: %p", (void*)UUIString_StringSize);
+
         UCanvas_WrappedPrint = Context.ResolveTyped<t_UCanvas_WrappedPrint>(GLOBAL_UCANVAS_WRAPPEDPRINT_PHOOK);
         MILAN_DEBUGW(L"UCanvas::WrappedPrint found: %p", (void*)UCanvas_WrappedPrint);
 

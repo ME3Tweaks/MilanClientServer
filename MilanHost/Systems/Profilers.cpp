@@ -2,6 +2,7 @@
 #include <LESDK/Init.hpp>
 
 #include "Base.hpp"
+#include "Canvas.hpp"
 #include "Hooks.hpp"
 #include "Intercept.hpp"
 #include "Systems/Output.hpp"
@@ -10,6 +11,8 @@
 
 namespace Milan::Profilers
 {
+    MilanCanvasDrawer g_canvas{};
+
     void Initialize(::LESDK::Initializer& Context)
     {
         MILAN_UNUSED(Context);
@@ -19,6 +22,7 @@ namespace Milan::Profilers
     void Terminate()
     {
         MILAN_INFOW(L"profilers system terminating");
+        g_canvas.~MilanCanvasDrawer();
     }
 
     void On_UObject_ProcessEvent(UObject* const Context, UFunction* const Function, void* const Parms, void* const Result)
@@ -32,13 +36,12 @@ namespace Milan::Profilers
             UCanvas* const Canvas = TParms->Canvas;
             MILAN_CHECKW(Canvas != nullptr, L"");
 
-            Canvas->SetDrawColor(255, 255, 255, 255);
-            Canvas->SetPos(40.f, 40.f);
+            g_canvas.UpdateCanvas(Canvas);
+            g_canvas.UpdateGlobals((*GEngine)->Cast<USFXEngine>());
 
-            int OutX = 0, OutY = 0;
+            g_canvas.Reset();
 
-            FFontRenderInfo const FontRenderInfo{};
-            (*UCanvas_WrappedPrint)(Canvas, TRUE, &OutX, &OutY, Canvas->Font, 1.f, 1.f, FALSE, L"Hello there!", &FontRenderInfo);
+            //g_canvas.DrawHeader(L"Network", L"Shows active channels and related networking items");
         }
     }
 }

@@ -17,6 +17,9 @@
  // TODO: Replace this with a post-hook pattern search.
 #define GLOBAL_WNDPROC_RVA  ::LESDK::Address::FromOffset(0x99D2C0)
 
+#define GLOBAL_UUISTRING_STRINGSIZE_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 8B C4 53 56 */ "57 41 56 41 57 48 81 EC D0 00 00 00 33 F6 48 8B DA 48 8B 51 28")
+
 #define GLOBAL_UCANVAS_WRAPPEDPRINT_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 55 56 */ "57 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 90 02 00 00 48 C7 45 ?? FE FF FF FF")
 
@@ -55,6 +58,25 @@ extern t_BioRequestExit* BioRequestExit;
 
 // ! UCanvas methods.
 // ========================================
+
+#pragma pack(push, 4)
+struct CStringSizeParams
+{
+    unsigned char       Unknown_00[0x20];   // 0x00
+    FVector2D           Scaling;            // 0x20
+    UFont*              DrawFont;           // 0x28
+    unsigned char       Unknown_30[0x18];   // 0x30
+    FVector2D           OutSize;            // 0x48
+    unsigned char       Unknown_50[0x20];   // 0x50  -  safety padding
+};
+#pragma pack(pop)
+
+static_assert(offsetof(CStringSizeParams, Scaling) == 0x20);
+static_assert(offsetof(CStringSizeParams, DrawFont) == 0x28);
+static_assert(offsetof(CStringSizeParams, OutSize) == 0x48);
+
+using t_UUIString_StringSize = void(CStringSizeParams* Params, WCHAR const* Text, WCHAR const* Unknown1, UBOOL Unknown2);
+extern t_UUIString_StringSize* UUIString_StringSize;
 
 using t_UCanvas_WrappedPrint = int(UCanvas* Context, UBOOL Draw, INT* OutX, INT* OutY, UFont* Font, float ScaleX, float ScaleY, UBOOL Center, WCHAR const* Text, FFontRenderInfo const* RenderInfo);
 extern t_UCanvas_WrappedPrint* UCanvas_WrappedPrint;
