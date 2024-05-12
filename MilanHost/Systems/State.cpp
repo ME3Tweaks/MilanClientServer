@@ -64,17 +64,17 @@ namespace Milan::State
         static FunctionInterceptLegacy SFXSaveManagerMP_SaveRecordsImpl{};
         if (SFXSaveManagerMP_SaveRecordsImpl.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.SaveRecordsImpl"))
         {
-            MILAN_DEBUGW(L"intercepted SFXGame.SFXSaveManagerMP.SaveRecordsImpl");
+            MILAN_TRACEW(L"intercepted SFXGame.SFXSaveManagerMP.SaveRecordsImpl:");
 
             MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
-            MILAN_DEBUGW(L"profile path: %s", *Profile.GetProfilePath());
+            MILAN_TRACEW(L"profile path: %s", *Profile.GetProfilePath());
 
             ::RelativeTimer ProfileTimer{};
 
             MemoryOutputStream ProfileStream{ 204800 };  // reserve 200kb
             Profile.Serialize(ProfileStream);
 
-            MILAN_DEBUGW(L"profile serialized in %.3f ms.", ProfileTimer.GetMilliseconds());
+            MILAN_TRACEW(L"profile serialized in %.3f ms.", ProfileTimer.GetMilliseconds());
 
             ::WriteFileFull(static_cast<std::wstring_view>(Profile.GetProfilePath()), ProfileStream.View());
         }
@@ -90,10 +90,10 @@ namespace Milan::State
         static FunctionInterceptLegacy SFXSaveManagerMP_Initialize{};
         if (SFXSaveManagerMP_Initialize.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.Initialize"))
         {
-            MILAN_DEBUGW(L"intercepted SFXGame.SFXSaveManagerMP.Initialize");
+            MILAN_TRACEW(L"intercepted SFXGame.SFXSaveManagerMP.Initialize:");
 
             MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
-            MILAN_DEBUGW(L"profile path: %s", *Profile.GetProfilePath());
+            MILAN_TRACEW(L"profile path: %s", *Profile.GetProfilePath());
 
             ::game::vector<BYTE> ProfileBuffer{};
             ::ReadFileFull(static_cast<std::wstring_view>(Profile.GetProfilePath()), ProfileBuffer);
@@ -103,7 +103,7 @@ namespace Milan::State
             MemoryInputStream ProfileStream{ std::move(ProfileBuffer) };
             Profile.Deserialize(ProfileStream);
 
-            MILAN_DEBUGW(L"profile deserialized in %.3f ms.", ProfileTimer.GetMilliseconds());
+            MILAN_TRACEW(L"profile deserialized in %.3f ms.", ProfileTimer.GetMilliseconds());
         }
     }
 

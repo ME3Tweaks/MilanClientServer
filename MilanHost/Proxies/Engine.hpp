@@ -19,6 +19,15 @@ enum EConnectionState
     USOCK_Open                      = 3
 };
 
+enum ENetMode
+{
+    NM_Standalone                   = 0,
+    NM_DedicatedServer              = 1,
+    NM_ListenServer                 = 2,
+    NM_Client                       = 3,
+    NM_MAX                          = 4
+};
+
 
 class UChannel_Proxy : public UObject
 {

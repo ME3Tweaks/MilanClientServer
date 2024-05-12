@@ -1,3 +1,5 @@
+#include <optional>
+
 #include <LESDK/Headers.hpp>
 #include <LESDK/Init.hpp>
 
@@ -5,17 +7,65 @@
 #include "Canvas.hpp"
 #include "Hooks.hpp"
 #include "Intercept.hpp"
+#include "Systems/Console.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/Profilers.hpp"
 
 
+wchar_t const* NetModeString(unsigned char const Mode)
+{
+    if (Mode == NM_Standalone)          return L"Standalone";
+    if (Mode == NM_Client)              return L"Client";
+    if (Mode == NM_ListenServer)        return L"ListenServer";
+    if (Mode == NM_DedicatedServer)     return L"DedicatedServer";
+
+    return L"???";
+}
+
 namespace Milan::Profilers
 {
     MilanCanvasDrawer g_canvas{};
+    EMilanProfilerMode g_mode = MPM_Network;
+
+    CCanvasProfiler g_profilers[MPM_Max] =
+    {
+        /* MPM_None */
+        CCanvasProfiler
+        {
+            .Subtitle = L"",
+            .Description = L"",
+            .Function = nullptr
+        },
+
+        /* MPM_Network */
+        CCanvasProfiler
+        {
+            .Subtitle = L"Network",
+            .Description = L"Displays active channels and related networking info",
+            .Function = ProfileNetwork
+        },
+
+        /* MPM_WorldInfo */
+        CCanvasProfiler
+        {
+            .Subtitle = L"WorldInfo",
+            .Description = L"Displays information about active world",
+            .Function = ProfileWorldInfo
+        },
+    };
 
     void Initialize(::LESDK::Initializer& Context)
     {
         MILAN_UNUSED(Context);
+
+        Console::RegisterCommand(L"dbg", L"nextprofile",
+            [](wchar_t const*)
+            {
+                g_mode = (EMilanProfilerMode)((int)g_mode + 1);
+                if (g_mode >= MPM_Max) g_mode = MPM_None;
+                return true;
+            });
+
         MILAN_INFOW(L"profilers system initialized");
     }
 
@@ -33,15 +83,145 @@ namespace Milan::Profilers
         if (GameViewportClient_PostRender.Applies(Function, L"Function Engine.GameViewportClient.PostRender"))
         {
             auto* const TParms = reinterpret_cast<UGameViewportClient_eventPostRender_Parms*>(Parms);
-            UCanvas* const Canvas = TParms->Canvas;
-            MILAN_CHECKW(Canvas != nullptr, L"");
 
-            g_canvas.UpdateCanvas(Canvas);
+            g_canvas.UpdateCanvas(TParms->Canvas);
             g_canvas.UpdateGlobals((*GEngine)->Cast<USFXEngine>());
-
             g_canvas.Reset();
 
-            //g_canvas.DrawHeader(L"Network", L"Shows active channels and related networking items");
+            UObject* const Target = nullptr;
+
+            if (g_mode != MPM_None)
+            {
+                MILAN_CHECKW(g_mode >= 0 && g_mode < MPM_Max, L"");
+                auto const& Profiler = g_profilers[g_mode];
+
+                g_canvas.DrawHeader(Profiler.Subtitle, Profiler.Description, Target, g_canvas.k_warnColor);
+                if (Profiler.Function) (*Profiler.Function)(g_canvas, Target);
+            }
         }
+    }
+
+    void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* const Target)
+    {
+        MILAN_UNUSED_2(Drawer, Target);
+
+        auto* const Engine = (*GEngine)->Cast<USFXEngine>();
+        auto* const WorldInfo = Engine->GetRealWorldInfo();
+
+        if (WorldInfo == nullptr)
+        {
+            Drawer.PushColor(Drawer.k_warnColor);
+            Drawer.DrawString(L"WorldInfo not available, aborting...");
+            Drawer.PopColor();
+            return;
+        }
+
+        // WorldInfo
+
+        Drawer.DrawString(FString::Printf(L"WorldInfo: %s", *WorldInfo->StaticName()));
+
+        Drawer.PushIndent();
+        Drawer.DrawProperty(L"URL", WorldInfo->GetLocalURL());
+        Drawer.DrawProperty(L"GameInfo", WorldInfo->Game ? WorldInfo->Game->StaticName() : L"");
+        Drawer.DrawProperty(L"ReplicationInfo", WorldInfo->GRI ? WorldInfo->GRI->StaticName() : L"");
+        Drawer.DrawProperty(L"NetMode", FString::Printf(L"%d (%s)", WorldInfo->NetMode, NetModeString(WorldInfo->NetMode)));
+        Drawer.PopIndent();
+
+        Drawer.DrawSeparator();
+
+        // NetDriver
+
+        auto* const World = reinterpret_cast<UWorld_Proxy*>(*GWorld);
+        auto* const NetDriver = reinterpret_cast<UNetDriver_Proxy*>(World->NetDriver);
+
+        Drawer.DrawString(FString::Printf(L"World: %s", *World->StaticName()));
+        Drawer.DrawString(FString::Printf(L"NetDriver: %s", NetDriver ? *NetDriver->StaticName() : L"n/a"));
+
+        if (NetDriver && WorldInfo->NetMode == NM_ListenServer)
+        {
+            Drawer.PushIndent();
+
+            for (UINT i = 0u; i < NetDriver->ChildConnections.Count(); ++i)
+            {
+                //MILAN_CHECKW(ChildConnIter->IsA<UChildConnection>(), L"");
+
+                auto* const ChildConnIter = NetDriver->ChildConnections(i);
+                auto* const ChildConn = reinterpret_cast<UNetConnection_Proxy*>(ChildConnIter);
+
+                Drawer.DrawString(FString::Printf(L"ChildConnections(%d): %s", i, *ChildConnIter->StaticName()));
+
+                Drawer.PushIndent();
+                Drawer.DrawProperty(L"ClientWorldPackageName", ChildConn->ClientWorldPackageName.ToString());
+                Drawer.DrawString(L"Actor channels");
+                unsigned int ChannelIndex = 0;
+                for (auto const& [Actor, Channel] : ChildConn->ActorChannels)
+                {
+                    Drawer.PushIndent();
+                    MILAN_CHECKW(Channel != nullptr, L"");
+                    auto* const ChannelProxy = reinterpret_cast<UActorChannel_Proxy*>(Channel);
+                    DrawActorChannel(Drawer, ChannelProxy, ChannelIndex++);
+                    Drawer.PopIndent();
+                }
+                Drawer.DrawString(L"Client visible levels");
+                unsigned int VisibleIndex = 0;
+                for (auto const VisibleLevelName : ChildConn->ClientVisibleLevelNames)
+                {
+                    Drawer.PushIndent();
+                    Drawer.DrawProperty(FString::Printf(L"%d", VisibleIndex++), VisibleLevelName.ToString());
+                    Drawer.PopIndent();
+                }
+                Drawer.DrawString(L"Pending packages");
+                unsigned int PendingIndex = 0;
+                for (auto const& PendingPackage : ChildConn->PendingPackageInfos)
+                {
+                    Drawer.PushIndent();
+                    Drawer.DrawProperty(FString::Printf(L"%d", PendingIndex++),
+                        FString::Printf(L"Name=%s, Parent=%s, Guid=%08X%08X%08X%08X",
+                            *PendingPackage->PackageName.ToString(),
+                            PendingPackage->Parent ? *PendingPackage->Parent->StaticName() : L"n/a",
+                            PendingPackage->Guid.A, PendingPackage->Guid.B, PendingPackage->Guid.C, PendingPackage->Guid.D));
+                    Drawer.PopIndent();
+                }
+                Drawer.PopIndent();
+            }
+
+            Drawer.PopIndent();
+        }
+        else if (NetDriver && NetDriver->ServerConnection)
+        {
+            Drawer.PushIndent();
+
+            auto* const ServerConn = reinterpret_cast<UNetConnection_Proxy*>(NetDriver->ServerConnection);
+
+            Drawer.DrawString(L"Actor channels");
+            unsigned int ChannelIndex = 0;
+            for (auto const& [Actor, Channel] : ServerConn->ActorChannels)
+            {
+                Drawer.PushIndent();
+                MILAN_CHECKW(Channel != nullptr, L"");
+                auto* const ChannelProxy = reinterpret_cast<UActorChannel_Proxy*>(Channel);
+                DrawActorChannel(Drawer, ChannelProxy, ChannelIndex++);
+                Drawer.PopIndent();
+            }
+
+            Drawer.PopIndent();
+        }
+    }
+
+    void ProfileWorldInfo(MilanCanvasDrawer& Drawer, UObject* const Target)
+    {
+        MILAN_UNUSED_2(Drawer, Target);
+    }
+
+    void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel_Proxy* const Channel, unsigned int const Index)
+    {
+        Drawer.DrawString(FString::Printf(L"Channel %d:", Index));
+        Drawer.PushIndent();
+        Drawer.DrawProperty(L"Actor", Channel->Actor ? Channel->Actor->StaticFullName() : L"n/a");
+        Drawer.DrawProperty(L"Flags (base)", FString::Printf(L"bOpenAcked=%d, bClosing=%d, bOpenTemporary=%d, bBroken=%d, bTornOff=%d",
+            Channel->bOpenAcked, Channel->bClosing, Channel->bOpenTemporary, Channel->bBroken, Channel->bTornOff));
+        Drawer.DrawProperty(L"Flags (derived)", FString::Printf(L"SpawnAcked=%d, ActorDirty=%d, MustStayDirty=%d, StillInitial=%d, IsReplicating=%d",
+            Channel->SpawnAcked, Channel->ActorDirty, Channel->bActorMustStayDirty, Channel->bActorStillInitial, Channel->bIsReplicatingActor));
+        Drawer.PopIndent();
     }
 }

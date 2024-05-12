@@ -164,18 +164,36 @@ void CanvasDrawer::DrawBoldHorizontalLine(float X1, float X2, unsigned char cons
 void MilanCanvasDrawer::UpdateGlobals(USFXEngine* const InEngine)
 {
     MILAN_CHECKW(InEngine != nullptr, L"");
+    Engine = InEngine;
 }
 
-void MilanCanvasDrawer::DrawHeader(std::wstring_view const Subtitle, std::wstring_view const Description)
+void MilanCanvasDrawer::PushIndent()
+{
+    Indent += k_indentSize;
+}
+
+void MilanCanvasDrawer::PopIndent()
+{
+    Indent = std::max<float>(Indent - k_indentSize, 0.f);
+}
+
+void MilanCanvasDrawer::DrawHeader(std::wstring_view const Subtitle,
+    std::wstring_view const Description, UObject* const Target, FColor const Color)
 {
     MILAN_CHECKW(!Subtitle.empty(), L"");
     MILAN_CHECKW(!Description.empty(), L"");
 
-    PushColor(k_warnColor);
-    SetPos(k_canvasPadding, k_canvasPadding);
+    PushColor(Color);
 
-    DrawText(L"Milan Debug HUD / ", false);
-    DrawText(Subtitle, false);
+    SetPos(k_canvasPadding, k_canvasPadding);
+    DrawText(L"Milan Debug HUD / ", false, ETA_Left);
+    DrawText(Subtitle, false, ETA_Left);
+
+    if (Target != nullptr)
+    {
+        SetPosX(0.f);
+        DrawText(FString::Printf(L"<< %s >>", *FormatObjectName(Target)), false, ETA_Center);
+    }
 
     SetPosX(-k_canvasPadding);
     DrawText(Description, true, ETA_Right);
@@ -184,4 +202,67 @@ void MilanCanvasDrawer::DrawHeader(std::wstring_view const Subtitle, std::wstrin
     DrawHorizontalLine(k_canvasPadding, -k_canvasPadding);
 
     AdjustPos(0.f, k_canvasPadding / 2);
+
+    PopColor();
+}
+
+void MilanCanvasDrawer::DrawString(std::wstring_view const String)
+{
+    SetPosX(k_canvasPadding + Indent);
+    DrawText(String, true);
+}
+
+void MilanCanvasDrawer::DrawProperty(std::wstring_view const Name, std::wstring_view const String)
+{
+    FColor NameColor = Canvas->DrawColor;
+    if (NameColor.A > 250) NameColor.A = static_cast<unsigned char>(NameColor.A * 0.8);
+
+    PushColor(NameColor);
+
+    SetPosX(k_canvasPadding + Indent);
+    DrawText(Name, false);
+    DrawText(L": ", false);
+
+    PopColor();
+
+    SetPosX(k_canvasPadding + 180.f);
+    DrawText(String, true);
+}
+
+void MilanCanvasDrawer::DrawSeparator()
+{
+    float const LineHeight = GetTextSize(L"---", 1.f).Y;
+    AdjustPos(0.f, LineHeight);
+}
+
+FString const& MilanCanvasDrawer::FormatObjectName(UObject* const Object)
+{
+    MILAN_CHECKW(Object != nullptr, L"");
+    TargetName.Clear();
+
+    if (Object->Class != nullptr)
+    {
+        ::LESDK::AppendObjectName(Object->Class, TargetName, SFXName::k_formatBasic);
+        TargetName.Append(L" ");
+
+        if (Object->Outer != nullptr)
+        {
+            if (Object->Outer->Outer != nullptr)
+            {
+                ::LESDK::AppendObjectName(Object->Outer->Outer, TargetName, SFXName::k_formatBasic);
+                TargetName.Append(L".");
+            }
+
+            ::LESDK::AppendObjectName(Object->Outer, TargetName, SFXName::k_formatBasic);
+            TargetName.Append(L".");
+        }
+
+        ::LESDK::AppendObjectName(Object, TargetName, SFXName::k_formatInstanced);
+    }
+    else
+    {
+        TargetName.Append(L"(none)");
+    }
+
+    return TargetName;
 }

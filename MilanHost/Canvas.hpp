@@ -23,8 +23,10 @@ inline bool IsValidAlign(ETextAlign const Value) noexcept
 }
 
 
-class CanvasDrawer : public NonCopyable
+class CanvasDrawer
 {
+protected:
+
     UCanvas* Canvas{ nullptr };
     TArray<FColor> ColorStack{};
 
@@ -74,9 +76,14 @@ public:
 
 class MilanCanvasDrawer final : public CanvasDrawer
 {
-    USFXEngine* Engine{ nullptr };
+    USFXEngine*     Engine{ nullptr };
+    FString         TargetName{};
+    float           Indent{ 0.f };
+
+public:
 
     float const     k_canvasPadding = 20.f;
+    float const     k_indentSize = 10.f;
 
     FColor const    k_warnColor{ .B = 0x00, .G = 0x64, .R = 0xFF, .A = 0xFF };
     FColor const    k_infoColor{ .B = 0xFF, .G = 0x40, .R = 0x40, .A = 0xFF };
@@ -87,5 +94,15 @@ public:
     ~MilanCanvasDrawer() noexcept override {}
     void UpdateGlobals(USFXEngine* InEngine);
 
-    void DrawHeader(std::wstring_view Subtitle, std::wstring_view Description);
+    void PushIndent();
+    void PopIndent();
+
+    void DrawHeader(std::wstring_view Subtitle, std::wstring_view Description, UObject* Target, FColor Color);
+    void DrawString(std::wstring_view String);
+    void DrawProperty(std::wstring_view Name, std::wstring_view String);
+    void DrawSeparator();
+
+private:
+
+    FString const& FormatObjectName(UObject* Object);
 };
