@@ -233,3 +233,30 @@ void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delt
     (*UWorld_Tick_orig)(Context, Unknown, Delta);
     ::Milan::State::On_UWorld_Tick(Context, Unknown, Delta);
 }
+
+
+// ! <Methods relevant to network debug.>
+// ========================================
+
+t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_orig = nullptr;
+
+void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
+{
+    MILAN_CHECKW(Context != nullptr, L"");
+    auto* const Channel = reinterpret_cast<UActorChannel_Proxy*>(Context);
+
+    //MILAN_TRACEW(L"UActorChannel::ReplicateActor:");
+    //MILAN_TRACEW(L"  Channel: %s", *Channel->StaticFullName());
+    //MILAN_TRACEW(L"    Props: OpenedLocally=%d, OpenPacketId=%d, NumInRec=%d, NumOutRec=%d, NegotiatedVer=%d",
+    //    Channel->OpenedLocally, Channel->OpenPacketId, Channel->NumInRec, Channel->NumOutRec, Channel->NegotiatedVer);
+    //MILAN_TRACEW(L"  Actor: %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
+    //if (Channel->Actor)
+    //{
+    //    auto* const Actor = Channel->Actor;
+    //    MILAN_TRACEW(L"    Props: bNetOwner=%d, bNetInitial=%d Top=%s",
+    //        !!Actor->bNetOwner, !!Actor->bNetInitial, *Actor->StaticName());
+    //}
+
+    MILAN_UNUSED(Channel);
+    (*UActorChannel_ReplicateActor_orig)(Context);
+}

@@ -116,6 +116,8 @@ namespace Milan::Profilers
             return;
         }
 
+        Drawer.SetBackground(FColor{ .B = 0, .G = 0, .R = 0, .A = 25 });
+
         // WorldInfo
 
         Drawer.DrawString(FString::Printf(L"WorldInfo: %s", *WorldInfo->StaticName()));
@@ -161,6 +163,13 @@ namespace Milan::Profilers
                     auto* const ChannelProxy = reinterpret_cast<UActorChannel_Proxy*>(Channel);
                     DrawActorChannel(Drawer, ChannelProxy, ChannelIndex++);
                     Drawer.PopIndent();
+
+                    if (Actor != ChannelProxy->Actor)
+                    {
+                        MILAN_WARNW(L"server has actor channel with actor != channel->actor");
+                        MILAN_WARNW(L"  actor = %s", Actor ? *Actor->StaticFullName() : L"n/a");
+                        MILAN_WARNW(L"  channel->actor = %s", ChannelProxy->Actor ? *ChannelProxy->Actor->StaticFullName() : L"n/a");
+                    }
                 }
                 Drawer.DrawString(L"Client visible levels");
                 unsigned int VisibleIndex = 0;
@@ -202,6 +211,13 @@ namespace Milan::Profilers
                 auto* const ChannelProxy = reinterpret_cast<UActorChannel_Proxy*>(Channel);
                 DrawActorChannel(Drawer, ChannelProxy, ChannelIndex++);
                 Drawer.PopIndent();
+
+                if (Actor != ChannelProxy->Actor)
+                {
+                    MILAN_WARNW(L"client has actor channel with actor != channel->actor");
+                    MILAN_WARNW(L"  actor = %s", Actor ? *Actor->StaticFullName() : L"n/a");
+                    MILAN_WARNW(L"  channel->actor = %s", ChannelProxy->Actor ? *ChannelProxy->Actor->StaticFullName() : L"n/a");
+                }
             }
 
             Drawer.PopIndent();
@@ -215,12 +231,31 @@ namespace Milan::Profilers
 
     void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel_Proxy* const Channel, unsigned int const Index)
     {
+        static FColor s_flagsActorColor{ .B = 232, .G = 232, .R = 200, .A = 255 };
+        static FColor s_flagsBaseColor{ .B = 255, .G = 200, .R = 200, .A = 255 };
+        static FColor s_flagsDerivedColor{ .B = 200, .G = 255, .R = 200, .A = 255 };
+
         Drawer.DrawString(FString::Printf(L"Channel %d: %s", Index, Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a"));
         Drawer.PushIndent();
+
+        if (AActor* Actor = Channel->Actor)
+        {
+            Drawer.PushColor(s_flagsActorColor);
+            Drawer.DrawProperty(L"Actor info", FString::Printf(L"Role=%d, RemoteRole=%d, bNetInitial=%d, bNetOwner=%d, bGameRelevant=%d, bNetTemporary=%d, bNetDirty=%d, SkipPropRepl=%d",
+                (int)Actor->Role, (int)Actor->RemoteRole, !!Actor->bNetInitial, !!Actor->bNetOwner, !!Actor->bGameRelevant, !!Actor->bNetTemporary, !!Actor->bNetDirty, !!Actor->bSkipActorPropertyReplication));
+            Drawer.PopColor();
+        }
+
+        Drawer.PushColor(s_flagsBaseColor);
         Drawer.DrawProperty(L"Flags (base)", FString::Printf(L"bOpenAcked=%d, bClosing=%d, bOpenTemporary=%d, bBroken=%d, bTornOff=%d",
             !!Channel->bOpenAcked, !!Channel->bClosing, !!Channel->bOpenTemporary, !!Channel->bBroken, !!Channel->bTornOff));
+        Drawer.PopColor();
+
+        Drawer.PushColor(s_flagsDerivedColor);
         Drawer.DrawProperty(L"Flags (derived)", FString::Printf(L"SpawnAcked=%d, ActorDirty=%d, MustStayDirty=%d, StillInitial=%d, IsReplicating=%d",
             !!Channel->SpawnAcked, !!Channel->ActorDirty, !!Channel->bActorMustStayDirty, !!Channel->bActorStillInitial, !!Channel->bIsReplicatingActor));
+        Drawer.PopColor();
+
         Drawer.PopIndent();
     }
 }

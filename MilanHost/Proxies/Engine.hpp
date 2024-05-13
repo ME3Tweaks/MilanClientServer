@@ -25,7 +25,16 @@ enum ENetMode
     NM_DedicatedServer              = 1,
     NM_ListenServer                 = 2,
     NM_Client                       = 3,
-    NM_MAX                          = 4
+    NM_Max                          = 4
+};
+
+enum ENetRole
+{
+    ROLE_None                       = 0,
+    ROLE_SimulatedProxy             = 1,
+    ROLE_AutonomousProxy            = 2,
+    ROLE_Authority                  = 3,
+    ROLE_Max                        = 4
 };
 
 
@@ -42,17 +51,17 @@ public:
     int                             bTornOff : 1;               // 0x68 (& 0x10)
 
     int                             ChannelIndex;               // 0x6C
-    int                             Unknown_70;                 // 0x70
+    int                             OpenedLocally;              // 0x70
     int                             OpenPacketId;               // 0x74
     int                             ChannelType;                // 0x78
     int                             NumInRec;                   // 0x7C
     int                             NumOutRec;                  // 0x80
-    int                             Unknown_84;                 // 0x84
+    int                             NegotiatedVer;              // 0x84
     unsigned char                   UnknownData_88[0x10];       // 0x88
 };
 
 static_assert(offsetof(UChannel_Proxy, ChannelIndex) == 0x6C);
-static_assert(offsetof(UChannel_Proxy, Unknown_84) == 0x84);
+//static_assert(offsetof(UChannel_Proxy, Unknown_84) == 0x84);
 static_assert(sizeof(UChannel_Proxy) == sizeof(UChannel));
 
 

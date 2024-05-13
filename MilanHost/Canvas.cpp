@@ -101,10 +101,25 @@ FColor CanvasDrawer::PopColor()
     return Canvas->DrawColor;
 }
 
+void CanvasDrawer::SetBackground(FColor const Color)
+{
+    PushColor(Color);
+    FVector2D const Stored = GetPos();
+    SetPos(0.f, 0.f);
+    Canvas->DrawRect((float)Canvas->SizeX, (float)Canvas->SizeY, Canvas->DefaultTexture);
+    SetPos(Stored.X, Stored.Y);
+    PopColor();
+}
+
 void CanvasDrawer::SetColor(FColor const Color)
 {
     ColorStack.Clear();
     Canvas->DrawColor = Color;
+}
+
+FVector2D CanvasDrawer::GetPos() const
+{
+    return FVector2D{ .X = Canvas->CurX, .Y = Canvas->CurY };
 }
 
 void CanvasDrawer::AdjustPos(float const DX, float const DY)

@@ -38,6 +38,9 @@
 #define GLOBAL_UWORLD_TICK_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 F3 0F */ "11 50 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D 68 A1")
 
+#define GLOBAL_UACTORCHANNEL_REPLICATEACTOR_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 40 55 53 56 57 */ "41 54 41 55 41 56 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC 08 02 00 00 48 C7 85 ?? ?? ?? ?? FE FF FF FF")
+
 
 // ! Miscellaneous functions / methods.
 // ========================================
@@ -134,3 +137,12 @@ using t_UWorld_Tick = void(UWorld* Context, int Unknown, float Delta);
 extern t_UWorld_Tick* UWorld_Tick_orig;
 
 void UWorld_Tick_hook(UWorld* Context, int Unknown, float Delta);
+
+
+// ! <Methods relevant to network debug.>
+// ========================================
+
+using t_UActorChannel_ReplicateActor = void(UActorChannel* Context);
+extern t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_orig;
+
+void UActorChannel_ReplicateActor_hook(UActorChannel* Context);

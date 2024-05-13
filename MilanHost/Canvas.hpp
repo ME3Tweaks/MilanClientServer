@@ -52,8 +52,12 @@ public:
 
     FColor PopColor();
 
+    /** Draws a full-sized rectangle under all the drawing. */
+    void SetBackground(FColor Color);
     /** Updates canvas drawing color and clears out the stack. */
     void SetColor(FColor Color);
+
+    FVector2D GetPos() const;
 
     /** Adds given values to current coordinates. */
     void AdjustPos(float DX, float DY);

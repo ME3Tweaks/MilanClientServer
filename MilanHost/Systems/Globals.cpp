@@ -97,6 +97,16 @@ namespace Milan::Globals
         UWorld_Tick_orig = (t_UWorld_Tick*)Context.InstallHook("UWorld::Tick", UWorld_Tick_target, UWorld_Tick_hook);
         MILAN_DEBUGW(L"UWorld::Tick hooked: %p -> %p", (void*)UWorld_Tick_target, (void*)UWorld_Tick_orig);
 
+        // Network debug begin.
+        // ----------------------------------------
+
+        t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_target = Context.ResolveTyped<t_UActorChannel_ReplicateActor>(GLOBAL_UACTORCHANNEL_REPLICATEACTOR_PHOOK);
+        UActorChannel_ReplicateActor_orig = (t_UActorChannel_ReplicateActor*)Context.InstallHook("UActorChannel::ReplicateActor", UActorChannel_ReplicateActor_target, UActorChannel_ReplicateActor_hook);
+        MILAN_DEBUGW(L"UActorChannel::ReplicateActor hooked: %p -> %p", (void*)UActorChannel_ReplicateActor_target, (void*)UActorChannel_ReplicateActor_orig);
+
+        // ----------------------------------------
+        // Network debug end.
+
         MILAN_INFOW(L"globals system initialized");
     }
 
