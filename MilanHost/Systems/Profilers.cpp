@@ -287,21 +287,30 @@ namespace Milan::Profilers
         static FColor s_flagsBaseColor{ .B = 255, .G = 185, .R = 185, .A = 255 };
         static FColor s_flagsDerivedColor{ .B = 185, .G = 255, .R = 185, .A = 255 };
 
+        // I'd very much like to know what's supposed to be in here...
+        MILAN_CHECKW(Channel->Unknown_114.Count() == 0, L"");
+
         Drawer.DrawString(FString::Printf(L"Channel %d: %s", Index, Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a"));
         Drawer.PushIndent();
 
-        if (AActor* Actor = Channel->Actor)
-        {
-            Drawer.PushColor(s_flagsActorColor);
-            Drawer.DrawProperty(L"Actor info", FString::Printf(L"Role=%s, RemoteRole=%s, bNetInitial=%d, bNetOwner=%d, bGameRelevant=%d, bNetTemporary=%d, bNetDirty=%d, SkipPropRepl=%d",
-                NetRoleString(Actor->Role), NetRoleString(Actor->RemoteRole), !!Actor->bNetInitial, !!Actor->bNetOwner, !!Actor->bGameRelevant, !!Actor->bNetTemporary, !!Actor->bNetDirty, !!Actor->bSkipActorPropertyReplication));
-            Drawer.PopColor();
-        }
+        //unsigned int PropertyIndex = 0;
+        //for (auto const& [Offset, Property] : Channel->ReplicatedProperties)
+        //{
+        //    Drawer.DrawString(FString::Printf(L"%d. %s -> %d", PropertyIndex++, Property ? *Property->StaticName() : L"n/a", Offset));
+        //}
 
-        Drawer.PushColor(s_flagsBaseColor);
-        Drawer.DrawProperty(L"Flags (base)", FString::Printf(L"bOpenAcked=%d, bClosing=%d, bOpenTemporary=%d, bBroken=%d, bTornOff=%d",
-            !!Channel->bOpenAcked, !!Channel->bClosing, !!Channel->bOpenTemporary, !!Channel->bBroken, !!Channel->bTornOff));
-        Drawer.PopColor();
+        //if (AActor* Actor = Channel->Actor)
+        //{
+        //    Drawer.PushColor(s_flagsActorColor);
+        //    Drawer.DrawProperty(L"Actor info", FString::Printf(L"Role=%s, RemoteRole=%s, bNetInitial=%d, bNetOwner=%d, bGameRelevant=%d, bNetTemporary=%d, bNetDirty=%d, SkipPropRepl=%d",
+        //        NetRoleString(Actor->Role), NetRoleString(Actor->RemoteRole), !!Actor->bNetInitial, !!Actor->bNetOwner, !!Actor->bGameRelevant, !!Actor->bNetTemporary, !!Actor->bNetDirty, !!Actor->bSkipActorPropertyReplication));
+        //    Drawer.PopColor();
+        //}
+
+        //Drawer.PushColor(s_flagsBaseColor);
+        //Drawer.DrawProperty(L"Flags (base)", FString::Printf(L"bOpenAcked=%d, bClosing=%d, bOpenTemporary=%d, bBroken=%d, bTornOff=%d",
+        //    !!Channel->bOpenAcked, !!Channel->bClosing, !!Channel->bOpenTemporary, !!Channel->bBroken, !!Channel->bTornOff));
+        //Drawer.PopColor();
 
         Drawer.PushColor(s_flagsDerivedColor);
         Drawer.DrawProperty(L"Flags (derived)", FString::Printf(L"SpawnAcked=%d, ActorDirty=%d, MustStayDirty=%d, StillInitial=%d, IsReplicating=%d",

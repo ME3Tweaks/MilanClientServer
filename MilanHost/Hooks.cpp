@@ -257,6 +257,8 @@ void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
     //        !!Actor->bNetOwner, !!Actor->bNetInitial, *Actor->StaticName());
     //}
 
+    //MILAN_TRACEW(L"UActorChannel::ReplicateActor: %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
+
     MILAN_UNUSED(Channel);
     (*UActorChannel_ReplicateActor_orig)(Context);
 }

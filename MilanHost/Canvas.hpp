@@ -89,7 +89,7 @@ public:
     float const     k_canvasPadding = 20.f;
     float const     k_indentSize = 10.f;
 
-    FColor const    k_warnColor{ .B = 0x00, .G = 0x64, .R = 0xFF, .A = 0xFF };
+    FColor const    k_warnColor{ .B = 0x00, .G = 0x80, .R = 0xFF, .A = 0xFF };
     FColor const    k_infoColor{ .B = 0xFF, .G = 0x40, .R = 0x40, .A = 0xFF };
     FColor const    k_textColor{ .B = 0xFF, .G = 0xFF, .R = 0xFF, .A = 0xFF };
 
