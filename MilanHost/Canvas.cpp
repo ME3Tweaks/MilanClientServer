@@ -18,14 +18,14 @@ void CanvasDrawer::Reset()
     SetColor(FColor{ 0xFF, 0xFF, 0xFF, 0xFF });
 }
 
-void CanvasDrawer::DrawText(std::wstring_view const Text, bool const bNewLine, ETextAlign const Align, float const Scale)
+void CanvasDrawer::DrawText(std::wstring_view Text, bool const bNewLine, ETextAlign const Align, float const Scale)
 {
     //MILAN_CHECKW(!Text.empty(), L"");
     MILAN_CHECKW(IsValidAlign(Align), L"");
     MILAN_CHECKW(Scale > 0.f, L"");
-
     MILAN_CHECKW(Canvas->Font != nullptr, L"");
 
+    int SizeX = 0, SizeY = 0;
     FFontRenderInfo const FontRenderInfo{};
 
     if (Align == ETA_Right)
@@ -35,8 +35,15 @@ void CanvasDrawer::DrawText(std::wstring_view const Text, bool const bNewLine, E
         AdjustPos(-(float)DX, 0.f);
     }
 
-    int SizeX = 0, SizeY = 0;
-    (*UCanvas_WrappedPrint)(Canvas, TRUE, &SizeX, &SizeY, Canvas->Font, Scale, Scale, Align == ETA_Center, Text.data(), &FontRenderInfo);
+    if (Text.empty())
+    {
+        // Get size of bogus rendered text to skip an empty line.
+        AdjustPos(0.f, GetTextSize(L"---", Scale).Y);
+    }
+    else
+    {
+        (*UCanvas_WrappedPrint)(Canvas, TRUE, &SizeX, &SizeY, Canvas->Font, Scale, Scale, Align == ETA_Center, Text.data(), &FontRenderInfo);
+    }
 
     if (!bNewLine)
     {

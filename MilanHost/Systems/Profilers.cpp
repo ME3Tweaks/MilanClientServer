@@ -7,6 +7,7 @@
 #include "Canvas.hpp"
 #include "Hooks.hpp"
 #include "Intercept.hpp"
+#include "Misc.hpp"
 #include "Systems/Console.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/Profilers.hpp"
@@ -18,6 +19,16 @@ wchar_t const* NetModeString(unsigned char const Mode)
     if (Mode == NM_Client)              return L"Client";
     if (Mode == NM_ListenServer)        return L"ListenServer";
     if (Mode == NM_DedicatedServer)     return L"DedicatedServer";
+
+    return L"???";
+}
+
+wchar_t const* NetRoleString(unsigned char const Role)
+{
+    if (Role == ROLE_None)              return L"ROLE_None";
+    if (Role == ROLE_SimulatedProxy)    return L"ROLE_SimulatedProxy";
+    if (Role == ROLE_AutonomousProxy)   return L"ROLE_AutonomousProxy";
+    if (Role == ROLE_Authority)         return L"ROLE_Authority";
 
     return L"???";
 }
@@ -35,6 +46,14 @@ namespace Milan::Profilers
             .Subtitle = L"",
             .Description = L"",
             .Function = nullptr
+        },
+
+        /* MPM_PlayerControllers */
+        CCanvasProfiler
+        {
+            .Subtitle = L"Player controllers",
+            .Description = L"Displays active APlayerController instances",
+            .Function = ProfilePlayerControllers,
         },
 
         /* MPM_Network */
@@ -99,6 +118,39 @@ namespace Milan::Profilers
                 if (Profiler.Function) (*Profiler.Function)(g_canvas, Target);
             }
         }
+    }
+
+    void ProfilePlayerControllers(MilanCanvasDrawer& Drawer, UObject* Target)
+    {
+        MILAN_UNUSED_2(Drawer, Target);
+
+        Drawer.SetBackground(FColor{ .B = 0, .G = 0, .R = 0, .A = 25 });
+
+        for (TypedObjectIterator<APlayerController, true, false> Iter; Iter; ++Iter)
+        {
+            APlayerController* const Controller = *Iter;
+            Drawer.DrawString(Controller->StaticFullName());
+            Drawer.PushIndent();
+            Drawer.DrawProperty(L"Pawn", Controller->Pawn ? Controller->Pawn->StaticFullName() : L"n/a");
+            Drawer.DrawProperty(L"PRI", Controller->PlayerReplicationInfo ? Controller->PlayerReplicationInfo->StaticFullName() : L"n/a");
+            if (Controller->PlayerReplicationInfo != nullptr)
+            {
+                Drawer.DrawProperty(L"PRI.Owner", Controller->PlayerReplicationInfo->Owner ? Controller->PlayerReplicationInfo->Owner->StaticFullName() : L"n/a");
+                Drawer.DrawProperty(L"PRI.UniqueId", FString::Printf(L"%u:%u", Controller->PlayerReplicationInfo->UniqueId.Uid.A, Controller->PlayerReplicationInfo->UniqueId.Uid.B));
+                Drawer.DrawProperty(L"PRI.SavedAddress", Controller->PlayerReplicationInfo->SavedNetworkAddress);
+            }
+            Drawer.DrawProperty(L"Actor", FString::Printf(L"bDeleteMe=%d, bStatic=%d, bGameRelevant=%d",
+                !!Controller->bDeleteMe, !!Controller->bStatic, !!Controller->bGameRelevant));
+            Drawer.DrawProperty(L"Actor.Owner", Controller->Owner ? Controller->Owner->StaticFullName() : L"n/a");
+            Drawer.DrawProperty(L"Actor.WI", Controller->WorldInfo ? Controller->WorldInfo->StaticFullName() : L"n/a");
+            Drawer.DrawProperty(L"Net", FString::Printf(L"Role=%s, RemoteRole=%s",
+                NetRoleString(Controller->Role), NetRoleString(Controller->RemoteRole)));
+            Drawer.DrawProperty(L"Net", FString::Printf(L"NetTag=%d, NetUpdateTime=%f, NetUpdateFrequency=%f, NetPriority=%f, LastNetUpdateTime=%f",
+                Controller->NetTag, Controller->NetUpdateTime, Controller->NetUpdateFrequency, Controller->NetPriority, Controller->LastNetUpdateTime));
+
+            Drawer.PopIndent();
+        }
+
     }
 
     void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* const Target)
@@ -231,9 +283,9 @@ namespace Milan::Profilers
 
     void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel_Proxy* const Channel, unsigned int const Index)
     {
-        static FColor s_flagsActorColor{ .B = 232, .G = 232, .R = 200, .A = 255 };
-        static FColor s_flagsBaseColor{ .B = 255, .G = 200, .R = 200, .A = 255 };
-        static FColor s_flagsDerivedColor{ .B = 200, .G = 255, .R = 200, .A = 255 };
+        static FColor s_flagsActorColor{ .B = 210, .G = 210, .R = 200, .A = 255 };
+        static FColor s_flagsBaseColor{ .B = 255, .G = 185, .R = 185, .A = 255 };
+        static FColor s_flagsDerivedColor{ .B = 185, .G = 255, .R = 185, .A = 255 };
 
         Drawer.DrawString(FString::Printf(L"Channel %d: %s", Index, Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a"));
         Drawer.PushIndent();
@@ -241,8 +293,8 @@ namespace Milan::Profilers
         if (AActor* Actor = Channel->Actor)
         {
             Drawer.PushColor(s_flagsActorColor);
-            Drawer.DrawProperty(L"Actor info", FString::Printf(L"Role=%d, RemoteRole=%d, bNetInitial=%d, bNetOwner=%d, bGameRelevant=%d, bNetTemporary=%d, bNetDirty=%d, SkipPropRepl=%d",
-                (int)Actor->Role, (int)Actor->RemoteRole, !!Actor->bNetInitial, !!Actor->bNetOwner, !!Actor->bGameRelevant, !!Actor->bNetTemporary, !!Actor->bNetDirty, !!Actor->bSkipActorPropertyReplication));
+            Drawer.DrawProperty(L"Actor info", FString::Printf(L"Role=%s, RemoteRole=%s, bNetInitial=%d, bNetOwner=%d, bGameRelevant=%d, bNetTemporary=%d, bNetDirty=%d, SkipPropRepl=%d",
+                NetRoleString(Actor->Role), NetRoleString(Actor->RemoteRole), !!Actor->bNetInitial, !!Actor->bNetOwner, !!Actor->bGameRelevant, !!Actor->bNetTemporary, !!Actor->bNetDirty, !!Actor->bSkipActorPropertyReplication));
             Drawer.PopColor();
         }
 
