@@ -239,7 +239,6 @@ void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delt
 // ========================================
 
 t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_orig = nullptr;
-
 void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
 {
     MILAN_CHECKW(Context != nullptr, L"");
@@ -261,4 +260,117 @@ void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
 
     MILAN_UNUSED(Channel);
     (*UActorChannel_ReplicateActor_orig)(Context);
+}
+
+t_UNetConnection_ClientSupportsLevel* UNetConnection_ClientSupportsLevel_orig = nullptr;
+int UNetConnection_ClientSupportsLevel_hook(UNetConnection* const Context, UObject* const Object)
+{
+    int const Return = (*UNetConnection_ClientSupportsLevel_orig)(Context, Object);
+
+    //if (false)
+    {
+        //auto* const Connection = reinterpret_cast<UNetConnection_Proxy*>(Context);
+        if (Return != 0)
+        {
+            MILAN_TRACEW(L"UNetConnection::ClientSupportsLevel: %s (%s) => TRUE",
+                Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
+        }
+        else
+        {
+            MILAN_WARNW(L"UNetConnection::ClientSupportsLevel: %s (%s) => FALSE",
+                Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
+        }
+    }
+
+    return Return;
+}
+
+t_UPackageMap_SupportsObject* UPackageMap_SupportsObject_orig = nullptr;
+int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const Object)
+{
+    int const Return = (*UPackageMap_SupportsObject_orig)(Context, Object);
+
+    //if (false)
+    {
+        auto* const PackageMap = reinterpret_cast<UPackageMap_Proxy*>(Context);
+        MILAN_UNUSED(PackageMap);
+
+        if (Return != 0)
+        {
+            MILAN_TRACEW(L"UPackageMap::SupportsObject: %s (%s) => TRUE",
+                Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
+        }
+        else
+        {
+            MILAN_WARNW(L"UPackageMap::SupportsObject: %s (%s) => FALSE",
+                Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
+        }
+    }
+
+    return Return;
+}
+
+t_UWorld_ServerTickClients* UWorld_ServerTickClients_orig = nullptr;
+int UWorld_ServerTickClients_hook(UWorld* const Context, float const Delta)
+{
+    if (false)
+    {
+        auto* const World = reinterpret_cast<UWorld_Proxy*>(Context);
+        auto* const WorldInfo = (*GEngine)->GetCurrentWorldInfo();
+
+        MILAN_WARNW(L"UWorld::ServerTickClients: delta = %f", Delta);
+        MILAN_WARNW(L"--------------------------------------");
+
+        int LevelIndex = -1;
+        for (auto* const LevelIter : World->Levels)
+        {
+            LevelIndex++;
+
+            auto* const Level = reinterpret_cast<ULevel_Proxy*>(LevelIter);
+            if (Level == nullptr) continue;
+
+            MILAN_DEBUGW(L" Level(%d): %s", LevelIndex, *Level->StaticFullName());
+            MILAN_DEBUGW(L" Level(%d): actor count = %d, first net index = %d", LevelIndex, Level->Actors.Count(), Level->FirstNetRelevantActor);
+
+            for (int ActorIndex = Level->FirstNetRelevantActor; ActorIndex < (int)Level->Actors.Count(); ++ActorIndex)
+            {
+                auto* const Actor = Level->Actors(ActorIndex);
+                if (Actor == nullptr) continue;
+
+                float const TimeSeconds = WorldInfo ? WorldInfo->TimeSeconds : Actor->NetUpdateTime;
+                if ((Actor->RemoteRole != ROLE_None) && (Actor->bPendingNetUpdate || Actor->bForceNetUpdate || TimeSeconds > Actor->NetUpdateTime))
+                {
+                    // Plenty of actors here are still irrelevant...
+                    MILAN_TRACEW(L" Level(%d).Actor(%d): %s", LevelIndex, ActorIndex, *Actor->StaticFullName());
+
+                    //if (Actor->Class->StaticName().StartsWith(L"SFXPlayerControllerMP"))
+                    //    Actor->bAlwaysRelevant = TRUE;
+                }
+            }
+        }
+    }
+
+    return (*UWorld_ServerTickClients_orig)(Context, Delta);
+}
+
+t_SortReplicatedActors* SortReplicatedActors_orig = nullptr;
+void SortReplicatedActors_hook(CReplicatedActorRecord** const Actors, int const Count)
+{
+    (*SortReplicatedActors_orig)(Actors, Count);
+
+    if (false)
+    {
+        MILAN_WARNW(L"SortReplicatedActors");
+        MILAN_WARNW(L"----------------------");
+
+        for (int Index = 0; Index < Count; ++Index)
+        {
+            auto const* const Record = Actors[Index];
+            MILAN_TRACEW(L" %d. actor = %s, channel = %s, key = %d",
+                Index,
+                Record->Actor ? *Record->Actor->GetName() : L"???",
+                Record->Channel ? *Record->Channel->GetName() : L"???",
+                Record->SortKey);
+        }
+    }
 }

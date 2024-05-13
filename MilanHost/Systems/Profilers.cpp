@@ -176,6 +176,7 @@ namespace Milan::Profilers
 
         Drawer.PushIndent();
         Drawer.DrawProperty(L"URL", WorldInfo->GetLocalURL());
+        Drawer.DrawProperty(L"World", (*GWorld)->StaticFullName());
         Drawer.DrawProperty(L"GameInfo", WorldInfo->Game ? WorldInfo->Game->StaticName() : L"n/a");
         Drawer.DrawProperty(L"ReplicationInfo", WorldInfo->GRI ? WorldInfo->GRI->StaticName() : L"n/a");
         Drawer.DrawProperty(L"NetMode", FString::Printf(L"%d (%s)", WorldInfo->NetMode, NetModeString(WorldInfo->NetMode)));
@@ -205,6 +206,7 @@ namespace Milan::Profilers
                 Drawer.DrawString(FString::Printf(L"ChildConnections(%d): %s", i, *ChildConnIter->StaticName()));
 
                 Drawer.PushIndent();
+                Drawer.DrawProperty(L"Viewer", ChildConn->Viewer ? ChildConn->Viewer->StaticFullName() : L"n/a");
                 Drawer.DrawProperty(L"ClientWorldPackageName", ChildConn->ClientWorldPackageName.ToString());
                 Drawer.DrawString(L"Actor channels");
                 unsigned int ChannelIndex = 0;
@@ -253,6 +255,7 @@ namespace Milan::Profilers
             Drawer.PushIndent();
 
             auto* const ServerConn = reinterpret_cast<UNetConnection_Proxy*>(NetDriver->ServerConnection);
+            Drawer.DrawProperty(L"Viewer", ServerConn->Viewer ? ServerConn->Viewer->StaticFullName() : L"n/a");
 
             Drawer.DrawString(L"Actor channels");
             unsigned int ChannelIndex = 0;
@@ -293,29 +296,50 @@ namespace Milan::Profilers
         Drawer.DrawString(FString::Printf(L"Channel %d: %s", Index, Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a"));
         Drawer.PushIndent();
 
+        // > Replicated properties.
+        // ----------------------------------------
+
         //unsigned int PropertyIndex = 0;
         //for (auto const& [Offset, Property] : Channel->ReplicatedProperties)
         //{
         //    Drawer.DrawString(FString::Printf(L"%d. %s -> %d", PropertyIndex++, Property ? *Property->StaticName() : L"n/a", Offset));
         //}
 
+        // > Relevancy timer.
+        // ----------------------------------------
+
+        //auto* const NetDriver = (UNetDriver_Proxy*)(((UWorld_Proxy*)Channel->World)->NetDriver);
+        //Drawer.DrawProperty(L"relevancy timer", FString::Printf(L"Time=%f, RelevantTime=%f, RelevantTimeout=%f",
+        //    NetDriver->Time, Channel->RelevantTime, NetDriver->RelevantTimeout));
+
+        // > Actors and ownerships.
+        // ----------------------------------------
+
+        //Drawer.DrawProperty(L"Actor->Owner", (Channel->Actor && Channel->Actor->Owner) ? Channel->Actor->Owner->StaticFullName() : L"n/a");
+        //Drawer.DrawProperty(L"Connection->Actor", (Channel->Connection && Channel->Connection->Actor) ? Channel->Connection->Actor->StaticFullName() : L"n/a");
+
+        // > Channel actor flags.
+        // ----------------------------------------
+
         //if (AActor* Actor = Channel->Actor)
         //{
         //    Drawer.PushColor(s_flagsActorColor);
-        //    Drawer.DrawProperty(L"Actor info", FString::Printf(L"Role=%s, RemoteRole=%s, bNetInitial=%d, bNetOwner=%d, bGameRelevant=%d, bNetTemporary=%d, bNetDirty=%d, SkipPropRepl=%d",
+        //    Drawer.DrawProperty(L"Channel actor", FString::Printf(L"Role=%s, RemoteRole=%s, bNetInitial=%d, bNetOwner=%d, bGameRelevant=%d, bNetTemporary=%d, bNetDirty=%d, SkipPropRepl=%d",
         //        NetRoleString(Actor->Role), NetRoleString(Actor->RemoteRole), !!Actor->bNetInitial, !!Actor->bNetOwner, !!Actor->bGameRelevant, !!Actor->bNetTemporary, !!Actor->bNetDirty, !!Actor->bSkipActorPropertyReplication));
         //    Drawer.PopColor();
         //}
+
+        // > Channel flags.
+        // ----------------------------------------
 
         //Drawer.PushColor(s_flagsBaseColor);
         //Drawer.DrawProperty(L"Flags (base)", FString::Printf(L"bOpenAcked=%d, bClosing=%d, bOpenTemporary=%d, bBroken=%d, bTornOff=%d",
         //    !!Channel->bOpenAcked, !!Channel->bClosing, !!Channel->bOpenTemporary, !!Channel->bBroken, !!Channel->bTornOff));
         //Drawer.PopColor();
-
-        Drawer.PushColor(s_flagsDerivedColor);
-        Drawer.DrawProperty(L"Flags (derived)", FString::Printf(L"SpawnAcked=%d, ActorDirty=%d, MustStayDirty=%d, StillInitial=%d, IsReplicating=%d",
-            !!Channel->SpawnAcked, !!Channel->ActorDirty, !!Channel->bActorMustStayDirty, !!Channel->bActorStillInitial, !!Channel->bIsReplicatingActor));
-        Drawer.PopColor();
+        //Drawer.PushColor(s_flagsDerivedColor);
+        //Drawer.DrawProperty(L"Flags (derived)", FString::Printf(L"SpawnAcked=%d, ActorDirty=%d, MustStayDirty=%d, StillInitial=%d, IsReplicating=%d",
+        //    !!Channel->SpawnAcked, !!Channel->ActorDirty, !!Channel->bActorMustStayDirty, !!Channel->bActorStillInitial, !!Channel->bIsReplicatingActor));
+        //Drawer.PopColor();
 
         Drawer.PopIndent();
     }

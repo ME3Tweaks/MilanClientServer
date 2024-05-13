@@ -38,8 +38,21 @@
 #define GLOBAL_UWORLD_TICK_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 F3 0F */ "11 50 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D 68 A1")
 
+
 #define GLOBAL_UACTORCHANNEL_REPLICATEACTOR_PHOOK \
     ::LESDK::Address::FromPostHook(/* 40 55 53 56 57 */ "41 54 41 55 41 56 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC 08 02 00 00 48 C7 85 ?? ?? ?? ?? FE FF FF FF")
+
+#define GLOBAL_UNETCONNECTION_CLIENTSUPPORTSLEVEL_PATTERN \
+    ::LESDK::Address::FromPattern("48 89 5C 24 ?? 57 48 83 EC 20 48 8B DA 48 8B F9 48 85 D2 74 ?? 48 8B 15 ?? ?? ?? ?? 0F 1F 40 00")
+
+#define GLOBAL_UPACKAGEMAP_SUPPORTSOBJECT_PATTERN \
+    ::LESDK::Address::FromPattern("48 83 EC 28 48 8B 01 FF 90 ?? ?? ?? ?? 33 C9 83 F8 FF")
+
+#define GLOBAL_UWORLD_SERVERTICKCLIENTS_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 8B C4 48 89 */ "48 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 00 02 00 00")
+
+#define GLOBAL_SORT_REPLICATED_ACTORS_OFFSET \
+    ::LESDK::Address::FromOffset(0x58B0A0)
 
 
 // ! Miscellaneous functions / methods.
@@ -146,3 +159,34 @@ using t_UActorChannel_ReplicateActor = void(UActorChannel* Context);
 extern t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_orig;
 
 void UActorChannel_ReplicateActor_hook(UActorChannel* Context);
+
+using t_UNetConnection_ClientSupportsLevel = int(UNetConnection* Context, UObject* Object);
+extern t_UNetConnection_ClientSupportsLevel* UNetConnection_ClientSupportsLevel_orig;
+
+int UNetConnection_ClientSupportsLevel_hook(UNetConnection* Context, UObject* Object);
+
+using t_UPackageMap_SupportsObject = int(UPackageMap* Context, UObject* Object);
+extern t_UPackageMap_SupportsObject* UPackageMap_SupportsObject_orig;
+
+int UPackageMap_SupportsObject_hook(UPackageMap* Context, UObject* Object);
+
+using t_UWorld_ServerTickClients = int(UWorld* Context, float Delta);
+extern t_UWorld_ServerTickClients* UWorld_ServerTickClients_orig;
+
+int UWorld_ServerTickClients_hook(UWorld* Context, float Delta);
+
+#pragma pack(push, 4)
+struct CReplicatedActorRecord
+{
+    int                 SortKey;
+    AActor*             Actor;
+    UActorChannel*      Channel;
+};
+static_assert(offsetof(CReplicatedActorRecord, Channel) == 12);
+static_assert(sizeof(CReplicatedActorRecord) == 20);
+#pragma pack(pop)
+
+using t_SortReplicatedActors = void(CReplicatedActorRecord** Actors, int Count);
+extern t_SortReplicatedActors* SortReplicatedActors_orig;
+
+void SortReplicatedActors_hook(CReplicatedActorRecord** Actors, int Count);

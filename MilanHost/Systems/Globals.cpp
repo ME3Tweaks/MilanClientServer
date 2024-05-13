@@ -104,6 +104,22 @@ namespace Milan::Globals
         UActorChannel_ReplicateActor_orig = (t_UActorChannel_ReplicateActor*)Context.InstallHook("UActorChannel::ReplicateActor", UActorChannel_ReplicateActor_target, UActorChannel_ReplicateActor_hook);
         MILAN_DEBUGW(L"UActorChannel::ReplicateActor hooked: %p -> %p", (void*)UActorChannel_ReplicateActor_target, (void*)UActorChannel_ReplicateActor_orig);
 
+        t_UNetConnection_ClientSupportsLevel* UNetConnection_ClientSupportsLevel_target = Context.ResolveTyped<t_UNetConnection_ClientSupportsLevel>(GLOBAL_UNETCONNECTION_CLIENTSUPPORTSLEVEL_PATTERN);
+        UNetConnection_ClientSupportsLevel_orig = (t_UNetConnection_ClientSupportsLevel*)Context.InstallHook("UNetConnection::ClientSupportsLevel", UNetConnection_ClientSupportsLevel_target, UNetConnection_ClientSupportsLevel_hook);
+        MILAN_DEBUGW(L"UNetConnection::ClientSupportsLevel hooked: %p -> %p", (void*)UNetConnection_ClientSupportsLevel_target, (void*)UNetConnection_ClientSupportsLevel_orig);
+
+        t_UPackageMap_SupportsObject* UPackageMap_SupportsObject_target = Context.ResolveTyped<t_UPackageMap_SupportsObject>(GLOBAL_UPACKAGEMAP_SUPPORTSOBJECT_PATTERN);
+        UPackageMap_SupportsObject_orig = (t_UPackageMap_SupportsObject*)Context.InstallHook("UPackageMap::SupportsObject", UPackageMap_SupportsObject_target, UPackageMap_SupportsObject_hook);
+        MILAN_DEBUGW(L"UPackageMap::SupportsObject hooked: %p -> %p", (void*)UPackageMap_SupportsObject_target, (void*)UPackageMap_SupportsObject_orig);
+
+        t_UWorld_ServerTickClients* UWorld_ServerTickClients_target = Context.ResolveTyped<t_UWorld_ServerTickClients>(GLOBAL_UWORLD_SERVERTICKCLIENTS_PHOOK);
+        UWorld_ServerTickClients_orig = (t_UWorld_ServerTickClients*)Context.InstallHook("UWorld::ServerTickClients", UWorld_ServerTickClients_target, UWorld_ServerTickClients_hook);
+        MILAN_DEBUGW(L"UWorld::ServerTickClients hooked: %p -> %p", (void*)UWorld_ServerTickClients_target, (void*)UWorld_ServerTickClients_orig);
+
+        t_SortReplicatedActors* SortReplicatedActors_target = Context.ResolveTyped<t_SortReplicatedActors>(GLOBAL_SORT_REPLICATED_ACTORS_OFFSET);
+        SortReplicatedActors_orig = (t_SortReplicatedActors*)(Context.InstallHook("SortReplicatedActors", SortReplicatedActors_target, SortReplicatedActors_hook));
+        MILAN_DEBUGW(L"SortReplicatedActors hooked: %p -> %p", (void*)SortReplicatedActors_target, (void*)SortReplicatedActors_orig);
+
         // ----------------------------------------
         // Network debug end.
 

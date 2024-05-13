@@ -254,7 +254,8 @@ public:
     TArray<SFXName>                 ClientVisibleLevelNames;    //   checks out: 0x6028
     TArray<FGuid>                   PendingRemovePackageGuids;  //   checks out: 0x6038
     TArray<UChildConnection*>       Children;                   // 0x6048
-    unsigned char                   Unknown_6058[0x14];         // 0x6058
+    AActor*                         Viewer;                     // 0x6058
+    unsigned char                   Unknown_6060[0x0C];         // 0x6060
 };
 
 static_assert(offsetof(UNetConnection_Proxy, PackageMap) == 0xF0);
@@ -270,7 +271,7 @@ static_assert(offsetof(UNetConnection_Proxy, OpenChannels) == 0x5f90);
 static_assert(offsetof(UNetConnection_Proxy, Download) == 0x5ff8);
 static_assert(offsetof(UNetConnection_Proxy, DownloadInfo) == 0x6000);
 static_assert(offsetof(UNetConnection_Proxy, Children) == 0x6048);
-static_assert(offsetof(UNetConnection_Proxy, Unknown_6058) == 0x6058);
+static_assert(offsetof(UNetConnection_Proxy, Unknown_6060) == 0x6060);
 static_assert(sizeof(UNetConnection_Proxy) == sizeof(UNetConnection));
 
 
