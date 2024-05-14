@@ -39,13 +39,22 @@ namespace Milan::Output
         static constexpr int k_tagConsole = 200;
         static constexpr int k_tagFile = 201;
 
+        std::string LogFileName = "MilanHost.log";
+
+        int const OrdinalInstance = ::GetGameInstanceOrdinal();
+        if (OrdinalInstance > 0)
+        {
+            // This allows us to use different log files when running multiple local clients.
+            LogFileName = std::string{ "MilanHost-" } + std::to_string(OrdinalInstance) + ".log";
+        }
+
 #if defined(_DEBUG) || !defined(_FINAL_RELEASE)
         // In DEBUG and RELEASE builds keep both sinks, and set file to overwrite previous log.
         gp_mainLogger->RegisterOutput(k_tagConsole, new ConsoleLoggerOutput{});
-        gp_mainLogger->RegisterOutput(k_tagFile, new FileLoggerOutput{ "MilanHost.log", false });
+        gp_mainLogger->RegisterOutput(k_tagFile, new FileLoggerOutput{ LogFileName, false });
 #else
         // In FINAL_RELEASE builds only enable file sink, and set it to append.
-        gp_mainLogger->RegisterOutput(k_tagFile, new FileLoggerOutput{ "MilanHost.log", true });
+        gp_mainLogger->RegisterOutput(k_tagFile, new FileLoggerOutput{ LogFileName, true });
 #endif
 
         if (gp_activeLogger == nullptr)

@@ -9,6 +9,9 @@
 #include "Containers/vector.hpp"
 
 
+int GetGameInstanceOrdinal();
+
+
 class RelativeTimer final
 {
     long long Frequency{};

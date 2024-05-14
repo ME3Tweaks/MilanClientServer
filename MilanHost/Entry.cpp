@@ -49,6 +49,8 @@ SPI_IMPLEMENT_ATTACH
 
 
     MILAN_INFOW(L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
+    MILAN_INFOW(L"ordinal instance = %d", ::GetGameInstanceOrdinal());
+
     ::Milan::Output::FlushEverything();
 
     return true;
@@ -90,6 +92,14 @@ void SingleDetachImpl()
 void RegisterNonshipCommands()
 {
 #ifndef _FINAL_RELEASE
+
+    ::Milan::Console::RegisterCommand(L"dbg", L"crashme",
+        [](wchar_t const*)
+        {
+            MILAN_INFOW(L"CRASHING THIS PLANE");
+            ::RaiseException(1, 0, 0, nullptr);
+            return true;
+        });
 
     ::Milan::Console::RegisterCommand(L"dbg", L"dumpnatives",
         [](wchar_t const*)
