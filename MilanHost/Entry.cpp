@@ -1,3 +1,4 @@
+#include <atomic>
 #include <fstream>
 
 //#include <LESDK/Headers.hpp>
@@ -56,9 +57,21 @@ SPI_IMPLEMENT_ATTACH
 SPI_IMPLEMENT_DETACH
 {
     MILAN_UNUSED(InterfacePtr);
-    MILAN_INFOW(L"detach starting");
+    SingleDetachImpl();
+    return true;
+}
 
-    // Logging calls in system termination will not be flushed here.
+
+// ! Local functions.
+// ========================================
+
+void SingleDetachImpl()
+{
+    static std::atomic_bool s_detachCalled{ false };
+    if (s_detachCalled.exchange(true))
+        return;
+
+    MILAN_INFOW(L"detach starting");
     ::Milan::Output::FlushEverything();
 
 
@@ -72,13 +85,7 @@ SPI_IMPLEMENT_DETACH
     ::Milan::Globals::Terminate();
     ::Milan::Output::Terminate();
     ::Milan::Allocator::Terminate();
-
-    return true;
 }
-
-
-// ! Local functions.
-// ========================================
 
 void RegisterNonshipCommands()
 {

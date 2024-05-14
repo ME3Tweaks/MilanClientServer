@@ -12,7 +12,7 @@ namespace Milan::Allocator
 {
     void Initialize(::LESDK::Initializer& Context)
     {
-        // Cannot use logging here because that is dependend on GMalloc.
+        // Cannot use logging here because that is dependent on GMalloc.
 
         GMalloc = Context.ResolveTyped<FMallocLike*>(BUILTIN_GMALLOC_RIP);
         assert(GMalloc != nullptr && *GMalloc != nullptr);
@@ -22,7 +22,10 @@ namespace Milan::Allocator
         (*GMalloc)->Free(BogusReallocation);
     }
 
-    void Terminate() {}
+    void Terminate()
+    {
+         // No logging here either because output has already been terminated.
+    }
 }
 
 namespace Milan::Globals
@@ -50,8 +53,9 @@ namespace Milan::Globals
         SFXName::GInitMethod = Context.ResolveTyped<SFXName::tInitMethod>(BUILTIN_SFXNAMEINIT_PHOOK);
         MILAN_DEBUGW(L"SFXName::Init found: %p", (void*)SFXName::GInitMethod);
 
-        BioRequestExit = Context.ResolveTyped<t_BioRequestExit>(GLOBAL_BIOREQUESTEXIT_PHOOK);
-        MILAN_DEBUGW(L"BioRequestExit found: %p", (void*)BioRequestExit);
+        t_BioRequestExit* BioRequestExit_target = Context.ResolveTyped<t_BioRequestExit>(GLOBAL_BIOREQUESTEXIT_PHOOK);
+        BioRequestExit_orig = (t_BioRequestExit*)Context.InstallHook("BioRequestExit", BioRequestExit_target, BioRequestExit_hook);
+        MILAN_DEBUGW(L"BioRequestExit hooked: %p -> %p", (void*)BioRequestExit_target, (void*)BioRequestExit_orig);
 
         t_IDXGISwapChain_Present* IDXGISwapChain_Present_target = ::Milan::Imgui::FindSwapChainPresent();
         IDXGISwapChain_Present_orig = (t_IDXGISwapChain_Present*)Context.InstallHook("IDXGISwapChain::Present", IDXGISwapChain_Present_target, IDXGISwapChain_Present_hook);

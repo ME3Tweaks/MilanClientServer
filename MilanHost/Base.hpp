@@ -523,3 +523,10 @@ public:
     NonCopyable(NonCopyable const&) = delete;
     NonCopyable& operator=(NonCopyable const&) = delete;
 };
+
+
+/**
+ * Re-declared and implemented in Entry.hpp / Entry.cpp.
+ * Needs to be declared here first so that hooks can call it.
+ */
+extern void SingleDetachImpl();

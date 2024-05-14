@@ -69,8 +69,9 @@ extern t_IDXGISwapChain_Present* IDXGISwapChain_Present_orig;
 HRESULT __stdcall IDXGISwapChain_Present_hook(IDXGISwapChain* pChain, UINT SyncInterval, UINT Flags);
 
 using t_BioRequestExit = void(UBOOL bForce, INT ExitCode, INT Unused);
-extern t_BioRequestExit* BioRequestExit;
+extern t_BioRequestExit* BioRequestExit_orig;
 
+void BioRequestExit_hook(UBOOL bForce, INT ExitCode, INT Unused);
 
 // ! UCanvas methods.
 // ========================================

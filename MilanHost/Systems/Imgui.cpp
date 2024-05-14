@@ -81,6 +81,26 @@ namespace Milan::Imgui
 
     bool OnWndProc(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
     {
+        //if (uMsg == WM_QUIT || uMsg == WM_CLOSE || uMsg == WM_DESTROY)
+        //{
+        //    if (::Milan::Output::HasInitialized())
+        //        MILAN_WARNW(L"MESSAGE CAUGHT: %u", uMsg);
+        //    ::Sleep(1000);
+        //}
+
+        static bool sb_skipOwnCode = false;
+
+        if (sb_skipOwnCode)
+        {
+            return false;
+        }
+        else if (uMsg == WM_DESTROY)
+        {
+            sb_skipOwnCode = true;
+            ::SingleDetachImpl();
+            return false;
+        }
+
         ImGuiIO& IO = ImGui::GetIO();
         POINT MousePosition{};
 

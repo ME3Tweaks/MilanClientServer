@@ -47,7 +47,7 @@ namespace Milan::Imgui
     t_IDXGISwapChain_Present* FindSwapChainPresent();
 
     /**
-     * @brief       Checks if a WndProc message pass through to the game.
+     * @brief       Checks if a WndProc message should pass through to the game.
      * @return      If this function returns FALSE, a hook WndProc must prevent it from reaching the game's WndProc.
      */
     bool MessageImguiPassthrough(UINT uMsg, WPARAM, LPARAM);

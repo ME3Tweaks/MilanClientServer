@@ -1,3 +1,5 @@
+#include <array>
+
 #include "Systems/Console.hpp"
 #include "Systems/Imgui.hpp"
 #include "Systems/Output.hpp"
@@ -37,7 +39,34 @@ HRESULT IDXGISwapChain_Present_hook(IDXGISwapChain* const pChain, UINT const Syn
     return IDXGISwapChain_Present_orig(pChain, SyncInterval, Flags);
 }
 
-t_BioRequestExit* BioRequestExit = nullptr;
+t_BioRequestExit* BioRequestExit_orig = nullptr;
+void BioRequestExit_hook(UBOOL const bForce, INT const ExitCode, INT const Unused)
+{
+#ifndef _FINAL_RELEASE
+    if (::Milan::Output::HasInitialized())
+    {
+        if (bForce)
+        {
+            ::Sleep(1000);
+            MILAN_WARNW(L"BioRequestExit: bForce = TRUE, ExitCode = %d", ExitCode);
+        }
+        else
+        {
+            MILAN_DEBUGW(L"BioRequestExit: bForce = FALSE, ExitCode = %d", ExitCode);
+        }
+    }
+    else
+    {
+        thread_local std::array<wchar_t, 128> OutputBuffer{ '\0' };
+        ::swprintf(OutputBuffer.data(), OutputBuffer.size(),
+            L"BioRequestExit: bForce = %s, ExitCode = %d",
+            bForce ? L"TRUE" : L"FALSE", ExitCode);
+        ::OutputDebugStringW(OutputBuffer.data());
+    }
+#endif
+
+    (*BioRequestExit_orig)(bForce, ExitCode, Unused);
+}
 
 
 // ! UCanvas methods.

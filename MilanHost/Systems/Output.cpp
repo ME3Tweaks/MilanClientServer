@@ -1,8 +1,20 @@
 #include <LESDK/Init.hpp>
 #include <LESDK/Headers.hpp>
 
-#include "Systems/Output.hpp"
+#include "Hooks.hpp"
 #include "Logger.hpp"
+#include "Systems/Output.hpp"
+
+
+#ifndef _FINAL_RELEASE
+BOOL WINAPI MilanConsoleHandler(DWORD const dwCtrlType)
+{
+    if (dwCtrlType <= CTRL_CLOSE_EVENT)
+        ::SingleDetachImpl();
+
+    return false;
+}
+#endif
 
 
 namespace Milan::Output
@@ -19,6 +31,7 @@ namespace Milan::Output
 
 #ifndef _FINAL_RELEASE
         ::LESDK::InitializeConsole();
+        ::SetConsoleCtrlHandler(::MilanConsoleHandler, TRUE);
 #endif
 
         gp_mainLogger = new MilanLogger{};
