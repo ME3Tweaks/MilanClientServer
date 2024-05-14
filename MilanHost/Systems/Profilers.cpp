@@ -36,7 +36,7 @@ wchar_t const* NetRoleString(unsigned char const Role)
 namespace Milan::Profilers
 {
     MilanCanvasDrawer g_canvas{};
-    EMilanProfilerMode g_mode = MPM_Network;
+    EMilanProfilerMode g_mode = MPM_None;
 
     CCanvasProfiler g_profilers[MPM_Max] =
     {
@@ -85,6 +85,33 @@ namespace Milan::Profilers
                 return true;
             });
 
+        Console::RegisterCommand(L"dbg", L"profile",
+            [](wchar_t const* const Params)
+            {
+                //MILAN_INFOW(L"dbg.profile: params = %s (%d)",
+                //    Params ? Params : L"(null)",
+                //    Params ? (int)::wcslen(Params) : -1);
+
+                if (!Params || ::wcslen(Params) == 0)
+                {
+                    MILAN_WARNW(L"empty dbg.profile parameter");
+                    return true;
+                }
+
+                if (!::_wcsicmp(Params, L"none"))
+                    g_mode = MPM_None;
+                else if (!::_wcsicmp(Params, L"playercontrollers") || !::_wcsicmp(Params, L"pcs"))
+                    g_mode = MPM_PlayerControllers;
+                else if (!::_wcsicmp(Params, L"network") || !::_wcsicmp(Params, L"net"))
+                    g_mode = MPM_Network;
+                else if (!::_wcsicmp(Params, L"worldinfo") || !::_wcsicmp(Params, L"wi"))
+                    g_mode = MPM_WorldInfo;
+                else
+                    MILAN_WARNW(L"unknown dbg.profile parameter: %s", Params);
+
+                return true;
+            });
+
         MILAN_INFOW(L"profilers system initialized");
     }
 
@@ -114,7 +141,7 @@ namespace Milan::Profilers
                 MILAN_CHECKW(g_mode >= 0 && g_mode < MPM_Max, L"");
                 auto const& Profiler = g_profilers[g_mode];
 
-                g_canvas.DrawHeader(Profiler.Subtitle, Profiler.Description, Target, g_canvas.k_warnColor);
+                g_canvas.DrawHeader(Profiler.Subtitle, Profiler.Description, Target, MilanCanvasDrawer::k_warnColor);
                 if (Profiler.Function) (*Profiler.Function)(g_canvas, Target);
             }
         }
@@ -257,6 +284,9 @@ namespace Milan::Profilers
             auto* const ServerConn = reinterpret_cast<UNetConnection_Proxy*>(NetDriver->ServerConnection);
             Drawer.DrawProperty(L"Viewer", ServerConn->Viewer ? ServerConn->Viewer->StaticFullName() : L"n/a");
 
+            Drawer.DrawString(L"ServerConnection:");
+            Drawer.PushIndent();
+
             Drawer.DrawString(L"Actor channels");
             unsigned int ChannelIndex = 0;
             for (auto const& [Actor, Channel] : ServerConn->ActorChannels)
@@ -275,6 +305,7 @@ namespace Milan::Profilers
                 }
             }
 
+            Drawer.PopIndent();
             Drawer.PopIndent();
         }
     }

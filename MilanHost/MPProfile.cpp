@@ -120,6 +120,13 @@ MPProfile::MPProfile(USFXEngine* const Engine)
     MILAN_CHECKW(AccomplishmentManager != nullptr, L"");
 
     ProfilePath = GetProfilePathStatic();
+
+    static bool bLoggedProfilePath = false;
+    if (!bLoggedProfilePath)
+    {
+        bLoggedProfilePath = true;
+        MILAN_DEBUGW(L"MPProfile resolved path = %s", *ProfilePath);
+    }
 }
 
 void MPProfile::Deserialize(IInputStream& Stream)

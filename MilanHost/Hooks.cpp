@@ -9,10 +9,10 @@
 #include "Logger.hpp"
 
 
-static bool gb_logCallFunction = false;
-static bool gb_logProcessDelegate = false;
-static bool gb_logProcessEvent = false;
-static bool gb_logProcessInternal = false;
+bool gb_logCallFunction = false;
+bool gb_logProcessDelegate = false;
+bool gb_logProcessEvent = false;
+bool gb_logProcessInternal = false;
 
 
 tWndProc* WndProc_orig = nullptr;
@@ -238,27 +238,38 @@ void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delt
 // ! <Methods relevant to network debug.>
 // ========================================
 
+#ifndef _FINAL_RELEASE
+
+bool gb_logReplicateActor = false;
+
 t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_orig = nullptr;
 void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
 {
     MILAN_CHECKW(Context != nullptr, L"");
+
     auto* const Channel = reinterpret_cast<UActorChannel_Proxy*>(Context);
-
-    //MILAN_TRACEW(L"UActorChannel::ReplicateActor:");
-    //MILAN_TRACEW(L"  Channel: %s", *Channel->StaticFullName());
-    //MILAN_TRACEW(L"    Props: OpenedLocally=%d, OpenPacketId=%d, NumInRec=%d, NumOutRec=%d, NegotiatedVer=%d",
-    //    Channel->OpenedLocally, Channel->OpenPacketId, Channel->NumInRec, Channel->NumOutRec, Channel->NegotiatedVer);
-    //MILAN_TRACEW(L"  Actor: %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
-    //if (Channel->Actor)
-    //{
-    //    auto* const Actor = Channel->Actor;
-    //    MILAN_TRACEW(L"    Props: bNetOwner=%d, bNetInitial=%d Top=%s",
-    //        !!Actor->bNetOwner, !!Actor->bNetInitial, *Actor->StaticName());
-    //}
-
-    //MILAN_TRACEW(L"UActorChannel::ReplicateActor: %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
-
     MILAN_UNUSED(Channel);
+
+    if (false)
+    {
+        MILAN_TRACEW(L"UActorChannel::ReplicateActor:");
+        MILAN_TRACEW(L"  Channel: %s", *Channel->StaticFullName());
+        MILAN_TRACEW(L"    Props: OpenedLocally=%d, OpenPacketId=%d, NumInRec=%d, NumOutRec=%d, NegotiatedVer=%d",
+            Channel->OpenedLocally, Channel->OpenPacketId, Channel->NumInRec, Channel->NumOutRec, Channel->NegotiatedVer);
+        MILAN_TRACEW(L"  Actor: %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
+        if (Channel->Actor != nullptr)
+        {
+            auto* const Actor = Channel->Actor;
+            MILAN_TRACEW(L"    Props: bNetOwner=%d, bNetInitial=%d Top=%s",
+                !!Actor->bNetOwner, !!Actor->bNetInitial, *Actor->StaticName());
+        }
+    }
+    else if (gb_logReplicateActor)
+    {
+        MILAN_DEBUGW(L"UActorChannel::ReplicateActor: %s",
+            Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
+    }
+
     (*UActorChannel_ReplicateActor_orig)(Context);
 }
 
@@ -267,13 +278,15 @@ int UNetConnection_ClientSupportsLevel_hook(UNetConnection* const Context, UObje
 {
     int const Return = (*UNetConnection_ClientSupportsLevel_orig)(Context, Object);
 
-    //if (false)
     {
-        //auto* const Connection = reinterpret_cast<UNetConnection_Proxy*>(Context);
+        // This is left so that we can see PackageMap fields in an attached debugger.
+        auto* const Connection = reinterpret_cast<UNetConnection_Proxy*>(Context);
+        MILAN_UNUSED(Connection);
+
         if (Return != 0)
         {
-            MILAN_TRACEW(L"UNetConnection::ClientSupportsLevel: %s (%s) => TRUE",
-                Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
+            //MILAN_TRACEW(L"UNetConnection::ClientSupportsLevel: %s (%s) => TRUE",
+            //    Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
         }
         else
         {
@@ -290,15 +303,15 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
 {
     int const Return = (*UPackageMap_SupportsObject_orig)(Context, Object);
 
-    //if (false)
     {
+        // This is left so that we can see PackageMap fields in an attached debugger.
         auto* const PackageMap = reinterpret_cast<UPackageMap_Proxy*>(Context);
         MILAN_UNUSED(PackageMap);
 
         if (Return != 0)
         {
-            MILAN_TRACEW(L"UPackageMap::SupportsObject: %s (%s) => TRUE",
-                Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
+            //MILAN_TRACEW(L"UPackageMap::SupportsObject: %s (%s) => TRUE",
+            //    Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
         }
         else
         {
@@ -321,12 +334,9 @@ int UWorld_ServerTickClients_hook(UWorld* const Context, float const Delta)
         MILAN_WARNW(L"UWorld::ServerTickClients: delta = %f", Delta);
         MILAN_WARNW(L"--------------------------------------");
 
-        int LevelIndex = -1;
-        for (auto* const LevelIter : World->Levels)
+        for (int LevelIndex = 0; LevelIndex < (int)World->Levels.Count(); ++LevelIndex)
         {
-            LevelIndex++;
-
-            auto* const Level = reinterpret_cast<ULevel_Proxy*>(LevelIter);
+            auto* const Level = reinterpret_cast<ULevel_Proxy*>(World->Levels(LevelIndex));
             if (Level == nullptr) continue;
 
             MILAN_DEBUGW(L" Level(%d): %s", LevelIndex, *Level->StaticFullName());
@@ -342,9 +352,6 @@ int UWorld_ServerTickClients_hook(UWorld* const Context, float const Delta)
                 {
                     // Plenty of actors here are still irrelevant...
                     MILAN_TRACEW(L" Level(%d).Actor(%d): %s", LevelIndex, ActorIndex, *Actor->StaticFullName());
-
-                    //if (Actor->Class->StaticName().StartsWith(L"SFXPlayerControllerMP"))
-                    //    Actor->bAlwaysRelevant = TRUE;
                 }
             }
         }
@@ -374,3 +381,5 @@ void SortReplicatedActors_hook(CReplicatedActorRecord** const Actors, int const 
         }
     }
 }
+
+#endif

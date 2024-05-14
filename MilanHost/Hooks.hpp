@@ -119,6 +119,11 @@ UBOOL UGameEngine_Exec_hook(UGameEngine* Context, WCHAR const* Command, void* Ar
 // ! UObject methods.
 // ========================================
 
+extern bool gb_logCallFunction;
+extern bool gb_logProcessDelegate;
+extern bool gb_logProcessEvent;
+extern bool gb_logProcessInternal;
+
 using t_UObject_CallFunction = tCallFunction;
 extern t_UObject_CallFunction* UObject_CallFunction_orig;
 
@@ -155,6 +160,10 @@ void UWorld_Tick_hook(UWorld* Context, int Unknown, float Delta);
 // ! <Methods relevant to network debug.>
 // ========================================
 
+#ifndef _FINAL_RELEASE
+
+extern bool gb_logReplicateActor;
+
 using t_UActorChannel_ReplicateActor = void(UActorChannel* Context);
 extern t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_orig;
 
@@ -190,3 +199,5 @@ using t_SortReplicatedActors = void(CReplicatedActorRecord** Actors, int Count);
 extern t_SortReplicatedActors* SortReplicatedActors_orig;
 
 void SortReplicatedActors_hook(CReplicatedActorRecord** Actors, int Count);
+
+#endif // _FINAL_RELEASE

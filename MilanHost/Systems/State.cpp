@@ -4,10 +4,12 @@
 #include <milan_ecsm_ffi.h>
 
 #include "Base.hpp"
+#include "Hooks.hpp"
 #include "Intercept.hpp"
 #include "Misc.hpp"
 #include "MPProfile.hpp"
 #include "Streams.hpp"
+#include "Systems/Console.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/State.hpp"
 
@@ -46,6 +48,18 @@ namespace Milan::State
         ::ecsm::init_logger(::ecsm_log);
         ::ecsm::init_state();
 
+#ifndef _FINAL_RELEASE
+
+        Console::RegisterCommand(L"net", L"logactorrepl",
+            [](wchar_t const*)
+            {
+                gb_logReplicateActor = !gb_logReplicateActor;
+                MILAN_INFOW(L"actor replication log %s", gb_logReplicateActor ? L"ENABLED" : L"DISABLED");
+                return true;
+            });
+
+#endif
+
         MILAN_INFOW(L"state system initialized");
     }
 
@@ -67,8 +81,6 @@ namespace Milan::State
             MILAN_TRACEW(L"intercepted SFXGame.SFXSaveManagerMP.SaveRecordsImpl:");
 
             MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
-            MILAN_TRACEW(L"profile path: %s", *Profile.GetProfilePath());
-
             ::RelativeTimer ProfileTimer{};
 
             MemoryOutputStream ProfileStream{ 204800 };  // reserve 200kb
@@ -93,7 +105,6 @@ namespace Milan::State
             MILAN_TRACEW(L"intercepted SFXGame.SFXSaveManagerMP.Initialize:");
 
             MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
-            MILAN_TRACEW(L"profile path: %s", *Profile.GetProfilePath());
 
             ::game::vector<BYTE> ProfileBuffer{};
             ::ReadFileFull(static_cast<std::wstring_view>(Profile.GetProfilePath()), ProfileBuffer);

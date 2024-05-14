@@ -86,12 +86,14 @@ class MilanCanvasDrawer final : public CanvasDrawer
 
 public:
 
-    float const     k_canvasPadding = 20.f;
-    float const     k_indentSize = 10.f;
+    static constexpr float      k_canvasPadding = 20.f;
+    static constexpr float      k_indentSize = 10.f;
 
-    FColor const    k_warnColor{ .B = 0x00, .G = 0x80, .R = 0xFF, .A = 0xFF };
-    FColor const    k_infoColor{ .B = 0xFF, .G = 0x40, .R = 0x40, .A = 0xFF };
-    FColor const    k_textColor{ .B = 0xFF, .G = 0xFF, .R = 0xFF, .A = 0xFF };
+    // Remember that these colors are BGRA!!!
+
+    static constexpr FColor     k_warnColor{ 0x00, 0x80, 0xFF, 0xFF };
+    static constexpr FColor     k_infoColor{ 0xFF, 0x40, 0x40, 0xFF };
+    static constexpr FColor     k_textColor{ 0xFF, 0xFF, 0xFF, 0xFF };
 
 public:
 

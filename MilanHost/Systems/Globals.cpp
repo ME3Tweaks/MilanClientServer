@@ -31,6 +31,9 @@ namespace Milan::Globals
     {
         MILAN_INFOW(L"base address = %p", (void*)::LESDK::GetMainModuleBase());
 
+        // Some of the addresses initialized here might be unused completely or in non-debug flows.
+        // TODO: Before public release, go through all of globals here and comment everything unneeded.
+
         GEngine = Context.ResolveTyped<UEngine*>(BUILTIN_GENGINE_RIP);
         MILAN_DEBUGW(L"GEngine found: %p (%p)", (void*)GEngine, (void*)*GEngine);
         GNatives = Context.ResolveTyped<tNative*>(BUILTIN_GNATIVES_RIP);
@@ -97,8 +100,10 @@ namespace Milan::Globals
         UWorld_Tick_orig = (t_UWorld_Tick*)Context.InstallHook("UWorld::Tick", UWorld_Tick_target, UWorld_Tick_hook);
         MILAN_DEBUGW(L"UWorld::Tick hooked: %p -> %p", (void*)UWorld_Tick_target, (void*)UWorld_Tick_orig);
 
-        // Network debug begin.
+        // Network debug hooks.
         // ----------------------------------------
+
+#ifndef _FINAL_RELEASE
 
         t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_target = Context.ResolveTyped<t_UActorChannel_ReplicateActor>(GLOBAL_UACTORCHANNEL_REPLICATEACTOR_PHOOK);
         UActorChannel_ReplicateActor_orig = (t_UActorChannel_ReplicateActor*)Context.InstallHook("UActorChannel::ReplicateActor", UActorChannel_ReplicateActor_target, UActorChannel_ReplicateActor_hook);
@@ -119,6 +124,8 @@ namespace Milan::Globals
         t_SortReplicatedActors* SortReplicatedActors_target = Context.ResolveTyped<t_SortReplicatedActors>(GLOBAL_SORT_REPLICATED_ACTORS_OFFSET);
         SortReplicatedActors_orig = (t_SortReplicatedActors*)(Context.InstallHook("SortReplicatedActors", SortReplicatedActors_target, SortReplicatedActors_hook));
         MILAN_DEBUGW(L"SortReplicatedActors hooked: %p -> %p", (void*)SortReplicatedActors_target, (void*)SortReplicatedActors_orig);
+
+#endif
 
         // ----------------------------------------
         // Network debug end.
