@@ -344,8 +344,41 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
         }
         else
         {
-            MILAN_WARNW(L"UPackageMap::SupportsObject: %s (%s) => FALSE",
-                Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
+            auto const ObjectOutermost = [](UObject* const Object) -> UPackage*
+                {
+                    UObject* Outermost = Object;
+                    for (; Outermost != nullptr && Outermost->Outer != nullptr; Outermost = Outermost->Outer);
+                    return Outermost->Cast<UPackage>();
+                };
+
+            UPackage* const OutermostPackage = ObjectOutermost(Object);
+            if (OutermostPackage == nullptr)
+            {
+                MILAN_WARNW(L"UPackageMap::SupportsObject: %s => FALSE (outermost is NULL)",
+                    Object ? *Object->GetFullName() : L"???");
+                return Return;
+            }
+
+            int const* const ListIndex = PackageMap->PackageMapList.Find(std::move(OutermostPackage->Name));
+            if (ListIndex == nullptr)
+            {
+                MILAN_WARNW(L"UPackageMap::SupportsObject: %s => FALSE (package=%s not found)",
+                    Object ? *Object->GetFullName() : L"???", *OutermostPackage->Name.ToString());
+                return Return;
+            }
+
+            FPackageInfo const& PackageInfo = PackageMap->List((UINT)*ListIndex);
+            if (Object->NetIndex >= PackageInfo.ObjectCount)
+            {
+                MILAN_WARNW(L"UPackageMap::SupportsObject: %s => FALSE (NetIndex=%d >= PackageInfo.ObjectCount=%d)",
+                    Object ? *Object->GetFullName() : L"???", Object->NetIndex, PackageInfo.ObjectCount);
+                MILAN_WARNW(L"  PackageInfo.PackageName = %s, PackageInfo.ObjectBase = %d",
+                    *PackageInfo.PackageName.ToString(), PackageInfo.ObjectBase);
+                return Return;
+            }
+
+            MILAN_WARNW(L"UPackageMap::SupportsObject: %s => FALSE (NetIndex=%d)",
+                Object ? *Object->GetFullName() : L"???", Object->NetIndex);
         }
     }
 
