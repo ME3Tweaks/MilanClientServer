@@ -49,7 +49,7 @@ set (PROJ_SOURCES
 set (PROJ_LINKS
   MilanCore  # ECSM FFI
   ImGui ImPlot LESDK-LE3  # External libraries.
-  d3d11.lib dxgi.lib dxguid.lib  # DirectX 11 SDK.
+  d3d11.lib dxgi.lib dxguid.lib  # DirectX 11 SDK for ImGui.
 )
 
 add_library (${PROJ_TARGET} SHARED ${PROJ_SOURCES})
@@ -62,3 +62,27 @@ target_compile_options (${PROJ_TARGET} PUBLIC ${MILAN_COMPILE_OPTIONS})
 target_include_directories (${PROJ_TARGET} PUBLIC ${PROJ_FOLDER})
 target_link_options (${PROJ_TARGET} PUBLIC ${MILAN_LINK_OPTIONS})
 target_link_libraries (${PROJ_TARGET} PUBLIC ${PROJ_LINKS})
+
+
+# If there's an appropriate environment variable set auto-copy
+# the built .asi to game directory and update default debug options.
+
+if (DEFINED ENV{MILAN_GAME_WIN64})
+  set (MILAN_GAME_WIN64 "$ENV{MILAN_GAME_WIN64}")
+
+  message ("-- User-provided Mass Effect 3 (LE) Win64 folder:")
+  message ("-- ${MILAN_GAME_WIN64}")
+
+  set (COPY_SOURCE $<TARGET_FILE:${PROJ_TARGET}>)
+  set (COPY_DEST ${MILAN_GAME_WIN64}/ASI/$<TARGET_FILE_NAME:${PROJ_TARGET}>)
+
+  add_custom_command (TARGET ${PROJ_TARGET} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${COPY_SOURCE} ${COPY_DEST}
+  )
+
+  set_target_properties (${PROJ_TARGET} PROPERTIES
+    VS_DEBUGGER_COMMAND "${MILAN_GAME_WIN64}/MassEffect3.exe"
+    VS_DEBUGGER_COMMAND_ARGUMENTS "-enableminidumps -nosplash -nomovie"
+    VS_DEBUGGER_WORKING_DIRECTORY "${MILAN_GAME_WIN64}"
+  )
+endif ()
