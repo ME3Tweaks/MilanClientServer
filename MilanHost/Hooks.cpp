@@ -359,7 +359,7 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
                 return Return;
             }
 
-            int const* const ListIndex = PackageMap->PackageMapList.Find(std::move(OutermostPackage->Name));
+            int const* const ListIndex = PackageMap->PackageMapList.Find(SFXName(OutermostPackage->Name));
             if (ListIndex == nullptr)
             {
                 MILAN_WARNW(L"UPackageMap::SupportsObject: %s => FALSE (package=%s not found)",

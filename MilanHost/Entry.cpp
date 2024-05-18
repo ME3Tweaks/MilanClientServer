@@ -1,5 +1,6 @@
 #include <atomic>
 #include <fstream>
+#include <unordered_set>
 
 //#include <LESDK/Headers.hpp>
 #include <LESDK/Init.hpp>
@@ -101,7 +102,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"dbg", L"dumpnatives",
+    ::Milan::Console::RegisterCommand(L"dump", L"natives",
         [](wchar_t const*)
         {
             MILAN_INFOW(L"dumping native ufuncs");
@@ -126,7 +127,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"dbg", L"dumpsfxuid",
+    ::Milan::Console::RegisterCommand(L"dump", L"sfxuid",
         [](wchar_t const*)
         {
             MILAN_INFOW(L"dumping SFXUniqueID map");
@@ -148,6 +149,48 @@ void RegisterNonshipCommands()
             }
 
             MILAN_INFOW(L"dumping SFXUniqueID map - done in %.3f ms.", Timer.GetMilliseconds());
+            return true;
+        });
+
+    ::Milan::Console::RegisterCommand(L"dump", L"replistcalc",
+        [](wchar_t const*)
+        {
+            MILAN_INFOW(L"dumping replist calculation addresses");
+            ::RelativeTimer Timer{};
+
+            std::wofstream Stream{ L"MilanHost-replist.csv" };
+            Stream << L"FullName;RVA;Address\n" << std::hex;
+
+            auto const Base = reinterpret_cast<std::ptrdiff_t>(::LESDK::GetMainModuleBase());
+
+            std::unordered_set<UClass*> DumpedClasses{};
+            DumpedClasses.reserve(512);
+
+            for (TypedObjectIterator<AActor, true, true> Iter{}; Iter; ++Iter)
+            {
+                AActor* const Actor = *Iter;
+                UClass* const Class = Actor->Class;
+
+                if (Class == nullptr)
+                {
+                    MILAN_WARNW(L"Actor %s (%p) has NULL class", *Actor->GetName(), (void*)Actor);
+                    continue;
+                }
+
+                bool const bNewClass = DumpedClasses.insert(Class).second;
+                if (!bNewClass)
+                {
+                    // We already dumped this class...
+                    continue;
+                }
+
+                auto const VirtTablePtr = *(void***)Actor;
+                auto const VirtMethodPtr = (std::ptrdiff_t)(VirtTablePtr[0x368 / 8]);
+
+                Stream << *Actor->StaticFullName() << L";0x" << VirtMethodPtr - Base << L";0x" << VirtMethodPtr << L"\n";
+            }
+
+            MILAN_INFOW(L"dumping replist calculation addresses - done in %.3f ms.", Timer.GetMilliseconds());
             return true;
         });
 
