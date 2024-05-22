@@ -21,10 +21,10 @@ tWndProc* WndProc_orig = nullptr;
 LRESULT CALLBACK WndProc_hook(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
 {
     if (::Milan::Imgui::OnWndProc(hWnd, uMsg, wParam, lParam))
-        return true;
+        return TRUE;
 
     //if (WndProc_orig == nullptr)
-    //    return true;
+    //    return TRUE;
 
     return (*WndProc_orig)(hWnd, uMsg, wParam, lParam);
 }
@@ -47,8 +47,8 @@ void BioRequestExit_hook(UBOOL const bForce, INT const ExitCode, INT const Unuse
     {
         if (bForce)
         {
-            ::Sleep(1000);
             MILAN_WARNW(L"BioRequestExit: bForce = TRUE, ExitCode = %d", ExitCode);
+            ::Sleep(1000);
         }
         else
         {
@@ -281,15 +281,15 @@ void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
 
     if (false)
     {
-        MILAN_TRACEW(L"UActorChannel::ReplicateActor:");
-        MILAN_TRACEW(L"  Channel: %s", *Channel->StaticFullName());
-        MILAN_TRACEW(L"    Props: OpenedLocally=%d, OpenPacketId=%d, NumInRec=%d, NumOutRec=%d, NegotiatedVer=%d",
+        MILAN_DEBUGW(L"UActorChannel::ReplicateActor:");
+        MILAN_DEBUGW(L"  Channel: %s", *Channel->StaticFullName());
+        MILAN_DEBUGW(L"    Props: OpenedLocally=%d, OpenPacketId=%d, NumInRec=%d, NumOutRec=%d, NegotiatedVer=%d",
             Channel->OpenedLocally, Channel->OpenPacketId, Channel->NumInRec, Channel->NumOutRec, Channel->NegotiatedVer);
-        MILAN_TRACEW(L"  Actor: %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
+        MILAN_DEBUGW(L"  Actor: %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
         if (Channel->Actor != nullptr)
         {
             auto* const Actor = Channel->Actor;
-            MILAN_TRACEW(L"    Props: bNetOwner=%d, bNetInitial=%d Top=%s",
+            MILAN_DEBUGW(L"    Props: bNetOwner=%d, bNetInitial=%d Top=%s",
                 !!Actor->bNetOwner, !!Actor->bNetInitial, *Actor->StaticName());
         }
     }
@@ -435,7 +435,7 @@ void SortReplicatedActors_hook(CReplicatedActorRecord** const Actors, int const 
         for (int Index = 0; Index < Count; ++Index)
         {
             auto const* const Record = Actors[Index];
-            MILAN_TRACEW(L" %d. actor = %s, channel = %s, key = %d",
+            MILAN_DEBUGW(L" %d. actor = %s, channel = %s, key = %d",
                 Index,
                 Record->Actor ? *Record->Actor->GetName() : L"???",
                 Record->Channel ? *Record->Channel->GetName() : L"???",
