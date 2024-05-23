@@ -48,7 +48,7 @@ set (PROJ_SOURCES
 
 set (PROJ_LINKS
   MilanCore  # ECSM FFI
-  ImGui ImPlot LESDK-LE3  # External libraries.
+  ImGui ImPlot LESDK-LE3 Zydis  # External libraries.
   d3d11.lib dxgi.lib dxguid.lib  # DirectX 11 SDK for ImGui.
 )
 

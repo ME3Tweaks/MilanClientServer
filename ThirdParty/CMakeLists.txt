@@ -87,3 +87,12 @@ set (CORROSION_BUILD_TESTS OFF)
 set (CORROSION_INSTALL_ONLY OFF)
 
 add_subdirectory ("corrosion")
+
+
+# ! Zydis (dis)assembler.
+# ========================================
+
+set (ZYDIS_BUILD_SHARED_LIB OFF)
+
+add_subdirectory ("zydis")
+set_target_properties (Zydis PROPERTIES FOLDER "ThirdParty")
