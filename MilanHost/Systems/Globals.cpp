@@ -141,7 +141,8 @@ namespace Milan::Globals
         // Temporary network profiler stuff.
         // ----------------------------------------
 
-        new ::MiddleIntercept{ L"test", (unsigned char*)::LESDK::GetMainModuleBase() + 0xB93193, MlnUGameEngineTick1};
+        ::CaveIndexer LocalCaveIndexer{ 20 };
+        new ::MiddleIntercept{ L"test", (unsigned char*)::LESDK::GetMainModuleBase() + 0xB93193, MlnUGameEngineTick1, &LocalCaveIndexer };
 
 
         // ----------------------------------------

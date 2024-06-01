@@ -37,6 +37,53 @@ public:
 };
 
 
+// ! Mid-function intercept logic.
+// ========================================
+
+/**
+ * @brief       Self-initializing registry for potential code cave locations.
+ * @warning     This might conflict with @c minhook built into @c LEBinkProxy.
+ */
+class CaveIndexer final : public NonCopyable
+{
+public:
+
+    struct CCaveInfo
+    {
+        std::intptr_t Address = 0;
+        std::ptrdiff_t Size = 0;
+    };
+
+    static constexpr std::ptrdiff_t k_minCaveSize = 8;
+
+    /** Initializes this type and scans main module for @c INT3 sequences. */
+    explicit CaveIndexer(std::ptrdiff_t MinSize);
+
+    /**
+     * @brief   Retrieves an available cave entry and marks it as occupied.
+     * @param   MinSize - Smallest number of bytes the cave must have.
+     * @return  Pointer to a cave info, or @c nullptr if there are no caves bigger than @c MinSize.
+     */
+    CCaveInfo const* GetForSize(std::ptrdiff_t MinSize);
+
+private:
+
+    static std::span<unsigned char> ViewMainModule();
+
+    struct CCaveOccupancy
+    {
+        bool Occupied = false;
+        CCaveOccupancy(bool const Value) : Occupied{ Value } { }
+        operator bool() const noexcept { return Occupied; }
+    };
+
+    game::vector<CCaveInfo>         Caves{};
+    game::vector<CCaveOccupancy>    Occupancy{};
+    std::ptrdiff_t                  IndexMinSize{ 0 };
+    std::ptrdiff_t                  IndexMaxSize{ 0 };
+};
+
+
 /**
  * @brief       Primitive for setting interception of a native function at an arbitrary place.
  * @remarks     This basically handles most of the dirty work for setting up code caves.
@@ -45,41 +92,24 @@ class MiddleIntercept : public NonCopyable
 {
     /** Brief description of this intercept. */
     FString Label{ L"" };
-    /** Address of an ASM function which should run within the code cave. */
-    void* StubFunction{ nullptr };
 
-    /** Address of the first overriden instruction. */
-    unsigned char* InterceptAddress{ nullptr };
-    /** Address of the first unmodified instruction after @ref InterceptAddress. */
-    unsigned char* JumpBackAddress{ nullptr };
+    /** Address of an ASM function which should be injected. */
+    void* Function{ nullptr };
 
-    /** Address of the allocated code cave. */
-    unsigned char* AllocatedAddress{ nullptr };
-    /** Address past the last encoded instruction in the code cave. */
-    mutable unsigned char* AllocatedCursor{ nullptr };
-    /** Number of bytes allocated at @ref AllocatedAddress. */
-    size_t AllocatedSize{ 0 };
+
 
 public:
 
-    explicit MiddleIntercept(wchar_t const* InLabel) noexcept;
-    MiddleIntercept(wchar_t const* InLabel, void* InAddress, void* InStubFunction);
+    MiddleIntercept(wchar_t const* InLabel, void* InAddress, void* InStubFunction, CaveIndexer* InCaveIndexer);
     ~MiddleIntercept() noexcept;
 
 private:
 
-    void InitInternal(void* InAddress, void* InStubFunction);
+    void InitInternal(void* InAddress, void* InStubFunction, CaveIndexer* InCaveIndexer);
+
     void UpdateProtect(void* InAddress, size_t Length, bool bEnable) const;
-    void EncodeInternal(ZydisEncoderRequest* Request, unsigned char*& Buffer) const;
-    void EncodeInternalAt(ZydisEncoderRequest* Request, unsigned char*& Buffer, unsigned char*& Address) const;
-
-    /** Encodes a call to stub function in the cave. */
-    void WriteCallStub();
-    /** Encodes a jump to the code cave in the intercepted address, and re-encodes original instructions in the cave. */
-    void WriteInstallInstrs();
-    /** Encodes a jump back to the original code flow in the cave. */
-    void WriteJumpBack();
-
+    void EncodeRequest(ZydisEncoderRequest* Request, unsigned char*& Buffer) const;
+    void EncodeRequestEx(ZydisEncoderRequest* Request, unsigned char*& Buffer, unsigned char*& Address) const;
     void DebugDisassemble(unsigned char* Pointer, size_t Length);
 
     static size_t GetPageSize() noexcept;
