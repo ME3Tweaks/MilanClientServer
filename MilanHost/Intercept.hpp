@@ -70,8 +70,8 @@ private:
 
     void InitInternal(void* InAddress, void* InStubFunction);
     void UpdateProtect(void* InAddress, size_t Length, bool bEnable) const;
-    void EncodeInternal(ZydisEncoderRequest* Request, unsigned char*& Buffer, const wchar_t* Desc) const;
-    void EncodeInternalAt(ZydisEncoderRequest* Request, unsigned char*& Buffer, unsigned char*& Address, const wchar_t* Desc) const;
+    void EncodeInternal(ZydisEncoderRequest* Request, unsigned char*& Buffer) const;
+    void EncodeInternalAt(ZydisEncoderRequest* Request, unsigned char*& Buffer, unsigned char*& Address) const;
 
     /** Encodes a call to stub function in the cave. */
     void WriteCallStub();
@@ -79,6 +79,8 @@ private:
     void WriteInstallInstrs();
     /** Encodes a jump back to the original code flow in the cave. */
     void WriteJumpBack();
+
+    void DebugDisassemble(unsigned char* Pointer, size_t Length);
 
     static size_t GetPageSize() noexcept;
 };

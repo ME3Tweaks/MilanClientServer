@@ -36,8 +36,8 @@ add_library (${IMGUI_TARGET} STATIC ${IMGUI_SOURCES})
 set_target_properties (${IMGUI_TARGET} PROPERTIES FOLDER "ThirdParty")
 source_group (TREE "${IMGUI_FOLDER}" FILES ${IMGUI_SOURCES})
 
-target_compile_definitions (${IMGUI_TARGET} PUBLIC ${MILAN_COMPILE_DEFINITIONS})
-target_compile_options (${IMGUI_TARGET} PUBLIC ${MILAN_COMPILE_OPTIONS})
+target_compile_definitions (${IMGUI_TARGET} PRIVATE ${MILAN_COMPILE_DEFINITIONS})
+target_compile_options (${IMGUI_TARGET} PRIVATE ${MILAN_COMPILE_OPTIONS})
 target_include_directories (${IMGUI_TARGET} PUBLIC ${IMGUI_FOLDER})
 target_link_options (${IMGUI_TARGET} PUBLIC ${MILAN_LINK_OPTIONS})
 
@@ -60,8 +60,8 @@ add_library (${IMPLOT_TARGET} STATIC ${IMPLOT_SOURCES})
 set_target_properties (${IMPLOT_TARGET} PROPERTIES FOLDER "ThirdParty")
 source_group (TREE "${IMPLOT_FOLDER}" FILES ${IMPLOT_SOURCES})
 
-target_compile_definitions (${IMPLOT_TARGET} PUBLIC ${MILAN_COMPILE_DEFINITIONS})
-target_compile_options (${IMPLOT_TARGET} PUBLIC ${MILAN_COMPILE_OPTIONS})
+target_compile_definitions (${IMPLOT_TARGET} PRIVATE ${MILAN_COMPILE_DEFINITIONS})
+target_compile_options (${IMPLOT_TARGET} PRIVATE ${MILAN_COMPILE_OPTIONS})
 target_include_directories (${IMPLOT_TARGET} PUBLIC ${IMPLOT_FOLDER})
 target_link_options (${IMPLOT_TARGET} PUBLIC ${MILAN_LINK_OPTIONS})
 target_link_libraries (${IMPLOT_TARGET} PUBLIC ${IMGUI_TARGET})
@@ -95,4 +95,6 @@ add_subdirectory ("corrosion")
 set (ZYDIS_BUILD_SHARED_LIB OFF)
 
 add_subdirectory ("zydis")
+
+set_target_properties (Zycore PROPERTIES FOLDER "ThirdParty")
 set_target_properties (Zydis PROPERTIES FOLDER "ThirdParty")

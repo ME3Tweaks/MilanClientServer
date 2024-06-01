@@ -42,6 +42,9 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Misc.hpp
   ${PROJ_FOLDER}/MPProfile.cpp
   ${PROJ_FOLDER}/MPProfile.hpp
+  ${PROJ_FOLDER}/NetProf.asm
+  ${PROJ_FOLDER}/NetProf.cpp
+  ${PROJ_FOLDER}/NetProf.hpp
   ${PROJ_FOLDER}/Streams.cpp
   ${PROJ_FOLDER}/Streams.hpp
 )
@@ -58,16 +61,28 @@ source_group (TREE "${PROJ_FOLDER}" FILES ${PROJ_SOURCES})
 set_target_properties (${PROJ_TARGET} PROPERTIES SUFFIX ".asi")
 
 target_compile_definitions (${PROJ_TARGET} PUBLIC ${MILAN_COMPILE_DEFINITIONS})
-target_compile_options (${PROJ_TARGET} PUBLIC ${MILAN_COMPILE_OPTIONS})
+target_compile_options (${PROJ_TARGET} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${MILAN_COMPILE_OPTIONS}>)
 target_include_directories (${PROJ_TARGET} PUBLIC ${PROJ_FOLDER})
 target_link_options (${PROJ_TARGET} PUBLIC ${MILAN_LINK_OPTIONS})
 target_link_libraries (${PROJ_TARGET} PUBLIC ${PROJ_LINKS})
+
+
+# Override unsupported options .asm files.
+
+# foreach (ASM_FILE IN LISTS PROJ_SOURCES)
+#   if (ASM_FILE MATCHES ".asm$")
+#     message (">> Fixing assembly compile flags for: ${ASM_FILE}")
+#     set_source_files_properties (${ASM_FILE} PROPERTIES COMPILE_FLAGS "")
+#   endif ()
+# endforeach ()
+
 
 
 # If there's an appropriate environment variable set auto-copy
 # the built .asi to game directory and update default debug options.
 
 if (DEFINED ENV{MILAN_GAME_WIN64})
+
   set (MILAN_GAME_WIN64 "$ENV{MILAN_GAME_WIN64}")
 
   message ("-- User-provided Mass Effect 3 (LE) Win64 folder:")
@@ -85,4 +100,7 @@ if (DEFINED ENV{MILAN_GAME_WIN64})
     VS_DEBUGGER_COMMAND_ARGUMENTS "-enableminidumps -nosplash -nomovie"
     VS_DEBUGGER_WORKING_DIRECTORY "${MILAN_GAME_WIN64}"
   )
+
+  set_property (DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJ_TARGET})
+
 endif ()

@@ -28,7 +28,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND WIN32)
   )
 
   set (MILAN_COMPILE_OPTIONS
-    "/W4" "/WX" "/Zc:__cplusplus" "/permissive"
+    "/W4" "/WX" "/permissive"
     "/wd4121"  # -warn: alignment of member was sensitive to padding
     "/wd4127"  # -warn: conditional expression is constant
   )

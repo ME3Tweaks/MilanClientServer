@@ -7,6 +7,9 @@
 #include "Systems/Output.hpp"
 #include "Systems/Imgui.hpp"
 
+#include "Intercept.hpp"
+#include "NetProf.hpp"
+
 
 namespace Milan::Allocator
 {
@@ -133,6 +136,17 @@ namespace Milan::Globals
 
         // ----------------------------------------
         // Network debug end.
+
+
+        // Temporary network profiler stuff.
+        // ----------------------------------------
+
+        new ::MiddleIntercept{ L"test", (unsigned char*)::LESDK::GetMainModuleBase() + 0xB93193, MlnUGameEngineTick1};
+
+
+        // ----------------------------------------
+        // Network profiler end.
+
 
         MILAN_INFOW(L"globals system initialized");
     }

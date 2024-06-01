@@ -6,7 +6,7 @@ insert_final_newline = true
 indent_style = space
 trim_trailing_whitespace = true
 
-[*.{cpp, hpp, h, rs}]
+[*.{asm, cpp, hpp, h, rs}]
 indent_size = 4
 
 [/ThirdParty/**]

@@ -96,6 +96,16 @@ void MiddleIntercept::InitInternal(void* const InAddress, void* const InStubFunc
     WriteJumpBack();
 
     UpdateProtect(AllocatedAddress, AllocatedSize, true);
+
+#ifdef _DEBUG
+
+    MILAN_DEBUGW(L"Intercepted location:");
+    DebugDisassemble(InterceptAddress, 32);
+
+    MILAN_DEBUGW(L"Allocated code:");
+    DebugDisassemble(AllocatedAddress, AllocatedCursor - AllocatedAddress);
+
+#endif
 }
 
 void MiddleIntercept::UpdateProtect(void* const InAddress, size_t const Length, bool const bEnable) const
@@ -114,22 +124,21 @@ void MiddleIntercept::UpdateProtect(void* const InAddress, size_t const Length, 
     }
 }
 
-void MiddleIntercept::EncodeInternal(ZydisEncoderRequest* const Request, unsigned char*& Buffer, const wchar_t* const Desc) const
+void MiddleIntercept::EncodeInternal(ZydisEncoderRequest* const Request, unsigned char*& Buffer) const
 {
-    EncodeInternalAt(Request, Buffer, Buffer, Desc);
+    EncodeInternalAt(Request, Buffer, Buffer);
 }
 
-void MiddleIntercept::EncodeInternalAt(ZydisEncoderRequest* Request, unsigned char*& Buffer, unsigned char*& Address, const wchar_t* Desc) const
+void MiddleIntercept::EncodeInternalAt(ZydisEncoderRequest* Request, unsigned char*& Buffer, unsigned char*& Address) const
 {
     MILAN_CHECKW(Request != nullptr, L"");
     MILAN_CHECKW(Buffer != nullptr, L"");
-    MILAN_CHECKW(Desc != nullptr, L"");
 
-    ZyanUSize Length = 0;
+    ZyanUSize Length = 64;
     ZyanU64 const AddressU64 = reinterpret_cast<ZyanU64>(Address);
 
     if (ZyanStatus const Status = ZydisEncoderEncodeInstructionAbsolute(Request, Buffer, &Length, AddressU64); ZYAN_FAILED(Status))
-        MILAN_FATALW(L"failed to encode instruction, label = %s / %s, status = %d", *Label, Desc, Status);
+        MILAN_FATALW(L"failed to encode instruction, label = %s, status = %u", *Label, Status & 0xFFFFF);
 
     std::memset(Request, 0, sizeof(ZydisEncoderRequest));
 
@@ -152,7 +161,7 @@ void MiddleIntercept::WriteCallStub()
     Request.operands[1].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
     Request.operands[1].imm.s = (std::ptrdiff_t)StubFunction;
 
-    EncodeInternal(&Request, AllocatedCursor, L"mov-1");
+    EncodeInternal(&Request, AllocatedCursor);
 
     Request.mnemonic = ZYDIS_MNEMONIC_CALL;
     Request.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
@@ -160,7 +169,7 @@ void MiddleIntercept::WriteCallStub()
     Request.operands[0].type = ZYDIS_OPERAND_TYPE_REGISTER;
     Request.operands[0].reg.value = ZYDIS_REGISTER_RAX;
 
-    EncodeInternal(&Request, AllocatedCursor, L"call-1");
+    EncodeInternal(&Request, AllocatedCursor);
 }
 
 void MiddleIntercept::WriteInstallInstrs()
@@ -170,7 +179,7 @@ void MiddleIntercept::WriteInstallInstrs()
     std::array<unsigned char, 128> InitJumpBuffer{ 0u };
 
     unsigned char* InitJumpCursor = InitJumpBuffer.data();
-    unsigned char* InterceptCursor = InterceptAddress;
+    unsigned char* InterceptCursor = AllocatedCursor;
 
     {
         ZydisEncoderRequest InitJumpRequest{};
@@ -184,7 +193,7 @@ void MiddleIntercept::WriteInstallInstrs()
         InitJumpRequest.operands[1].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
         InitJumpRequest.operands[1].imm.s = (std::ptrdiff_t)AllocatedAddress;
 
-        EncodeInternalAt(&InitJumpRequest, InitJumpCursor, InterceptCursor, L"mov-2");
+        EncodeInternalAt(&InitJumpRequest, InitJumpCursor, InterceptCursor);
 
         InitJumpRequest.mnemonic = ZYDIS_MNEMONIC_JMP;
         InitJumpRequest.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
@@ -192,7 +201,7 @@ void MiddleIntercept::WriteInstallInstrs()
         InitJumpRequest.operands[0].type = ZYDIS_OPERAND_TYPE_REGISTER;
         InitJumpRequest.operands[0].reg.value = ZYDIS_REGISTER_RAX;
 
-        EncodeInternalAt(&InitJumpRequest, InitJumpCursor, InterceptCursor, L"jmp-2");
+        EncodeInternalAt(&InitJumpRequest, InitJumpCursor, InterceptCursor);
     }
 
     size_t const InitJumpSize = InitJumpCursor - InitJumpBuffer.data();
@@ -213,15 +222,66 @@ void MiddleIntercept::WriteInstallInstrs()
         std::memset(Operands, 0, sizeof Operands);
 
         ZyanStatus const DecodeStatus = ZydisDecoderDecodeFull(&Decoder, OrigCodeCursor, 128, &Instruction, Operands);
-        MILAN_CHECKW(ZYAN_SUCCESS(DecodeStatus), L"failed to decode instruction at %p", (void*)OrigCodeCursor);
+        MILAN_CHECKW(ZYAN_SUCCESS(DecodeStatus), L"failed to decode instruction at %p, status = %u", (void*)OrigCodeCursor, DecodeStatus & 0xFFFFF);
 
         ZydisEncoderRequest Request{};
         std::memset(&Request, 0, sizeof Request);
 
         ZyanStatus const ConvStatus = ZydisEncoderDecodedInstructionToEncoderRequest(&Instruction, Operands, Instruction.operand_count, &Request);
-        MILAN_CHECKW(ZYAN_SUCCESS(ConvStatus), L"failed to convert decoded instruction at %p into encoder request", (void*)OrigCodeCursor);
+        MILAN_CHECKW(ZYAN_SUCCESS(ConvStatus), L"failed to convert decoded instruction at %p into encoder request, status = %u", (void*)OrigCodeCursor, ConvStatus & 0xFFFFF);
 
-        EncodeInternal(&Request, AllocatedCursor, L"any-3");
+        for (ZyanU8 OpIdx = 0u; OpIdx < Request.operand_count; ++OpIdx)
+        {
+            ZydisEncoderOperand& Operand = Request.operands[OpIdx];
+            if (Operand.type != ZYDIS_OPERAND_TYPE_MEMORY)
+                continue;
+
+            MILAN_TRACEW(L"Memory operand #%d, base register = %d, displacement = %lld",
+                OpIdx, (int)Operand.mem.base, Operand.mem.displacement);
+
+            if (Operand.mem.base == ZYDIS_REGISTER_RIP)
+            {
+                ZyanI64 const OriginalAbsolute = (ZyanI64)OrigCodeCursor + Instruction.length + Operand.mem.displacement;
+                //ZyanI64 const RelocatedDisplacement = OriginalAbsolute - ((ZyanI64)AllocatedCursor + Instruction.length);
+                //Operand.mem.displacement = RelocatedDisplacement;
+
+                ZydisEncoderRequest LoadRequest{};
+                std::memset(&LoadRequest, 0, sizeof LoadRequest);
+
+                if (Instruction.meta.category == ZYDIS_CATEGORY_SSE)
+                {
+                    LoadRequest.mnemonic = ZYDIS_MNEMONIC_MOVQ;
+                    LoadRequest.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+                    LoadRequest.operand_count = 2;
+                    LoadRequest.operands[0].type = ZYDIS_OPERAND_TYPE_REGISTER;
+                    LoadRequest.operands[0].reg.value = ZYDIS_REGISTER_XMM31;
+                    LoadRequest.operands[1].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
+                    LoadRequest.operands[1].imm.s = OriginalAbsolute;
+
+                    EncodeInternal(&LoadRequest, AllocatedCursor);
+
+                    Operand.type = ZYDIS_OPERAND_TYPE_REGISTER;
+                    Operand.reg.value = ZYDIS_REGISTER_XMM31;
+                }
+                else
+                {
+                    LoadRequest.mnemonic = ZYDIS_MNEMONIC_MOV;
+                    LoadRequest.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+                    LoadRequest.operand_count = 2;
+                    LoadRequest.operands[0].type = ZYDIS_OPERAND_TYPE_REGISTER;
+                    LoadRequest.operands[0].reg.value = ZYDIS_REGISTER_RAX;
+                    LoadRequest.operands[1].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
+                    LoadRequest.operands[1].imm.s = OriginalAbsolute;
+
+                    EncodeInternal(&LoadRequest, AllocatedCursor);
+
+                    Operand.type = ZYDIS_OPERAND_TYPE_REGISTER;
+                    Operand.reg.value = ZYDIS_REGISTER_RAX;
+                }
+            }
+        }
+
+        EncodeInternal(&Request, AllocatedCursor);
         OrigCodeCursor += Instruction.length;
     }
 
@@ -254,7 +314,7 @@ void MiddleIntercept::WriteJumpBack()
     Request.operands[1].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
     Request.operands[1].imm.s = (std::ptrdiff_t)JumpBackAddress;
 
-    EncodeInternal(&Request, AllocatedCursor, L"mov-3");
+    EncodeInternal(&Request, AllocatedCursor);
 
     Request.mnemonic = ZYDIS_MNEMONIC_JMP;
     Request.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
@@ -262,7 +322,27 @@ void MiddleIntercept::WriteJumpBack()
     Request.operands[0].type = ZYDIS_OPERAND_TYPE_REGISTER;
     Request.operands[0].reg.value = ZYDIS_REGISTER_RAX;
 
-    EncodeInternal(&Request, AllocatedCursor, L"jmp-3");
+    EncodeInternal(&Request, AllocatedCursor);
+}
+
+void MiddleIntercept::DebugDisassemble(unsigned char* const Pointer, size_t Length)
+{
+    MILAN_CHECKW(Pointer != nullptr, L"");
+    MILAN_CHECKW(Length != 0, L"");
+
+    ZydisDisassembledInstruction Instruction{};
+    ZyanU64 Address = reinterpret_cast<ZyanU64>(Pointer);
+
+    while (ZYAN_SUCCESS(ZydisDisassembleIntel(ZYDIS_MACHINE_MODE_LONG_64, Address, Pointer, Length, &Instruction)))
+    {
+        MILAN_DEBUGW(L" %016llu %S", Address, Instruction.text);
+        
+        if (Instruction.info.length >= Length)
+            break;
+
+        Address += Instruction.info.length;
+        Length -= Instruction.info.length;
+    }
 }
 
 size_t MiddleIntercept::GetPageSize() noexcept
