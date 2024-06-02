@@ -158,7 +158,7 @@ MiddleIntercept::MiddleIntercept(wchar_t const* const InLabel, void* const InAdd
     MILAN_CHECKW(InAddress != nullptr, L"");
     MILAN_CHECKW(InStubFunction != nullptr, L"");
     MILAN_CHECKW(InCaveIndexer != nullptr, L"");
-    InitInternal(InAddress, InStubFunction, InCaveIndexer);
+    Init(InAddress, InStubFunction, InCaveIndexer);
 }
 
 MiddleIntercept::~MiddleIntercept() noexcept
@@ -166,16 +166,109 @@ MiddleIntercept::~MiddleIntercept() noexcept
     // ...
 }
 
-void MiddleIntercept::InitInternal(void* const InAddress,
+void MiddleIntercept::Init(void* const InAddress,
     void* const InStubFunction, CaveIndexer* const InCaveIndexer)
 {
-    MILAN_UNUSED_3(InAddress, InStubFunction, InCaveIndexer);
+    Function = InStubFunction;
+    Indexer = InCaveIndexer;
 
     // 1. Replace original instruction with jump to relay cave, nop out the rest.
-    // 2. In relay cave, execute original instruction and jump to code cave.
-    // 3. In code cave, push rax | movabs rax, <stub> | call rax | pop rax | jmp <back>.
-}
+    // 2. In relay cave, execute original instructions and jump to call cave.
+    // 3. In call cave, push rax | movabs rax, <stub> | call rax | pop rax | jmp <back>.
 
+    auto const [RelayCaveAddress, RelayCaveSize] = *Indexer->GetForSize(20);
+    auto const [CallCaveAddress, CallCaveSize] = *Indexer->GetForSize(20);
+
+    unsigned char* RelayCursor = reinterpret_cast<unsigned char*>(RelayCaveAddress);
+    unsigned char* CallCursor = reinterpret_cast<unsigned char*>(CallCaveAddress);
+
+    Address = reinterpret_cast<unsigned char*>(InAddress);
+    unsigned char* AddressCursor = Address;
+
+    // 1. Get size of a jump to relay cave.
+
+    ZydisEncoderRequest FirstJumpRequest{};
+    std::memset(&FirstJumpRequest, 0, sizeof FirstJumpRequest);
+
+    FirstJumpRequest.mnemonic = ZYDIS_MNEMONIC_JMP;
+    FirstJumpRequest.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+    FirstJumpRequest.operand_count = 1;
+    FirstJumpRequest.operands[0].type = ZYDIS_OPERAND_TYPE_MEMORY;
+    FirstJumpRequest.operands[0].mem.base = ZYDIS_REGISTER_RIP;
+    FirstJumpRequest.operands[0].mem.displacement = RelayCaveAddress;  // Zydis will transform it to relative displacement.
+
+    std::array<unsigned char, 32> FirstJumpTemporary{ 0u };
+    ZyanUSize FirstJumpSize = FirstJumpTemporary.size();
+
+    ZyanStatus const FirstJumpStatus = ZydisEncoderEncodeInstructionAbsolute(&FirstJumpRequest,
+        FirstJumpTemporary.data(), &FirstJumpSize, reinterpret_cast<ZyanU64>(Address));
+    MILAN_CHECKW(ZYAN_SUCCESS(FirstJumpStatus), L"failed to encode first jump, status = %d", (FirstJumpStatus & 0xFFFFF));
+
+    // 2. Decode necessary instructions at location and re-encode them into the relay cave.
+
+    ZydisDecoder                Decoder{};
+    ZydisDecodedInstruction     Instruction{};
+    ZydisDecodedOperand         Operands[ZYDIS_MAX_OPERAND_COUNT_VISIBLE];
+    ZydisEncoderRequest         Request{};
+
+    ZydisDecoderInit(&Decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
+
+    while (AddressCursor < Address + FirstJumpSize)
+    {
+        std::memset(&Instruction, 0, sizeof Instruction);
+        std::memset(Operands, 0, sizeof Operands);
+        std::memset(&Request, 0, sizeof Request);
+
+        ZyanStatus const DecodeStatus = ZydisDecoderDecodeFull(&Decoder, AddressCursor, 64, &Instruction, Operands);
+        MILAN_CHECKW(ZYAN_SUCCESS(DecodeStatus), L"failed to decode original instruction, status = %d", (DecodeStatus & 0xFFFFF));
+
+        // FIXME: Convert decoded instruction addresses to absolute.
+
+        ZyanStatus const ConvStatus = ZydisEncoderDecodedInstructionToEncoderRequest(&Instruction, Operands, Instruction.operand_count, &Request);
+        MILAN_CHECKW(ZYAN_SUCCESS(ConvStatus), L"failed to convert decoded instruction to request, status = %d", (ConvStatus & 0xFFFFF));
+
+        ZyanUSize EncodeLength = RelayCaveSize;
+        ZyanStatus const EncodeStatus = ZydisEncoderEncodeInstructionAbsolute(&Request, RelayCursor, &EncodeLength, reinterpret_cast<ZyanU64>(RelayCursor));
+        MILAN_CHECKW(ZYAN_SUCCESS(EncodeStatus), L"failed to encode decoded instruction, status = %d", (EncodeStatus & 0xFFFFF));
+
+        AddressCursor += Instruction.length;
+        RelayCursor += EncodeLength;
+    }
+
+    // 3. Encode a jump from the relay cave to the call cave.
+
+    std::memset(&Request, 0, sizeof Request);  // re-use this chonky variable
+
+    Request.mnemonic = ZYDIS_MNEMONIC_JMP;
+    Request.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+    Request.operand_count = 1;
+    Request.operands[0].type = ZYDIS_OPERAND_TYPE_MEMORY;
+    Request.operands[0].mem.base = ZYDIS_REGISTER_RIP;
+    Request.operands[0].mem.displacement = CallCaveAddress;  // Zydis will transform it to relative displacement.
+
+    ZyanUSize SecondJumpLength = RelayCaveSize - (reinterpret_cast<std::intptr_t>(RelayCursor) - RelayCaveAddress);
+    ZyanStatus const SecondJumpStatus = ZydisEncoderEncodeInstructionAbsolute(&Request, RelayCursor, &SecondJumpLength, reinterpret_cast<ZyanU64>(RelayCursor));
+    MILAN_CHECKW(ZYAN_SUCCESS(SecondJumpStatus), L"failed to encode second jump, status = %d", (SecondJumpStatus & 0xFFFFF));
+
+    RelayCursor += SecondJumpLength;
+
+    // 4. Nop out injection location and copy in the jump to the relay cave.
+
+    auto const ReplaceLength = AddressCursor - Address;
+
+    std::fill_n(Address, ReplaceLength, unsigned char (0x90));
+    std::copy_n(FirstJumpTemporary.data(), FirstJumpSize, Address);
+
+    unsigned char* const JumpBackAddress = AddressCursor;  // jumping back to the first untouched instruction
+
+    // 5. TODO: Encode the call cave.
+
+    MILAN_UNUSED_2(JumpBackAddress, CallCursor);
+
+    // 6. Cleanup temporaries.
+
+    Indexer = nullptr;
+}
 
 
 void MiddleIntercept::UpdateProtect(void* const InAddress, size_t const Length, bool const bEnable) const
@@ -194,45 +287,22 @@ void MiddleIntercept::UpdateProtect(void* const InAddress, size_t const Length, 
     }
 }
 
-void MiddleIntercept::EncodeRequest(ZydisEncoderRequest* const Request, unsigned char*& Buffer) const
-{
-    EncodeRequestEx(Request, Buffer, Buffer);
-}
-
-void MiddleIntercept::EncodeRequestEx(ZydisEncoderRequest* Request, unsigned char*& Buffer, unsigned char*& Address) const
-{
-    MILAN_CHECKW(Request != nullptr, L"");
-    MILAN_CHECKW(Buffer != nullptr, L"");
-
-    ZyanUSize   Length = 64;
-    ZyanU64     AddressU64 = reinterpret_cast<ZyanU64>(Address);
-
-    if (ZyanStatus const Status = ZydisEncoderEncodeInstructionAbsolute(Request, Buffer, &Length, AddressU64); ZYAN_FAILED(Status))
-        MILAN_FATALW(L"failed to encode instruction, label = %s, status = %u", *Label, Status & 0xFFFFF);
-
-    std::memset(Request, 0, sizeof *Request);
-    Buffer += Length;
-
-    // Avoid moving cursor twice when encoding to the actual location.
-    if (&Buffer != &Address) Address += Length;
-}
-
 void MiddleIntercept::DebugDisassemble(unsigned char* const Pointer, size_t Length)
 {
     MILAN_CHECKW(Pointer != nullptr, L"");
     MILAN_CHECKW(Length != 0, L"");
 
     ZydisDisassembledInstruction Instruction{};
-    ZyanU64 Address = reinterpret_cast<ZyanU64>(Pointer);
+    ZyanU64 PtrAddress = reinterpret_cast<ZyanU64>(Pointer);
 
-    while (ZYAN_SUCCESS(ZydisDisassembleIntel(ZYDIS_MACHINE_MODE_LONG_64, Address, Pointer, Length, &Instruction)))
+    while (ZYAN_SUCCESS(ZydisDisassembleIntel(ZYDIS_MACHINE_MODE_LONG_64, PtrAddress, Pointer, Length, &Instruction)))
     {
-        MILAN_DEBUGW(L" %016llu %S", Address, Instruction.text);
+        MILAN_DEBUGW(L" %016llu %S", PtrAddress, Instruction.text);
         
         if (Instruction.info.length >= Length)
             break;
 
-        Address += Instruction.info.length;
+        PtrAddress += Instruction.info.length;
         Length -= Instruction.info.length;
     }
 }

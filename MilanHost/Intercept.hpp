@@ -96,7 +96,11 @@ class MiddleIntercept : public NonCopyable
     /** Address of an ASM function which should be injected. */
     void* Function{ nullptr };
 
+    /** Cave indexer to use throughout initialization. */
+    CaveIndexer* Indexer{ nullptr };
 
+    /** Pointer for the injection's location. */
+    unsigned char* Address{ nullptr };
 
 public:
 
@@ -105,11 +109,9 @@ public:
 
 private:
 
-    void InitInternal(void* InAddress, void* InStubFunction, CaveIndexer* InCaveIndexer);
+    void Init(void* InAddress, void* InStubFunction, CaveIndexer* InCaveIndexer);
 
     void UpdateProtect(void* InAddress, size_t Length, bool bEnable) const;
-    void EncodeRequest(ZydisEncoderRequest* Request, unsigned char*& Buffer) const;
-    void EncodeRequestEx(ZydisEncoderRequest* Request, unsigned char*& Buffer, unsigned char*& Address) const;
     void DebugDisassemble(unsigned char* Pointer, size_t Length);
 
     static size_t GetPageSize() noexcept;
