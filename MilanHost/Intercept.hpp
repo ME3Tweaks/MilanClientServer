@@ -111,6 +111,8 @@ private:
 
     void Init(void* InAddress, void* InStubFunction, CaveIndexer* InCaveIndexer);
 
+    void EncodeCallCave(ZydisEncoderRequest* Scratch, void* JumpBackAddress, unsigned char*& CallCursor, std::ptrdiff_t CallCaveSize) const;
+
     void UpdateProtect(void* InAddress, size_t Length, bool bEnable) const;
     void DebugDisassemble(unsigned char* Pointer, size_t Length);
 

@@ -172,9 +172,9 @@ void MiddleIntercept::Init(void* const InAddress,
     Function = InStubFunction;
     Indexer = InCaveIndexer;
 
-    // 1. Replace original instruction with jump to relay cave, nop out the rest.
-    // 2. In relay cave, execute original instructions and jump to call cave.
-    // 3. In call cave, push rax | movabs rax, <stub> | call rax | pop rax | jmp <back>.
+    // > Replace original instruction with jump to relay cave, nop out the rest.
+    // > In relay cave, execute original instructions and jump to call cave.
+    // > In call cave, push rax | movabs rax, <stub> | call rax | pop rax | jmp <back>.
 
     auto const [RelayCaveAddress, RelayCaveSize] = *Indexer->GetForSize(20);
     auto const [CallCaveAddress, CallCaveSize] = *Indexer->GetForSize(20);
@@ -187,21 +187,20 @@ void MiddleIntercept::Init(void* const InAddress,
 
     // 1. Get size of a jump to relay cave.
 
-    ZydisEncoderRequest FirstJumpRequest{};
-    std::memset(&FirstJumpRequest, 0, sizeof FirstJumpRequest);
+    ZydisEncoderRequest Request{};  // quite chonky, so will be re-used at later stages
+    std::memset(&Request, 0, sizeof Request);
 
-    FirstJumpRequest.mnemonic = ZYDIS_MNEMONIC_JMP;
-    FirstJumpRequest.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
-    FirstJumpRequest.operand_count = 1;
-    FirstJumpRequest.operands[0].type = ZYDIS_OPERAND_TYPE_MEMORY;
-    FirstJumpRequest.operands[0].mem.base = ZYDIS_REGISTER_RIP;
-    FirstJumpRequest.operands[0].mem.displacement = RelayCaveAddress;  // Zydis will transform it to relative displacement.
+    Request.mnemonic = ZYDIS_MNEMONIC_JMP;
+    Request.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+    Request.operand_count = 1;
+    Request.operands[0].type = ZYDIS_OPERAND_TYPE_MEMORY;
+    Request.operands[0].mem.base = ZYDIS_REGISTER_RIP;
+    Request.operands[0].mem.displacement = RelayCaveAddress;  // Zydis will transform it to relative displacement.
 
     std::array<unsigned char, 32> FirstJumpTemporary{ 0u };
     ZyanUSize FirstJumpSize = FirstJumpTemporary.size();
 
-    ZyanStatus const FirstJumpStatus = ZydisEncoderEncodeInstructionAbsolute(&FirstJumpRequest,
-        FirstJumpTemporary.data(), &FirstJumpSize, reinterpret_cast<ZyanU64>(Address));
+    ZyanStatus const FirstJumpStatus = ZydisEncoderEncodeInstructionAbsolute(&Request, FirstJumpTemporary.data(), &FirstJumpSize, reinterpret_cast<ZyanU64>(Address));
     MILAN_CHECKW(ZYAN_SUCCESS(FirstJumpStatus), L"failed to encode first jump, status = %d", (FirstJumpStatus & 0xFFFFF));
 
     // 2. Decode necessary instructions at location and re-encode them into the relay cave.
@@ -209,7 +208,6 @@ void MiddleIntercept::Init(void* const InAddress,
     ZydisDecoder                Decoder{};
     ZydisDecodedInstruction     Instruction{};
     ZydisDecodedOperand         Operands[ZYDIS_MAX_OPERAND_COUNT_VISIBLE];
-    ZydisEncoderRequest         Request{};
 
     ZydisDecoderInit(&Decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
 
@@ -224,6 +222,32 @@ void MiddleIntercept::Init(void* const InAddress,
 
         // FIXME: Convert decoded instruction addresses to absolute.
 
+        for (ZyanU8 OpIdx = 0; OpIdx < Instruction.operand_count; ++OpIdx)
+        {
+            ZydisDecodedOperand& Op = Operands[OpIdx];
+            ZyanU64 const Addr = reinterpret_cast<ZyanU64>(AddressCursor);
+
+            ZyanU64 Absolute = 0;
+
+            if (Op.type == ZYDIS_OPERAND_TYPE_IMMEDIATE && Op.imm.is_relative)
+            {
+                ZyanStatus const Status = ZydisCalcAbsoluteAddress(&Instruction, &Op, Addr, &Absolute);
+                MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to calc absolute address for operand %d, status = %d", OpIdx, (Status & 0xFFFFF));
+
+                //Op.imm.is_relative = false;
+                Op.imm.value.u = Absolute;
+            }
+            else if (Op.type == ZYDIS_OPERAND_TYPE_MEMORY && (Op.mem.base == ZYDIS_REGISTER_EIP || Op.mem.base == ZYDIS_REGISTER_RIP))
+            {
+                ZyanStatus const Status = ZydisCalcAbsoluteAddress(&Instruction, &Op, Addr, &Absolute);
+                MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to calc absolute address for operand %d, status = %d", OpIdx, (Status & 0xFFFFF));
+
+                MILAN_CHECKW(Op.mem.disp.has_displacement, L"");
+                Op.mem.disp.value = static_cast<ZyanI64>(Absolute);
+            }
+            //else if (Op.type == ZYDIS_OPERAND_TYPE_MEMORY && Op.mem. ...)  // might be another case necessary to handle
+        }
+
         ZyanStatus const ConvStatus = ZydisEncoderDecodedInstructionToEncoderRequest(&Instruction, Operands, Instruction.operand_count, &Request);
         MILAN_CHECKW(ZYAN_SUCCESS(ConvStatus), L"failed to convert decoded instruction to request, status = %d", (ConvStatus & 0xFFFFF));
 
@@ -237,7 +261,7 @@ void MiddleIntercept::Init(void* const InAddress,
 
     // 3. Encode a jump from the relay cave to the call cave.
 
-    std::memset(&Request, 0, sizeof Request);  // re-use this chonky variable
+    std::memset(&Request, 0, sizeof Request);
 
     Request.mnemonic = ZYDIS_MNEMONIC_JMP;
     Request.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
@@ -259,15 +283,101 @@ void MiddleIntercept::Init(void* const InAddress,
     std::fill_n(Address, ReplaceLength, unsigned char (0x90));
     std::copy_n(FirstJumpTemporary.data(), FirstJumpSize, Address);
 
+    // 5. Encode the call cave.
+
     unsigned char* const JumpBackAddress = AddressCursor;  // jumping back to the first untouched instruction
-
-    // 5. TODO: Encode the call cave.
-
-    MILAN_UNUSED_2(JumpBackAddress, CallCursor);
+    EncodeCallCave(&Request, JumpBackAddress, CallCursor, CallCaveSize);
 
     // 6. Cleanup temporaries.
 
     Indexer = nullptr;
+}
+
+void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* const JumpBackAddress,
+    unsigned char*& CallCursor, std::ptrdiff_t const CallCaveSize) const
+{
+    // TODO: push rax | movabs rax, <stub> | call rax | pop rax | jmp <back>.
+    MILAN_UNUSED_4(Scratch, JumpBackAddress, CallCursor, CallCaveSize);
+    std::memset(Scratch, 0, sizeof * Scratch);
+
+    ZyanStatus Status = 0;
+    ZyanU64 CallLength = CallCaveSize;
+    ZyanU64 InstrLength = 0;
+
+    // 1. PUSH RAX
+
+    Scratch->mnemonic = ZYDIS_MNEMONIC_PUSH;
+    Scratch->machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+    Scratch->operand_count = 1;
+    Scratch->operands[0].type = ZYDIS_OPERAND_TYPE_REGISTER;
+    Scratch->operands[0].reg.value = ZYDIS_REGISTER_RAX;
+
+    InstrLength = CallLength;
+    Status = ZydisEncoderEncodeInstructionAbsolute(Scratch, CallCursor, &InstrLength, reinterpret_cast<ZyanU64>(CallCursor));
+    MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to encode a call cave (%s), status = %d", L"push rax", (Status & 0xFFFFF));
+    std::memset(Scratch, 0, sizeof * Scratch);
+    CallCursor += InstrLength;
+    CallLength -= InstrLength;
+
+    // 2. MOV RAX, <Function>
+
+    Scratch->mnemonic = ZYDIS_MNEMONIC_MOV;
+    Scratch->machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+    Scratch->operand_count = 1;
+    Scratch->operands[0].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
+    Scratch->operands[0].imm.u = reinterpret_cast<ZyanU64>(Function);
+
+    InstrLength = CallLength;
+    Status = ZydisEncoderEncodeInstructionAbsolute(Scratch, CallCursor, &InstrLength, reinterpret_cast<ZyanU64>(CallCursor));
+    MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to encode a call cave (%s), status = %d", L"mov rax, <func>", (Status & 0xFFFFF));
+    std::memset(Scratch, 0, sizeof * Scratch);
+    CallCursor += InstrLength;
+    CallLength -= InstrLength;
+
+    // 3. CALL RAX
+
+    Scratch->mnemonic = ZYDIS_MNEMONIC_CALL;
+    Scratch->machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+    Scratch->operand_count = 1;
+    Scratch->operands[0].type = ZYDIS_OPERAND_TYPE_REGISTER;
+    Scratch->operands[0].reg.value = ZYDIS_REGISTER_RAX;
+
+    InstrLength = CallLength;
+    Status = ZydisEncoderEncodeInstructionAbsolute(Scratch, CallCursor, &InstrLength, reinterpret_cast<ZyanU64>(CallCursor));
+    MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to encode a call cave (%s), status = %d", L"call rax", (Status & 0xFFFFF));
+    std::memset(Scratch, 0, sizeof * Scratch);
+    CallCursor += InstrLength;
+    CallLength -= InstrLength;
+
+    // 4. POP RAX
+
+    Scratch->mnemonic = ZYDIS_MNEMONIC_POP;
+    Scratch->machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+    Scratch->operand_count = 1;
+    Scratch->operands[0].type = ZYDIS_OPERAND_TYPE_REGISTER;
+    Scratch->operands[0].reg.value = ZYDIS_REGISTER_RAX;
+
+    InstrLength = CallLength;
+    Status = ZydisEncoderEncodeInstructionAbsolute(Scratch, CallCursor, &InstrLength, reinterpret_cast<ZyanU64>(CallCursor));
+    MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to encode a call cave (%s), status = %d", L"pop rax", (Status & 0xFFFFF));
+    std::memset(Scratch, 0, sizeof * Scratch);
+    CallCursor += InstrLength;
+    CallLength -= InstrLength;
+
+    // 5. JMP <JumpBackAddress>
+
+    Scratch->mnemonic = ZYDIS_MNEMONIC_JMP;
+    Scratch->machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
+    Scratch->operand_count = 1;
+    Scratch->operands[0].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
+    Scratch->operands[0].imm.u = reinterpret_cast<ZyanU64>(JumpBackAddress);  // Zydis will transform it to relative
+
+    InstrLength = CallLength;
+    Status = ZydisEncoderEncodeInstructionAbsolute(Scratch, CallCursor, &InstrLength, reinterpret_cast<ZyanU64>(CallCursor));
+    MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to encode a call cave (%s), status = %d", L"jmp <back>", (Status & 0xFFFFF));
+    std::memset(Scratch, 0, sizeof * Scratch);
+    CallCursor += InstrLength;
+    CallLength -= InstrLength;
 }
 
 
