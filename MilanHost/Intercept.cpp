@@ -212,7 +212,7 @@ void MiddleIntercept::Init(void* const InAddress,
 
     ZydisDecoder                Decoder{};
     ZydisDecodedInstruction     Instruction{};
-    ZydisDecodedOperand         Operands[ZYDIS_MAX_OPERAND_COUNT_VISIBLE];
+    ZydisDecodedOperand         Operands[ZYDIS_MAX_OPERAND_COUNT]{};
 
     ZydisDecoderInit(&Decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
 
@@ -254,7 +254,7 @@ void MiddleIntercept::Init(void* const InAddress,
         ZyanStatus const ConvStatus = ZydisEncoderDecodedInstructionToEncoderRequest(&Instruction, Operands, Instruction.operand_count, &Request);
         MILAN_CHECKW(ZYAN_SUCCESS(ConvStatus), L"failed to convert decoded instruction to request, status = %d", (ConvStatus & 0xFFFFF));
 
-        ZyanUSize EncodeLength = RelayAvailLength;
+        ZyanUSize EncodeLength = static_cast<ZyanUSize>(RelayAvailLength);
         ZyanStatus const EncodeStatus = ZydisEncoderEncodeInstructionAbsolute(&Request, RelayCursor, &EncodeLength, reinterpret_cast<ZyanU64>(RelayCursor));
         MILAN_CHECKW(ZYAN_SUCCESS(EncodeStatus), L"failed to encode decoded instruction, status = %d", (EncodeStatus & 0xFFFFF));
 
@@ -275,7 +275,7 @@ void MiddleIntercept::Init(void* const InAddress,
     Request.operands[0].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
     Request.operands[0].imm.s = CallCave.Address;  // Zydis will transform it to relative displacement.
 
-    ZyanUSize SecondJumpLength = RelayAvailLength;
+    ZyanUSize SecondJumpLength = static_cast<ZyanUSize>(RelayAvailLength);
     ZyanStatus const SecondJumpStatus = ZydisEncoderEncodeInstructionAbsolute(&Request, RelayCursor, &SecondJumpLength, reinterpret_cast<ZyanU64>(RelayCursor));
     MILAN_CHECKW(ZYAN_SUCCESS(SecondJumpStatus), L"failed to encode second jump, status = %d", (SecondJumpStatus & 0xFFFFF));
 
