@@ -172,26 +172,26 @@ void MiddleIntercept::Init(void* const InAddress,
     Function = InStubFunction;
     Indexer = InCaveIndexer;
 
-    // > Replace original instruction with jump to relay cave, nop out the rest.
-    // > In relay cave, execute original instructions and jump to call cave.
-    // > In call cave, push rax | movabs rax, <stub> | call rax | pop rax | jmp <back>.
-
-    auto const RelayCave = *Indexer->GetForSize(20);
-    auto const CallCave = *Indexer->GetForSize(20);
-
-    UpdateProtect(RelayCave, false);
-    UpdateProtect(CallCave, false);
-
-    unsigned char* RelayCursor = reinterpret_cast<unsigned char*>(RelayCave.Address);
-    unsigned char* CallCursor = reinterpret_cast<unsigned char*>(CallCave.Address);
-
-    std::ptrdiff_t RelayAvailLength = RelayCave.Size;
-    std::ptrdiff_t CallAvailLength = CallCave.Size;
-
     Address = reinterpret_cast<unsigned char*>(InAddress);
     unsigned char* AddressCursor = Address;
 
-    // 1. Get size of a jump to relay cave.
+    // > Replace original instruction with jump to call cave, nop out the rest.
+    // > In call cave, push rax | movabs rax, <stub> | call rax | pop rax | jmp <relay>.
+    // > In relay cave, execute original instructions and jump to <back>.
+
+    auto const CallCave = *Indexer->GetForSize(20);
+    auto const RelayCave = *Indexer->GetForSize(20);
+
+    UpdateProtect(CallCave, false);
+    UpdateProtect(RelayCave, false);
+
+    unsigned char* CallCursor = reinterpret_cast<unsigned char*>(CallCave.Address);
+    unsigned char* RelayCursor = reinterpret_cast<unsigned char*>(RelayCave.Address);
+
+    std::ptrdiff_t CallAvailLength = CallCave.Size;
+    std::ptrdiff_t RelayAvailLength = RelayCave.Size;
+
+    // 1. Get size of a jump to call cave by encoding it to a temporary buffer.
 
     ZydisEncoderRequest Request{};  // quite chonky, so will be re-used at later stages
     std::memset(&Request, 0, sizeof Request);
@@ -200,7 +200,7 @@ void MiddleIntercept::Init(void* const InAddress,
     Request.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
     Request.operand_count = 1;
     Request.operands[0].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
-    Request.operands[0].imm.s = RelayCave.Address;  // Zydis will transform it to relative displacement
+    Request.operands[0].imm.s = CallCave.Address;  // Zydis will transform it to relative displacement
 
     std::array<unsigned char, 32> FirstJumpTemporary{ 0u };
     ZyanUSize FirstJumpSize = FirstJumpTemporary.size();
@@ -228,12 +228,12 @@ void MiddleIntercept::Init(void* const InAddress,
         for (ZyanU8 OpIdx = 0; OpIdx < Instruction.operand_count; ++OpIdx)
         {
             ZydisDecodedOperand& Op = Operands[OpIdx];
-            ZyanU64 const Addr = reinterpret_cast<ZyanU64>(AddressCursor);
+            ZyanU64 const OpAddr = reinterpret_cast<ZyanU64>(AddressCursor);
 
             if (Op.type == ZYDIS_OPERAND_TYPE_IMMEDIATE && Op.imm.is_relative)
             {
                 ZyanU64 Absolute = 0;
-                ZyanStatus const Status = ZydisCalcAbsoluteAddress(&Instruction, &Op, Addr, &Absolute);
+                ZyanStatus const Status = ZydisCalcAbsoluteAddress(&Instruction, &Op, OpAddr, &Absolute);
                 MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to calc absolute address for operand %d, status = %d", OpIdx, (Status & 0xFFFFF));
 
                 //Op.imm.is_relative = false;
@@ -242,7 +242,7 @@ void MiddleIntercept::Init(void* const InAddress,
             else if (Op.type == ZYDIS_OPERAND_TYPE_MEMORY && (Op.mem.base == ZYDIS_REGISTER_EIP || Op.mem.base == ZYDIS_REGISTER_RIP))
             {
                 ZyanU64 Absolute = 0;
-                ZyanStatus const Status = ZydisCalcAbsoluteAddress(&Instruction, &Op, Addr, &Absolute);
+                ZyanStatus const Status = ZydisCalcAbsoluteAddress(&Instruction, &Op, OpAddr, &Absolute);
                 MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to calc absolute address for operand %d, status = %d", OpIdx, (Status & 0xFFFFF));
 
                 MILAN_CHECKW(Op.mem.disp.has_displacement, L"");
@@ -265,7 +265,7 @@ void MiddleIntercept::Init(void* const InAddress,
         AddressCursor += Instruction.length;
     }
 
-    // 3. Encode a jump from the relay cave to the call cave.
+    // 3. Encode a jump from the relay cave back to original code.
 
     std::memset(&Request, 0, sizeof Request);
 
@@ -273,7 +273,7 @@ void MiddleIntercept::Init(void* const InAddress,
     Request.machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
     Request.operand_count = 1;
     Request.operands[0].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
-    Request.operands[0].imm.s = CallCave.Address;  // Zydis will transform it to relative displacement.
+    Request.operands[0].imm.s = reinterpret_cast<ZyanI64>(AddressCursor);  // Zydis will transform it to relative displacement.
 
     ZyanUSize SecondJumpLength = static_cast<ZyanUSize>(RelayAvailLength);
     ZyanStatus const SecondJumpStatus = ZydisEncoderEncodeInstructionAbsolute(&Request, RelayCursor, &SecondJumpLength, reinterpret_cast<ZyanU64>(RelayCursor));
@@ -282,7 +282,7 @@ void MiddleIntercept::Init(void* const InAddress,
     RelayCursor += SecondJumpLength;
     RelayAvailLength -= SecondJumpLength;
 
-    // 4. Nop out injection location and copy in the jump to the relay cave.
+    // 4. Nop out injection location and copy in the jump to the call cave.
 
     auto const ReplaceLength = AddressCursor - Address;
     UpdateProtect(Address, ReplaceLength, false);
@@ -292,10 +292,9 @@ void MiddleIntercept::Init(void* const InAddress,
 
     // 5. Encode the call cave.
 
-    unsigned char* const JumpBackAddress = AddressCursor;  // jumping back to the first untouched instruction
-    EncodeCallCave(&Request, JumpBackAddress, CallCursor, CallAvailLength);
+    EncodeCallCave(&Request, reinterpret_cast<void*>(RelayCave.Address), CallCursor, CallAvailLength);
 
-    // 6. Cleanup stuff.
+    // 6. Clean up stuff.
 
     UpdateProtect(RelayCave, true);
     UpdateProtect(CallCave, true);
@@ -303,7 +302,7 @@ void MiddleIntercept::Init(void* const InAddress,
     Indexer = nullptr;
 }
 
-void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* const JumpBackAddress,
+void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* const RelayAddress,
     unsigned char*& CallCursor, std::ptrdiff_t& CallAvailLength) const
 {
     std::memset(Scratch, 0, sizeof *Scratch);
@@ -373,13 +372,13 @@ void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* c
     CallCursor += InstrLength;
     CallAvailLength -= InstrLength;
 
-    // 5. JMP <JumpBackAddress>
+    // 5. JMP <RelayAddress>
 
     Scratch->mnemonic = ZYDIS_MNEMONIC_JMP;
     Scratch->machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
     Scratch->operand_count = 1;
     Scratch->operands[0].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
-    Scratch->operands[0].imm.u = reinterpret_cast<ZyanU64>(JumpBackAddress);  // Zydis will transform it to relative
+    Scratch->operands[0].imm.u = reinterpret_cast<ZyanU64>(RelayAddress);  // Zydis will transform it to relative
 
     InstrLength = CallAvailLength;
     Status = ZydisEncoderEncodeInstructionAbsolute(Scratch, CallCursor, &InstrLength, reinterpret_cast<ZyanU64>(CallCursor));
