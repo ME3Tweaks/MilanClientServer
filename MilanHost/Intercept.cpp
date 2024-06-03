@@ -201,9 +201,6 @@ void MiddleIntercept::Init(void* const InAddress,
     Request.operand_count = 1;
     Request.operands[0].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
     Request.operands[0].imm.s = RelayCave.Address;  // Zydis will transform it to relative displacement
-    //Request.operands[0].type = ZYDIS_OPERAND_TYPE_MEMORY;
-    //Request.operands[0].mem.base = ZYDIS_REGISTER_RIP;
-    //Request.operands[0].mem.displacement = RelayCaveAddress;  // Zydis will transform it to relative displacement
 
     std::array<unsigned char, 32> FirstJumpTemporary{ 0u };
     ZyanUSize FirstJumpSize = FirstJumpTemporary.size();
@@ -309,7 +306,7 @@ void MiddleIntercept::Init(void* const InAddress,
 void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* const JumpBackAddress,
     unsigned char*& CallCursor, std::ptrdiff_t& CallAvailLength) const
 {
-    std::memset(Scratch, 0, sizeof * Scratch);
+    std::memset(Scratch, 0, sizeof *Scratch);
 
     ZyanStatus  Status = 0;
     ZyanU64     InstrLength = 0;
@@ -325,7 +322,7 @@ void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* c
     InstrLength = CallAvailLength;
     Status = ZydisEncoderEncodeInstructionAbsolute(Scratch, CallCursor, &InstrLength, reinterpret_cast<ZyanU64>(CallCursor));
     MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to encode a call cave (%s), status = %d", L"push rax", (Status & 0xFFFFF));
-    std::memset(Scratch, 0, sizeof * Scratch);
+    std::memset(Scratch, 0, sizeof *Scratch);
     CallCursor += InstrLength;
     CallAvailLength -= InstrLength;
 
@@ -333,11 +330,7 @@ void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* c
 
     Scratch->mnemonic = ZYDIS_MNEMONIC_MOV;
     Scratch->machine_mode = ZYDIS_MACHINE_MODE_LONG_64;
-    //Scratch->address_size_hint = ZYDIS_ADDRESS_SIZE_HINT_64;
     Scratch->operand_count = 2;
-    //Scratch->operands[0].type = ZYDIS_OPERAND_TYPE_MEMORY;
-    //Scratch->operands[0].mem.displacement = reinterpret_cast<ZyanU64>(Function);
-    //Scratch->operands[0].mem.size = 8;
     Scratch->operands[0].type = ZYDIS_OPERAND_TYPE_REGISTER;
     Scratch->operands[0].reg.value = ZYDIS_REGISTER_RAX;
     Scratch->operands[1].type = ZYDIS_OPERAND_TYPE_IMMEDIATE;
@@ -346,7 +339,7 @@ void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* c
     InstrLength = CallAvailLength;
     Status = ZydisEncoderEncodeInstructionAbsolute(Scratch, CallCursor, &InstrLength, reinterpret_cast<ZyanU64>(CallCursor));
     MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to encode a call cave (%s), status = %d", L"mov rax, <func>", (Status & 0xFFFFF));
-    std::memset(Scratch, 0, sizeof * Scratch);
+    std::memset(Scratch, 0, sizeof *Scratch);
     CallCursor += InstrLength;
     CallAvailLength -= InstrLength;
 
@@ -361,7 +354,7 @@ void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* c
     InstrLength = CallAvailLength;
     Status = ZydisEncoderEncodeInstructionAbsolute(Scratch, CallCursor, &InstrLength, reinterpret_cast<ZyanU64>(CallCursor));
     MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to encode a call cave (%s), status = %d", L"call rax", (Status & 0xFFFFF));
-    std::memset(Scratch, 0, sizeof * Scratch);
+    std::memset(Scratch, 0, sizeof *Scratch);
     CallCursor += InstrLength;
     CallAvailLength -= InstrLength;
 
@@ -376,7 +369,7 @@ void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* c
     InstrLength = CallAvailLength;
     Status = ZydisEncoderEncodeInstructionAbsolute(Scratch, CallCursor, &InstrLength, reinterpret_cast<ZyanU64>(CallCursor));
     MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to encode a call cave (%s), status = %d", L"pop rax", (Status & 0xFFFFF));
-    std::memset(Scratch, 0, sizeof * Scratch);
+    std::memset(Scratch, 0, sizeof *Scratch);
     CallCursor += InstrLength;
     CallAvailLength -= InstrLength;
 
@@ -391,7 +384,7 @@ void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* c
     InstrLength = CallAvailLength;
     Status = ZydisEncoderEncodeInstructionAbsolute(Scratch, CallCursor, &InstrLength, reinterpret_cast<ZyanU64>(CallCursor));
     MILAN_CHECKW(ZYAN_SUCCESS(Status), L"failed to encode a call cave (%s), status = %d", L"jmp <back>", (Status & 0xFFFFF));
-    std::memset(Scratch, 0, sizeof * Scratch);
+    std::memset(Scratch, 0, sizeof *Scratch);
     CallCursor += InstrLength;
     CallAvailLength -= InstrLength;
 }
