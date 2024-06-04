@@ -18,4 +18,5 @@ extern "C" void MlnUGameEngineLoadMap1();
 // ! Internal handlers called by asm code.
 // ========================================
 
+extern "C" void MlnUGameEngineTick1_Handler();
 extern "C" void MlnUGameEngineLoadMap1_Handler(FURL* Url);

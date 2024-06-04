@@ -145,7 +145,7 @@ namespace Milan::Globals
         unsigned char* const MainBase = reinterpret_cast<unsigned char*>(::LESDK::GetMainModuleBase());
 
         new ::MiddleIntercept{ L"UGameEngine::LoadMap", MainBase + 0xB930E0, MlnUGameEngineLoadMap1, &LocalCaveIndexer };
-        new ::MiddleIntercept{ L"UGameEngine::Tick", MainBase + 0xB93193, MlnUGameEngineTick1, &LocalCaveIndexer };
+        new ::MiddleIntercept{ L"UGameEngine::Tick", MainBase + 0x55031A, MlnUGameEngineTick1, &LocalCaveIndexer };
 
 
         // ----------------------------------------

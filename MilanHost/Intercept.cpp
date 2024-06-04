@@ -251,7 +251,7 @@ void MiddleIntercept::Init(void* const InAddress,
             //else if (Op.type == ZYDIS_OPERAND_TYPE_MEMORY && Op.mem. ...)  // might be another case necessary to handle
         }
 
-        ZyanStatus const ConvStatus = ZydisEncoderDecodedInstructionToEncoderRequest(&Instruction, Operands, Instruction.operand_count, &Request);
+        ZyanStatus const ConvStatus = ZydisEncoderDecodedInstructionToEncoderRequest(&Instruction, Operands, Instruction.operand_count_visible, &Request);
         MILAN_CHECKW(ZYAN_SUCCESS(ConvStatus), L"failed to convert decoded instruction to request, status = %d", (ConvStatus & 0xFFFFF));
 
         ZyanUSize EncodeLength = static_cast<ZyanUSize>(RelayAvailLength);
