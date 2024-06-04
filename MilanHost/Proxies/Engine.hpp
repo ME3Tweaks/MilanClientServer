@@ -173,7 +173,7 @@ public:
     unsigned char                   Unknown_A8[0x70];           // 0xA8
     UObject*                        Unknown_118;                // 0x118
     UNetDriver*                     NetDriver;                  // 0x120
-    unsigned char                   Unknown_128[0x58];          // 0x128
+    FURL                            URL;                        // 0x128
     UObject*                        Unknown_180;                // 0x180
     unsigned char                   Unknown_188[0x28];          // 0x188
     TArray<UObject*>                Unknown_1B0;                // 0x1B0

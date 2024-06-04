@@ -144,6 +144,10 @@ namespace Milan::Globals
         ::CaveIndexer LocalCaveIndexer{ 20 };
         unsigned char* const MainBase = reinterpret_cast<unsigned char*>(::LESDK::GetMainModuleBase());
 
+        new ::MiddleIntercept{ L"UActorChannel::ReplicateActor-1", MainBase + 0x48C82C, MlnUActorChannelReplicateActor1, &LocalCaveIndexer };
+        new ::MiddleIntercept{ L"UActorChannel::ReplicateActor-2", MainBase + 0x48D3B0, MlnUActorChannelReplicateActor2, &LocalCaveIndexer };
+        new ::MiddleIntercept{ L"UActorChannel::ReplicateActor-3", MainBase + 0x48D43D, MlnUActorChannelReplicateActor3, &LocalCaveIndexer };
+        new ::MiddleIntercept{ L"SeamlessTravelTick", MainBase + 0x8CA57B, MlnSeamlessTravelTick1, &LocalCaveIndexer };
         new ::MiddleIntercept{ L"UGameEngine::LoadMap", MainBase + 0xB930E0, MlnUGameEngineLoadMap1, &LocalCaveIndexer };
         new ::MiddleIntercept{ L"UGameEngine::Tick", MainBase + 0x55031A, MlnUGameEngineTick1, &LocalCaveIndexer };
 
