@@ -9,8 +9,8 @@ alignstack macro
     test rdx, rdx       ; set zf if rdx is zero, i.e. if rsp was 16-byte aligned
 
     mov r9, 0
-    mov r8, 8          ; by default, assign number of bytes to subtract from rsp to 8
-    cmovz r8, r9       ; if zf was set, reset number of bytes to subtract from rsp to 0
+    mov r8, 8           ; by default, assign number of bytes to subtract from rsp to 8
+    cmovz r8, r9        ; if zf was set, reset number of bytes to subtract from rsp to 0
     sub rsp, r8
 
     xor rax, rax
@@ -61,16 +61,55 @@ endm
 
 .data
 
-UActorChannelReplicateActor1_actor DQ ?
-UActorChannelReplicateActor2_bunch DQ ?
-UActorChannelReplicateActor3_bunch DQ ?
-UActorChannelReplicateActor3_prop DQ ?
-UGameEngineLoadMap1_url DQ ?
+UChannelSendBunch1_bunch                DQ ?
+UChannelSendBunch2_bunch                DQ ?
+UActorChannelReplicateActor1_actor      DQ ?
+UActorChannelReplicateActor2_bunch      DQ ?
+UActorChannelReplicateActor3_bunch      DQ ?
+UActorChannelReplicateActor3_prop       DQ ?
+InternalReplicateFunction1_chan         DQ ?
+InternalReplicateFunction1_bunch        DQ ?
+InternalReplicateFunction1_func         DQ ?
+UGameEngineLoadMap1_url                 DQ ?
 
 
 ;; FUNCTIONS
 
 .code
+
+externdef MlnUChannelSendBunch1_Handler:proc
+MlnUChannelSendBunch1 proc
+    mov UChannelSendBunch1_bunch, rcx  ; context pointer to the out bunch serializing merged bits
+
+    storeall
+    mov rbp, rsp
+    sub rsp, 20h
+    alignstack
+
+    mov rcx, UChannelSendBunch1_bunch
+    call MlnUChannelSendBunch1_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUChannelSendBunch1 endp
+
+externdef MlnUChannelSendBunch2_Handler:proc
+MlnUChannelSendBunch2 proc
+    mov UChannelSendBunch2_bunch, rbx  ; pointer to the local serializing bunch
+
+    storeall
+    mov rbp, rsp
+    sub rsp, 20h
+    alignstack
+
+    mov rcx, UChannelSendBunch2_bunch
+    call MlnUChannelSendBunch2_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUChannelSendBunch2 endp
 
 externdef MlnUActorChannelReplicateActor1_Handler:proc
 MlnUActorChannelReplicateActor1 proc
@@ -126,6 +165,27 @@ MlnUActorChannelReplicateActor3 proc
     restoreall
     ret
 MlnUActorChannelReplicateActor3 endp
+
+externdef MlnInternalReplicateFunction1_Handler:proc
+MlnInternalReplicateFunction1 proc
+    mov InternalReplicateFunction1_chan, rcx  ; resolved actor channel, since we can't get actor itself here
+    mov InternalReplicateFunction1_bunch, rdx  ; currently serializing local out bunch
+    mov InternalReplicateFunction1_func, r13
+
+    storeall
+    mov rbp, rsp
+    sub rsp, 20h
+    alignstack
+
+    mov r8, InternalReplicateFunction1_func
+    mov rdx, InternalReplicateFunction1_bunch
+    mov rcx, InternalReplicateFunction1_chan
+    call MlnInternalReplicateFunction1_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnInternalReplicateFunction1 endp
 
 externdef MlnSeamlessTravelTick1_Handler:proc
 MlnSeamlessTravelTick1 proc

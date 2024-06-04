@@ -139,6 +139,7 @@ public:
 };
 
 static_assert(offsetof(FOutBunch, Next) == 0xA4);
+static_assert(offsetof(FOutBunch, bReliable) == 0xD2);
 
 
 class FPackageInfo
