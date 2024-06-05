@@ -279,7 +279,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
             s_checkMainMenuLobbyFlow = true;
             MILAN_TRACEW(L"BioSeqAct_ShowMainMenu activated");
 
-            for (TypedObjectIterator<USFXGUI_MainMenu_RTT> Iter{}; Iter; ++Iter)
+            for (TypedObjectIterator<USFXGUI_MainMenu_RTT, false, false> Iter{}; Iter; ++Iter)
             {
                 MILAN_TRACEW(L"  %s: starting mp flow", *(*Iter)->StaticName());
                 (*Iter)->eventStartMultiplayerFlow();
