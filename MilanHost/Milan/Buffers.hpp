@@ -1,13 +1,13 @@
 /**
- * @file        MilanHost/Buffers.hpp
- * @brief       Implementation of reusable memory buffers.
+ * @file        MilanHost/Milan/Buffers.hpp
+ * @brief       Reusable memory buffers.
  */
 
 #pragma once
 
 #include <span>
 
-#include "Base.hpp"
+#include "Milan/Base.hpp"
 #include "Containers/vector.hpp"
 
 

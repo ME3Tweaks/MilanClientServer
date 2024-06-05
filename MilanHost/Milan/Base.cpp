@@ -2,8 +2,8 @@
 #include <cstdio>
 #include <cwchar>
 
-#include "Base.hpp"
-#include "Hooks.hpp"
+#include "Milan/Base.hpp"
+#include "Milan/Hooks.hpp"
 #include "Systems/Output.hpp"
 
 

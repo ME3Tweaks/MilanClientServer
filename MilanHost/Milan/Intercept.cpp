@@ -1,7 +1,7 @@
 #include <tlhelp32.h>
 
-#include "Base.hpp"
-#include "Intercept.hpp"
+#include "Milan/Base.hpp"
+#include "Milan/Intercept.hpp"
 #include "Systems/Output.hpp"
 
 
@@ -164,6 +164,14 @@ MiddleIntercept::MiddleIntercept(wchar_t const* const InLabel, void* const InAdd
 MiddleIntercept::~MiddleIntercept() noexcept
 {
     // ...
+}
+
+void MiddleIntercept::Install(wchar_t const* const InLabel, int const InRVA, void* const InStubFunction, CaveIndexer& InCaveIndexer)
+{
+    auto* const MainBase = reinterpret_cast<unsigned char*>(GetMainBase());
+    MiddleIntercept Instance{ InLabel, MainBase + InRVA, InStubFunction, &InCaveIndexer };
+    MILAN_DEBUGW(L"installed mid-function intercept '%s' at 0x%p", InLabel, (void*)Instance.Address);
+    MILAN_UNUSED(Instance);
 }
 
 void MiddleIntercept::Init(void* const InAddress,
@@ -421,7 +429,7 @@ void MiddleIntercept::DebugDisassemble(unsigned char* const Pointer, size_t Leng
     while (ZYAN_SUCCESS(ZydisDisassembleIntel(ZYDIS_MACHINE_MODE_LONG_64, PtrAddress, Pointer, Length, &Instruction)))
     {
         MILAN_DEBUGW(L" %016llu %S", PtrAddress, Instruction.text);
-        
+
         if (Instruction.info.length >= Length)
             break;
 
@@ -442,4 +450,17 @@ size_t MiddleIntercept::GetPageSize() noexcept
     }
 
     return PageSize;
+}
+
+std::intptr_t MiddleIntercept::GetMainBase() noexcept
+{
+    static std::intptr_t MainBase = INTPTR_MAX;
+
+    if (MainBase == INTPTR_MAX)
+    {
+        auto* const MainAddress = ::LESDK::GetMainModuleBase();
+        MainBase = reinterpret_cast<std::intptr_t>(MainAddress);
+    }
+
+    return MainBase;
 }

@@ -1,14 +1,12 @@
-#include <LESDK/Init.hpp>
 #include <LESDK/Headers.hpp>
 
-#include "Base.hpp"
-#include "Hooks.hpp"
+#include "Milan/Base.hpp"
+#include "Milan/Hooks.hpp"
+#include "Milan/Intercept.hpp"
+#include "Milan/NetProfDecls.hpp"
 #include "Systems/Globals.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/Imgui.hpp"
-
-#include "Intercept.hpp"
-#include "NetProf.hpp"
 
 
 namespace Milan::Allocator
@@ -107,10 +105,13 @@ namespace Milan::Globals
         UWorld_Tick_orig = (t_UWorld_Tick*)Context.InstallHook("UWorld::Tick", UWorld_Tick_target, UWorld_Tick_hook);
         MILAN_DEBUGW(L"UWorld::Tick hooked: %p -> %p", (void*)UWorld_Tick_target, (void*)UWorld_Tick_orig);
 
+
         // Network debug hooks.
         // ----------------------------------------
 
 #ifndef _FINAL_RELEASE
+
+        // Full-function hooks:
 
         t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_target = Context.ResolveTyped<t_UActorChannel_ReplicateActor>(GLOBAL_UACTORCHANNEL_REPLICATEACTOR_PHOOK);
         UActorChannel_ReplicateActor_orig = (t_UActorChannel_ReplicateActor*)Context.InstallHook("UActorChannel::ReplicateActor", UActorChannel_ReplicateActor_target, UActorChannel_ReplicateActor_hook);
@@ -132,31 +133,24 @@ namespace Milan::Globals
         SortReplicatedActors_orig = (t_SortReplicatedActors*)(Context.InstallHook("SortReplicatedActors", SortReplicatedActors_target, SortReplicatedActors_hook));
         MILAN_DEBUGW(L"SortReplicatedActors hooked: %p -> %p", (void*)SortReplicatedActors_target, (void*)SortReplicatedActors_orig);
 
+        // Mid-function injections:
+
+        ::CaveIndexer LocalCaveIndexer{ /* MinSize: */ 20 };
+
+        ::MiddleIntercept::Install(L"UChannel::SendBunch-1", 0x48E3D9, MlnUChannelSendBunch1, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UChannel::SendBunch-2", 0x48E645, MlnUChannelSendBunch2, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UActorChannel::ReplicateActor-1", 0x48C82C, MlnUActorChannelReplicateActor1, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UActorChannel::ReplicateActor-2", 0x48D3B0, MlnUActorChannelReplicateActor2, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UActorChannel::ReplicateActor-3", 0x48D43D, MlnUActorChannelReplicateActor3, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"InternalReplicateFunction", 0x709CFC, MlnInternalReplicateFunction1, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"SeamlessTravelTick", 0x8CA57B, MlnSeamlessTravelTick1, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UGameEngine::LoadMap", 0xB930E0, MlnUGameEngineLoadMap1, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UGameEngine::Tick", 0x55031A, MlnUGameEngineTick1, LocalCaveIndexer);
+
 #endif
 
         // ----------------------------------------
         // Network debug end.
-
-
-        // Temporary network profiler stuff.
-        // ----------------------------------------
-
-        ::CaveIndexer LocalCaveIndexer{ 20 };
-        unsigned char* const MainBase = reinterpret_cast<unsigned char*>(::LESDK::GetMainModuleBase());
-
-        new ::MiddleIntercept{ L"UChannel::SendBunch-1", MainBase + 0x48E3D9, MlnUChannelSendBunch1, &LocalCaveIndexer };
-        new ::MiddleIntercept{ L"UChannel::SendBunch-2", MainBase + 0x48E645, MlnUChannelSendBunch2, &LocalCaveIndexer };
-        new ::MiddleIntercept{ L"UActorChannel::ReplicateActor-1", MainBase + 0x48C82C, MlnUActorChannelReplicateActor1, &LocalCaveIndexer };
-        new ::MiddleIntercept{ L"UActorChannel::ReplicateActor-2", MainBase + 0x48D3B0, MlnUActorChannelReplicateActor2, &LocalCaveIndexer };
-        new ::MiddleIntercept{ L"UActorChannel::ReplicateActor-3", MainBase + 0x48D43D, MlnUActorChannelReplicateActor3, &LocalCaveIndexer };
-        new ::MiddleIntercept{ L"InternalReplicateFunction", MainBase + 0x709CFC, MlnInternalReplicateFunction1, &LocalCaveIndexer };
-        new ::MiddleIntercept{ L"SeamlessTravelTick", MainBase + 0x8CA57B, MlnSeamlessTravelTick1, &LocalCaveIndexer };
-        new ::MiddleIntercept{ L"UGameEngine::LoadMap", MainBase + 0xB930E0, MlnUGameEngineLoadMap1, &LocalCaveIndexer };
-        new ::MiddleIntercept{ L"UGameEngine::Tick", MainBase + 0x55031A, MlnUGameEngineTick1, &LocalCaveIndexer };
-
-
-        // ----------------------------------------
-        // Network profiler end.
 
 
         MILAN_INFOW(L"globals system initialized");

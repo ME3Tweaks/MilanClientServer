@@ -1,7 +1,7 @@
 #include <intrin.h>
 
-#include "Base.hpp"
-#include "NetProf.hpp"
+#include "Milan/Base.hpp"
+#include "Milan/NetProfDecls.hpp"
 #include "Proxies/Engine.hpp"
 #include "Systems/Output.hpp"
 

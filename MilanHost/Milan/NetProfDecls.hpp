@@ -1,6 +1,6 @@
 /**
- * @file        MilanHost/NetProf.hpp
- * @header      Embedded logic for our Network Profiler.
+ * @file        MilanHost/Milan/NetProfDecls.hpp
+ * @header      Declarations for Network Profiler extractors and handlers.
  */
 
 #pragma once

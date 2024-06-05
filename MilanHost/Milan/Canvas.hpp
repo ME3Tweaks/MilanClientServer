@@ -1,6 +1,6 @@
 /**
- * @file        MilanHost/Canvas.hpp
- * @brief       Utilities for drawing profilers on @ref UCanvas instances.
+ * @file        MilanHost/Milan/Canvas.hpp
+ * @brief       Drawing profilers on @ref UCanvas instances.
  */
 
 #pragma once
@@ -8,7 +8,11 @@
 
 #include <string_view>
 #include <LESDK/Headers.hpp>
+#include "Proxies/Engine.hpp"
 
+
+// ! Enumerations.
+// ========================================
 
 enum ETextAlign : int
 {
@@ -22,6 +26,19 @@ inline bool IsValidAlign(ETextAlign const Value) noexcept
     return Value == ETA_Left || Value == ETA_Center || Value == ETA_Right;
 }
 
+enum ECanvasProfilerMode : int
+{
+    CPM_None = 0,
+    CPM_PlayerControllers = 1,
+    CPM_Network = 2,
+    CPM_WorldInfo = 3,
+
+    CPM_Max
+};
+
+
+// ! Classes and other types.
+// ========================================
 
 class CanvasDrawer
 {
@@ -112,3 +129,20 @@ private:
 
     FString const& FormatObjectName(UObject* Object);
 };
+
+struct CanvasProfilerRecord
+{
+    wchar_t const* Subtitle;
+    wchar_t const* Description;
+    void (*Function)(MilanCanvasDrawer& Drawer, UObject* Target);
+};
+
+
+// ! Implementation of canvas profilers.
+// ========================================
+
+void ProfilePlayerControllers(MilanCanvasDrawer& Drawer, UObject* Target);
+void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* Target);
+void ProfileWorldInfo(MilanCanvasDrawer& Drawer, UObject* Target);
+
+void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel_Proxy* Channel, unsigned int Index);

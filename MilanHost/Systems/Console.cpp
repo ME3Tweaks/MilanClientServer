@@ -1,11 +1,10 @@
 #include <algorithm>
 #include <cwctype>
 
-#include <LESDK/Init.hpp>
 #include <LESDK/Headers.hpp>
 
-#include "Base.hpp"
-#include "Hooks.hpp"
+#include "Milan/Base.hpp"
+#include "Milan/Hooks.hpp"
 #include "Containers/string.hpp"
 #include "Containers/vector.hpp"
 #include "Systems/Console.hpp"

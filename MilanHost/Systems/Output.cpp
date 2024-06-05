@@ -1,8 +1,7 @@
-#include <LESDK/Init.hpp>
 #include <LESDK/Headers.hpp>
 
-#include "Hooks.hpp"
-#include "Logger.hpp"
+#include "Milan/Hooks.hpp"
+#include "Milan/Logger.hpp"
 #include "Systems/Output.hpp"
 
 

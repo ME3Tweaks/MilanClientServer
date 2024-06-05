@@ -1,5 +1,10 @@
+/**
+ * @file        MilanHost/Entry.hpp
+ * @header      Local declarations for @c Entry.cpp
+ */
+
 #pragma once
-#include <LESDK/Init.hpp>
+
 
 extern void SingleDetachImpl();
 void RegisterNonshipCommands();

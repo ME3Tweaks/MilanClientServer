@@ -1,13 +1,13 @@
 /**
  * @file        MilanHost/Systems/Imgui.hpp
- * @header      Declarations for Imgui integration.
+ * @header      System for Imgui integration.
  */
 
 #pragma once
-#include "Hooks.hpp"
 
+#include <LESDK/Init.hpp>
+#include "Milan/Hooks.hpp"
 
-namespace LESDK { class Initializer; }
 
 namespace Milan::Imgui
 {

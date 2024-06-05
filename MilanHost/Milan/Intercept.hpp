@@ -1,5 +1,5 @@
 /**
- * @file        MilanHost/Intercept.hpp
+ * @file        MilanHost/Milan/Intercept.hpp
  * @brief       Utilities for intercepting and overriding functions.
  */
 
@@ -7,8 +7,10 @@
 
 #include <array>
 #include <span>
+
 #include <Zydis/Zydis.h>
 #include <LESDK/Headers.hpp>
+
 #include "Containers/vector.hpp"
 
 
@@ -107,6 +109,8 @@ public:
     MiddleIntercept(wchar_t const* InLabel, void* InAddress, void* InStubFunction, CaveIndexer* InCaveIndexer);
     ~MiddleIntercept() noexcept;
 
+    static void Install(wchar_t const* InLabel, int InRVA, void* InStubFunction, CaveIndexer& InCaveIndexer);
+
 private:
 
     void Init(void* InAddress, void* InStubFunction, CaveIndexer* InCaveIndexer);
@@ -118,4 +122,5 @@ private:
     void DebugDisassemble(unsigned char* Pointer, size_t Length);
 
     static size_t GetPageSize() noexcept;
+    static std::intptr_t GetMainBase() noexcept;
 };

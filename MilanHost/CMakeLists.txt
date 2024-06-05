@@ -9,6 +9,27 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Containers/string.hpp
   ${PROJ_FOLDER}/Containers/unordered_map.hpp
   ${PROJ_FOLDER}/Containers/vector.hpp
+  ${PROJ_FOLDER}/Milan/Base.cpp
+  ${PROJ_FOLDER}/Milan/Base.hpp
+  ${PROJ_FOLDER}/Milan/Buffers.cpp
+  ${PROJ_FOLDER}/Milan/Buffers.hpp
+  ${PROJ_FOLDER}/Milan/Canvas.cpp
+  ${PROJ_FOLDER}/Milan/Canvas.hpp
+  ${PROJ_FOLDER}/Milan/Hooks.cpp
+  ${PROJ_FOLDER}/Milan/Hooks.hpp
+  ${PROJ_FOLDER}/Milan/Intercept.cpp
+  ${PROJ_FOLDER}/Milan/Intercept.hpp
+  ${PROJ_FOLDER}/Milan/Logger.cpp
+  ${PROJ_FOLDER}/Milan/Logger.hpp
+  ${PROJ_FOLDER}/Milan/Misc.cpp
+  ${PROJ_FOLDER}/Milan/Misc.hpp
+  ${PROJ_FOLDER}/Milan/MPProfile.cpp
+  ${PROJ_FOLDER}/Milan/MPProfile.hpp
+  ${PROJ_FOLDER}/Milan/NetProfDecls.hpp
+  ${PROJ_FOLDER}/Milan/NetProfExtractors.asm
+  ${PROJ_FOLDER}/Milan/NetProfHandlers.cpp
+  ${PROJ_FOLDER}/Milan/Streams.cpp
+  ${PROJ_FOLDER}/Milan/Streams.hpp
   ${PROJ_FOLDER}/Proxies/Core.hpp
   ${PROJ_FOLDER}/Proxies/Engine.hpp
   ${PROJ_FOLDER}/Proxies/SFXGame.hpp
@@ -24,29 +45,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Systems/Profilers.hpp
   ${PROJ_FOLDER}/Systems/State.cpp
   ${PROJ_FOLDER}/Systems/State.hpp
-  ${PROJ_FOLDER}/Base.cpp
-  ${PROJ_FOLDER}/Base.hpp
-  ${PROJ_FOLDER}/Buffers.cpp
-  ${PROJ_FOLDER}/Buffers.hpp
-  ${PROJ_FOLDER}/Canvas.cpp
-  ${PROJ_FOLDER}/Canvas.hpp
   ${PROJ_FOLDER}/Entry.cpp
   ${PROJ_FOLDER}/Entry.hpp
-  ${PROJ_FOLDER}/Hooks.cpp
-  ${PROJ_FOLDER}/Hooks.hpp
-  ${PROJ_FOLDER}/Intercept.cpp
-  ${PROJ_FOLDER}/Intercept.hpp
-  ${PROJ_FOLDER}/Logger.cpp
-  ${PROJ_FOLDER}/Logger.hpp
-  ${PROJ_FOLDER}/Misc.cpp
-  ${PROJ_FOLDER}/Misc.hpp
-  ${PROJ_FOLDER}/MPProfile.cpp
-  ${PROJ_FOLDER}/MPProfile.hpp
-  ${PROJ_FOLDER}/NetProf.asm
-  ${PROJ_FOLDER}/NetProf.cpp
-  ${PROJ_FOLDER}/NetProf.hpp
-  ${PROJ_FOLDER}/Streams.cpp
-  ${PROJ_FOLDER}/Streams.hpp
 )
 
 set (PROJ_LINKS

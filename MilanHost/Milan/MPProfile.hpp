@@ -1,5 +1,5 @@
 /**
- * @file        MilanHost/MPProfile.hpp
+ * @file        MilanHost/Milan/MPProfile.hpp
  * @brief       Handling of the multiplayer player profile.
  */
 
@@ -7,8 +7,8 @@
 
 #include <LESDK/Headers.hpp>
 
-#include "Base.hpp"
-#include "Streams.hpp"
+#include "Milan/Base.hpp"
+#include "Milan/Streams.hpp"
 
 
 enum EProfileSettingType : char

@@ -2,14 +2,13 @@
 #include <fstream>
 #include <unordered_set>
 
-//#include <LESDK/Headers.hpp>
 #include <LESDK/Init.hpp>
 #include <SPI.h>
 
-#include "Base.hpp"
 #include "Entry.hpp"
-#include "Logger.hpp"
-#include "Misc.hpp"
+#include "Milan/Base.hpp"
+#include "Milan/Logger.hpp"
+#include "Milan/Misc.hpp"
 #include "Proxies/Core.hpp"
 #include "Proxies/Engine.hpp"
 #include "Proxies/SFXGame.hpp"

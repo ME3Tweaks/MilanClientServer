@@ -1,14 +1,12 @@
-#include <LESDK/Init.hpp>
 #include <LESDK/Headers.hpp>
-
 #include <milan_ecsm_ffi.h>
 
-#include "Base.hpp"
-#include "Hooks.hpp"
-#include "Intercept.hpp"
-#include "Misc.hpp"
-#include "MPProfile.hpp"
-#include "Streams.hpp"
+#include "Milan/Base.hpp"
+#include "Milan/Hooks.hpp"
+#include "Milan/Intercept.hpp"
+#include "Milan/Misc.hpp"
+#include "Milan/MPProfile.hpp"
+#include "Milan/Streams.hpp"
 #include "Systems/Console.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/State.hpp"
