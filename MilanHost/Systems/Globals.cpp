@@ -62,6 +62,10 @@ namespace Milan::Globals
         IDXGISwapChain_Present_orig = (t_IDXGISwapChain_Present*)Context.InstallHook("IDXGISwapChain::Present", IDXGISwapChain_Present_target, IDXGISwapChain_Present_hook);
         MILAN_DEBUGW(L"IDXGISwapChain::Present hooked: %p -> %p", (void*)IDXGISwapChain_Present_target, (void*)IDXGISwapChain_Present_orig);
 
+        t_CreateWindowExW* CreateWindowExW_target = CreateWindowExW;
+        CreateWindowExW_orig = (t_CreateWindowExW*)Context.InstallHook("CreateWindowExW", CreateWindowExW_target, CreateWindowExW_hook);
+        MILAN_DEBUGW(L"CreateWindowExW hooked: %p -> %p", (void*)CreateWindowExW_target, (void*)CreateWindowExW_orig);
+
         WndProc_orig = Context.ResolveTyped<tWndProc>(GLOBAL_WNDPROC_RVA);
         MILAN_DEBUGW(L"WndProc found: %p", (void*)WndProc_orig);
 

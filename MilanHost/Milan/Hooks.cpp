@@ -17,6 +17,16 @@ bool gb_logProcessEvent = false;
 bool gb_logProcessInternal = false;
 
 
+t_CreateWindowExW* CreateWindowExW_orig = nullptr;
+HWND __stdcall CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle,
+    int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
+{
+    HWND const Window = (*CreateWindowExW_orig)(dwExStyle, lpClassName, lpWindowName, dwStyle,
+        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    MILAN_TRACEW(L"CreateWindowExW: dwExStyle=%d, lpWindowName=%s  =>  %p", dwExStyle, lpWindowName, (void*)Window);
+    return Window;
+}
+
 tWndProc* WndProc_orig = nullptr;
 LRESULT CALLBACK WndProc_hook(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
 {
@@ -258,11 +268,11 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
 
     if (s_skipMainMenu)
     {
-        static bool s_checkMainMenuSplash = false;
-        if (!s_checkMainMenuSplash && Stack->Node->StaticFullName()
+        static bool s_checkMainMenuSplash = true;
+        if (s_checkMainMenuSplash && Stack->Node->StaticFullName()
             .Equals(L"Function SFXGame.BioSeqAct_ShouldShowSplashSequence.Activated"))
         {
-            s_checkMainMenuSplash = true;
+            s_checkMainMenuSplash = false;
 
             MILAN_TRACEW(L"BioSeqAct_ShouldShowSplashSequence activated, overriding");
             auto* const Action = Context->CastDirect<UBioSeqAct_ShouldShowSplashSequence>();
@@ -272,17 +282,37 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
             Action->OutputLinks(1).bHasImpulse = TRUE;
         }
 
-        static bool s_checkMainMenuLobbyFlow = false;
-        if (!s_checkMainMenuLobbyFlow && Stack->Node->StaticFullName()
+        static bool s_checkMainMenuLobbyFlow = true;
+        if (s_checkMainMenuLobbyFlow && Stack->Node->StaticFullName()
             .Equals(L"Function SFXGameContentLiveKismet.BioSeqAct_ShowMainMenu.Activated"))
         {
-            s_checkMainMenuLobbyFlow = true;
+            s_checkMainMenuLobbyFlow = false;
             MILAN_TRACEW(L"BioSeqAct_ShowMainMenu activated");
 
             for (TypedObjectIterator<USFXGUI_MainMenu_RTT, false, false> Iter{}; Iter; ++Iter)
             {
                 MILAN_TRACEW(L"  %s: starting mp flow", *(*Iter)->StaticName());
                 (*Iter)->eventStartMultiplayerFlow();
+            }
+        }
+
+        // Kinda tacked on, but this is a fairly safe place for this logic...
+
+        static bool s_updateWindow = true;
+        if (s_updateWindow && !s_checkMainMenuSplash && !s_checkMainMenuLobbyFlow)
+        {
+            s_updateWindow = false;
+            auto const Title = FString::Printf(L"Mass Effect 3 (Project Milan - %d) PID = %d",
+                GetGameInstanceOrdinal(), ::GetCurrentProcessId());
+            for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
+            {
+                auto const Viewport = (*Iter)->Viewport;
+                auto const Window = *reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
+                auto* const Name = reinterpret_cast<FString*>(reinterpret_cast<unsigned char*>(Viewport) + 0xD4);
+                MILAN_TRACEW(L"Updating title for %s, FViewport* = %p, HWND = %p, Name = %s",
+                    *(*Iter)->StaticName(), Viewport, (void*)Window, Name->Chars());
+                *Name = Title;
+                DefWindowProcW(Window, WM_SETTEXT, 0, (LPARAM)Name->Chars());
             }
         }
     }

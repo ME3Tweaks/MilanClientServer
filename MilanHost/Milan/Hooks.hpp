@@ -64,6 +64,13 @@
 // ! Miscellaneous functions / methods.
 // ========================================
 
+
+
+using t_CreateWindowExW = HWND __stdcall(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+extern t_CreateWindowExW* CreateWindowExW_orig;
+
+HWND __stdcall CreateWindowExW_hook(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
+
 using tWndProc = LRESULT __stdcall(HWND, UINT, WPARAM, LPARAM);
 extern tWndProc* WndProc_orig;
 
@@ -78,6 +85,7 @@ using t_BioRequestExit = void(UBOOL bForce, INT ExitCode, INT Unused);
 extern t_BioRequestExit* BioRequestExit_orig;
 
 void BioRequestExit_hook(UBOOL bForce, INT ExitCode, INT Unused);
+
 
 // ! UCanvas methods.
 // ========================================
