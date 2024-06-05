@@ -530,3 +530,7 @@ public:
  * Needs to be declared here first so that hooks can call it.
  */
 extern void SingleDetachImpl();
+
+
+#define _MILAN_VARCAT(a, b) a##b
+#define MILAN_VARCAT(a, b) _MILAN_VARCAT(a, b)

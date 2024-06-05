@@ -86,13 +86,3 @@ void MlnSeamlessTravelTick1_Handler(FURL* const PendingUrl)
     TraceUrl(L"SeamlessTravelTick / world", WorldUrl);
     TraceUrl(L"SeamlessTravelTick / pending", PendingUrl);
 }
-
-void MlnUGameEngineTick1_Handler()
-{
-    //MILAN_TRACEW(L"NETPROF (UGameEngine::Tick): %d", 1);
-}
-
-void MlnUGameEngineLoadMap1_Handler(FURL* const Url)
-{
-    TraceUrl(L"UGameEngine::LoadMap", Url);
-}

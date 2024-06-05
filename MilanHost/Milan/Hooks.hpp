@@ -29,6 +29,12 @@
 #define GLOBAL_UGAMEENGINE_EXEC_PHOOK \
     ::LESDK::Address::FromPostHook(/* 40 55 56 57 41 */ "54 41 55 41 56 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC 40 0A 00 00")
 
+#define GLOBAL_UGAMEENGINE_LOADMAP_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 8B C4 4C 89 */ "48 ?? 4C 89 40 ?? 48 89 50 ?? 48 89 48 ?? 55 53 56 57 41 54 41 55 41 56 41 57 48 8D A8 F8 FE FF FF 48 81 EC C8 01 00 00 48 C7 45 28 FE FF FF FF")
+
+#define GLOBAL_UGAMEENGINE_TICK_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 8B C4 55 56 */ "57 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 20 04 00 00")
+
 #define GLOBAL_UOBJECT_PROCESSDELEGATE_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 89 5C 24 ?? */ "48 89 54 24 ?? 55 57 41 54 41 56 41 57 48 83 EC 20 49 63 40 08")
 
@@ -115,6 +121,16 @@ using t_UGameEngine_Exec = UBOOL(UGameEngine*, WCHAR const*, void*);
 extern t_UGameEngine_Exec* UGameEngine_Exec_orig;
 
 UBOOL UGameEngine_Exec_hook(UGameEngine* Context, WCHAR const* Command, void* Ar);
+
+using t_UGameEngine_LoadMap = UBOOL(UGameEngine*, FURL*, UPendingLevel*, FString*);
+extern t_UGameEngine_LoadMap* UGameEngine_LoadMap_orig;
+
+UBOOL UGameEngine_LoadMap_hook(UGameEngine* Context, FURL* Url, UPendingLevel* Level, FString* Error);
+
+using t_UGameEngine_Tick = void(UGameEngine*, float);
+extern t_UGameEngine_Tick* UGameEngine_Tick_orig;
+
+void UGameEngine_Tick_hook(UGameEngine* Context, float Delta);
 
 
 // ! UObject methods.

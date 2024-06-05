@@ -9,29 +9,22 @@
 #include "Proxies/Core.hpp"
 
 
-// ! Declarations for assembly stubs.
-// ========================================
-
-extern "C" void MlnUChannelSendBunch1();
-extern "C" void MlnUChannelSendBunch2();
-extern "C" void MlnUActorChannelReplicateActor1();
-extern "C" void MlnUActorChannelReplicateActor2();
-extern "C" void MlnUActorChannelReplicateActor3();
-extern "C" void MlnInternalReplicateFunction1();
-extern "C" void MlnSeamlessTravelTick1();
-extern "C" void MlnUGameEngineTick1();
-extern "C" void MlnUGameEngineLoadMap1();
+/**
+ * @def         MILAN_DECLARE_EXTRACTOR(name, ...)
+ * @brief       Declares two extern functions: an extractor defined in assembly, and a handler defined in .cpp code.
+ */
+#define MILAN_DECLARE_EXTRACTOR(name, ...) \
+    extern "C" void name(); \
+    extern "C" void MILAN_VARCAT(name, _Handler)(__VA_ARGS__)
 
 
-// ! Internal handlers called by asm code.
-// ========================================
+MILAN_DECLARE_EXTRACTOR(MlnUChannelSendBunch1, FOutBunch* Bunch);
+MILAN_DECLARE_EXTRACTOR(MlnUChannelSendBunch2, FOutBunch* Bunch);
+MILAN_DECLARE_EXTRACTOR(MlnUActorChannelReplicateActor1, AActor* Actor);
+MILAN_DECLARE_EXTRACTOR(MlnUActorChannelReplicateActor2, FOutBunch* Bunch);
+MILAN_DECLARE_EXTRACTOR(MlnUActorChannelReplicateActor3, UProperty* Property, FOutBunch* Bunch);
+MILAN_DECLARE_EXTRACTOR(MlnInternalReplicateFunction1, UActorChannel* Channel, FOutBunch* Bunch, UFunction* Function);
+MILAN_DECLARE_EXTRACTOR(MlnSeamlessTravelTick1, FURL* PendingUrl);
 
-extern "C" void MlnUChannelSendBunch1_Handler(FOutBunch* Bunch);
-extern "C" void MlnUChannelSendBunch2_Handler(FOutBunch* Bunch);
-extern "C" void MlnUActorChannelReplicateActor1_Handler(AActor* Actor);
-extern "C" void MlnUActorChannelReplicateActor2_Handler(FOutBunch* Bunch);
-extern "C" void MlnUActorChannelReplicateActor3_Handler(UProperty* Property, FOutBunch* Bunch);
-extern "C" void MlnInternalReplicateFunction1_Handler(UActorChannel* Channel, FOutBunch* Bunch, UFunction* Function);
-extern "C" void MlnSeamlessTravelTick1_Handler(FURL* PendingUrl);
-extern "C" void MlnUGameEngineTick1_Handler();
-extern "C" void MlnUGameEngineLoadMap1_Handler(FURL* Url);
+
+#undef MILAN_DECLARE_EXTRACTOR

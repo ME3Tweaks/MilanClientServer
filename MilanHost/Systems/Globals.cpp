@@ -82,6 +82,14 @@ namespace Milan::Globals
         UGameEngine_Exec_orig = (t_UGameEngine_Exec*)Context.InstallHook("UGameEngine::Exec", UGameEngine_Exec_target, UGameEngine_Exec_hook);
         MILAN_DEBUGW(L"UGameEngine::Exec hooked: %p -> %p", (void*)UGameEngine_Exec_target, (void*)UGameEngine_Exec_orig);
 
+        t_UGameEngine_LoadMap* UGameEngine_LoadMap_target = Context.ResolveTyped<t_UGameEngine_LoadMap>(GLOBAL_UGAMEENGINE_LOADMAP_PHOOK);
+        UGameEngine_LoadMap_orig = (t_UGameEngine_LoadMap*)Context.InstallHook("UGameEngine::LoadMap", UGameEngine_LoadMap_target, UGameEngine_LoadMap_hook);
+        MILAN_DEBUGW(L"UGameEngine::LoadMap hooked: %p -> %p", (void*)UGameEngine_LoadMap_target, (void*)UGameEngine_LoadMap_orig);
+
+        t_UGameEngine_Tick* UGameEngine_Tick_target = Context.ResolveTyped<t_UGameEngine_Tick>(GLOBAL_UGAMEENGINE_TICK_PHOOK);
+        UGameEngine_Tick_orig = (t_UGameEngine_Tick*)Context.InstallHook("UGameEngine::Tick", UGameEngine_Tick_target, UGameEngine_Tick_hook);
+        MILAN_DEBUGW(L"UGameEngine::Tick hooked: %p -> %p", (void*)UGameEngine_Tick_target, (void*)UGameEngine_Tick_orig);
+
         t_UObject_CallFunction* UObject_CallFunction_target = Context.ResolveTyped<t_UObject_CallFunction>(BUILTIN_CALLFUNCTION_PHOOK);
         UObject_CallFunction_orig = (t_UObject_CallFunction*)Context.InstallHook("UObject::CallFunction", UObject_CallFunction_target, UObject_CallFunction_hook);
         MILAN_DEBUGW(L"UObject::CallFunction hooked: %p -> %p", (void*)UObject_CallFunction_target, (void*)UObject_CallFunction_orig);
@@ -144,8 +152,6 @@ namespace Milan::Globals
         ::MiddleIntercept::Install(L"UActorChannel::ReplicateActor-3", 0x48D43D, MlnUActorChannelReplicateActor3, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"InternalReplicateFunction", 0x709CFC, MlnInternalReplicateFunction1, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"SeamlessTravelTick", 0x8CA57B, MlnSeamlessTravelTick1, LocalCaveIndexer);
-        ::MiddleIntercept::Install(L"UGameEngine::LoadMap", 0xB930E0, MlnUGameEngineLoadMap1, LocalCaveIndexer);
-        ::MiddleIntercept::Install(L"UGameEngine::Tick", 0x55031A, MlnUGameEngineTick1, LocalCaveIndexer);
 
 #endif
 

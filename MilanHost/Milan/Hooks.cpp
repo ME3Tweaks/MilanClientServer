@@ -104,6 +104,22 @@ UBOOL UGameEngine_Exec_hook(UGameEngine* const Context, WCHAR const* const Comma
     return (*UGameEngine_Exec_orig)(Context, Command, Output);
 }
 
+t_UGameEngine_LoadMap* UGameEngine_LoadMap_orig = nullptr;
+UBOOL UGameEngine_LoadMap_hook(UGameEngine* const Context, FURL* const Url, UPendingLevel* const Level, FString* const Error)
+{
+    MILAN_TRACEW(L"NETPROF (UGameEngine::LoadMap): Url = %s...", *Url->Map);
+    auto const Result = (*UGameEngine_LoadMap_orig)(Context, Url, Level, Error);
+    if (!Result) MILAN_ERRORW(L"UGameEngine::LoadMap failed: %s", *(*Error));
+    return Result;
+}
+
+t_UGameEngine_Tick* UGameEngine_Tick_orig = nullptr;
+void UGameEngine_Tick_hook(UGameEngine* const Context, float const Delta)
+{
+    //MILAN_TRACEW(L"NETPROF (UGameEngine::Tick): Delta=%f", Delta);
+    (*UGameEngine_Tick_orig)(Context, Delta);
+}
+
 
 // ! UObject methods.
 // ========================================

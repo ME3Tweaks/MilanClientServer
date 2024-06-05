@@ -56,7 +56,6 @@ UActorChannelReplicateActor3_prop       DQ ?
 InternalReplicateFunction1_chan         DQ ?
 InternalReplicateFunction1_bunch        DQ ?
 InternalReplicateFunction1_func         DQ ?
-UGameEngineLoadMap1_url                 DQ ?
 
 
 ;; FUNCTIONS
@@ -180,34 +179,5 @@ MlnSeamlessTravelTick1 proc
     restoreall
     ret
 MlnSeamlessTravelTick1 endp
-
-externdef MlnUGameEngineTick1_Handler:proc
-MlnUGameEngineTick1 proc
-    storeall
-    mov rbp, rsp
-    initstack 20h
-
-    call MlnUGameEngineTick1_Handler
-
-    mov rsp, rbp
-    restoreall
-    ret
-MlnUGameEngineTick1 endp
-
-externdef MlnUGameEngineLoadMap1_Handler:proc
-MlnUGameEngineLoadMap1 proc
-    mov UGameEngineLoadMap1_url, rdx  ; save FURL pointer from RDX
-
-    storeall
-    mov rbp, rsp
-    initstack 20h
-
-    mov rcx, UGameEngineLoadMap1_url
-    call MlnUGameEngineLoadMap1_Handler
-
-    mov rsp, rbp
-    restoreall
-    ret
-MlnUGameEngineLoadMap1 endp
 
 end
