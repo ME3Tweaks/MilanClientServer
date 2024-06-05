@@ -1,24 +1,10 @@
 ;; MACROS
 
-alignstack macro
-    mov r8, 16
-    xor rdx, rdx
-    mov rax, rsp
-    idiv r8             ; write remainder of 'rax / r8' (i.e. 'rsp / 16') division into rdx
-
-    test rdx, rdx       ; set zf if rdx is zero, i.e. if rsp was 16-byte aligned
-
-    mov r9, 0
-    mov r8, 8           ; by default, assign number of bytes to subtract from rsp to 8
-    cmovz r8, r9        ; if zf was set, reset number of bytes to subtract from rsp to 0
-    sub rsp, r8
-
-    xor rax, rax
-    xor rcx, rcx        ; zero out all 'argument' registers we just used
-    xor rdx, rdx
-    xor r8, r8
-    xor r9, r9
+initstack macro space
+    sub rsp, space
+    and rsp, -0Fh
 endm
+
 
 storeall macro
     pushfq
@@ -83,8 +69,7 @@ MlnUChannelSendBunch1 proc
 
     storeall
     mov rbp, rsp
-    sub rsp, 20h
-    alignstack
+    initstack 20h
 
     mov rcx, UChannelSendBunch1_bunch
     call MlnUChannelSendBunch1_Handler
@@ -100,8 +85,7 @@ MlnUChannelSendBunch2 proc
 
     storeall
     mov rbp, rsp
-    sub rsp, 20h
-    alignstack
+    initstack 20h
 
     mov rcx, UChannelSendBunch2_bunch
     call MlnUChannelSendBunch2_Handler
@@ -117,8 +101,7 @@ MlnUActorChannelReplicateActor1 proc
 
     storeall
     mov rbp, rsp
-    sub rsp, 20h
-    alignstack
+    initstack 20h
 
     mov rcx, UActorChannelReplicateActor1_actor
     call MlnUActorChannelReplicateActor1_Handler
@@ -135,8 +118,7 @@ MlnUActorChannelReplicateActor2 proc
 
     storeall
     mov rbp, rsp
-    sub rsp, 20h
-    alignstack
+    initstack 20h
 
     mov rcx, UActorChannelReplicateActor2_bunch
     call MlnUActorChannelReplicateActor2_Handler
@@ -154,8 +136,7 @@ MlnUActorChannelReplicateActor3 proc
 
     storeall
     mov rbp, rsp
-    sub rsp, 20h
-    alignstack
+    initstack 20h
 
     mov rdx, UActorChannelReplicateActor3_bunch
     mov rcx, UActorChannelReplicateActor3_prop
@@ -174,8 +155,7 @@ MlnInternalReplicateFunction1 proc
 
     storeall
     mov rbp, rsp
-    sub rsp, 20h
-    alignstack
+    initstack 20h
 
     mov r8, InternalReplicateFunction1_func
     mov rdx, InternalReplicateFunction1_bunch
@@ -191,8 +171,7 @@ externdef MlnSeamlessTravelTick1_Handler:proc
 MlnSeamlessTravelTick1 proc
     storeall
     mov rbp, rsp
-    sub rsp, 20h
-    alignstack
+    initstack 20h
     
     lea rcx, [r12 + 4h]  ; start of FURL in SeamlessTravel
     call MlnSeamlessTravelTick1_Handler
@@ -206,8 +185,7 @@ externdef MlnUGameEngineTick1_Handler:proc
 MlnUGameEngineTick1 proc
     storeall
     mov rbp, rsp
-    sub rsp, 20h
-    alignstack
+    initstack 20h
 
     call MlnUGameEngineTick1_Handler
 
@@ -222,8 +200,7 @@ MlnUGameEngineLoadMap1 proc
 
     storeall
     mov rbp, rsp
-    sub rsp, 20h
-    alignstack
+    initstack 20h
 
     mov rcx, UGameEngineLoadMap1_url
     call MlnUGameEngineLoadMap1_Handler
