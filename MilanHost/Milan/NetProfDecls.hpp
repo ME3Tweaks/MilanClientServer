@@ -6,6 +6,8 @@
 #pragma once
 
 #include <LESDK/Headers.hpp>
+
+#include "Milan/Base.hpp"
 #include "Proxies/Core.hpp"
 
 

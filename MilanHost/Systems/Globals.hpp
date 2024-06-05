@@ -15,6 +15,15 @@ namespace Milan::Allocator
 
 namespace Milan::Globals
 {
+    // ! Global subsystem functions.
+    // ========================================
+
     void Initialize(::LESDK::Initializer& Context);
     void Terminate();
+
+
+    // ! Public interface.
+    // ========================================
+
+    wchar_t const* GetCmdString();
 }

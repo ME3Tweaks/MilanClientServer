@@ -4,6 +4,7 @@
 #include "Milan/Intercept.hpp"
 #include "Milan/Logger.hpp"
 #include "Systems/Console.hpp"
+#include "Systems/Globals.hpp"
 #include "Systems/Imgui.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/Profilers.hpp"
@@ -218,6 +219,8 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
 t_UObject_ProcessInternal* UObject_ProcessInternal_orig = nullptr;
 void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, void* const Result)
 {
+    bool bCallOriginal = true;
+
 #ifndef _FINAL_RELEASE
     if (gb_logProcessInternal)
     {
@@ -233,28 +236,6 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
 #endif
 
-//#ifndef _FINAL_RELEASE
-//    auto const& FullName = Stack->Node->StaticFullName();
-//    if (FullName.Equals(L"Function SFXGameMPContent.SFXPRIMP.SetPower"))
-//    {
-//        struct USFXPRIMP_SetPower_Parms
-//        {
-//            INT         PowerIndex;             // 0x0000 (0x0004)
-//            SFXName     PowerClassPath;         // 0x0004 (0x0008)
-//            INT         EvolvedChoices[6];      // 0x000C (0x0018)
-//            INT         CurrentRank;            // 0x0024 (0x0004)
-//            UBOOL       ReturnValue;            // 0x0028
-//        };
-//
-//        auto const TParms = (USFXPRIMP_SetPower_Parms*)Stack->Locals;
-//
-//        MILAN_DEBUGW(L"intercepted SFXPRIMP.SetPower:");
-//        MILAN_DEBUGW(L"  power index = %d, power class path = %s", TParms->PowerIndex, *TParms->PowerClassPath.ToString());
-//    }
-//#endif
-
-    bool bCallOriginal = true;
-
     if (!::Milan::State::On_UObject_ProcessInternal_Pre(Context, Stack, Result))
         bCallOriginal = false;
 
@@ -263,6 +244,49 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
         (*UObject_ProcessInternal_orig)(Context, Stack, Result);
         ::Milan::State::On_UObject_ProcessInternal_Post(Context, Stack, Result);
     }
+
+
+#ifndef _FINAL_RELEASE
+    static bool s_skipMainMenuChecked = false;
+    static bool s_skipMainMenu = false;
+
+    if (!s_skipMainMenuChecked)
+    {
+        s_skipMainMenuChecked = true;
+        s_skipMainMenu = ::wcsstr(::Milan::Globals::GetCmdString(), L"-skiptomp") != nullptr;
+    }
+
+    if (s_skipMainMenu)
+    {
+        static bool s_checkMainMenuSplash = false;
+        if (!s_checkMainMenuSplash && Stack->Node->StaticFullName()
+            .Equals(L"Function SFXGame.BioSeqAct_ShouldShowSplashSequence.Activated"))
+        {
+            s_checkMainMenuSplash = true;
+
+            MILAN_TRACEW(L"BioSeqAct_ShouldShowSplashSequence activated, overriding");
+            auto* const Action = Context->CastDirect<UBioSeqAct_ShouldShowSplashSequence>();
+
+            Action->GetWorldInfo()->Game->ShowSplashScreen = FALSE;
+            Action->OutputLinks(0).bHasImpulse = FALSE;
+            Action->OutputLinks(1).bHasImpulse = TRUE;
+        }
+
+        static bool s_checkMainMenuLobbyFlow = false;
+        if (!s_checkMainMenuLobbyFlow && Stack->Node->StaticFullName()
+            .Equals(L"Function SFXGameContentLiveKismet.BioSeqAct_ShowMainMenu.Activated"))
+        {
+            s_checkMainMenuLobbyFlow = true;
+            MILAN_TRACEW(L"BioSeqAct_ShowMainMenu activated");
+
+            for (TypedObjectIterator<USFXGUI_MainMenu_RTT> Iter{}; Iter; ++Iter)
+            {
+                MILAN_TRACEW(L"  %s: starting mp flow", *(*Iter)->StaticName());
+                (*Iter)->eventStartMultiplayerFlow();
+            }
+        }
+    }
+#endif
 }
 
 t_UObject_SkipFunction* UObject_SkipFunction = nullptr;

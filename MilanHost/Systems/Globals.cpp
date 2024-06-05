@@ -166,4 +166,16 @@ namespace Milan::Globals
     {
         MILAN_INFOW(L"globals system terminating");
     }
+
+
+    // ! Public interface.
+    // ========================================
+
+    wchar_t const* GetCmdString()
+    {
+        static wchar_t const* String = nullptr;
+        if (String == nullptr) String = ::GetCommandLineW();
+        return String;
+    }
+
 }
