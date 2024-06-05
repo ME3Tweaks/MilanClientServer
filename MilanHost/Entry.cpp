@@ -1,3 +1,4 @@
+#include <array>
 #include <atomic>
 #include <fstream>
 #include <unordered_set>
@@ -46,7 +47,7 @@ SPI_IMPLEMENT_ATTACH
     // ----------------------------------------
 
     RegisterNonshipCommands();
-
+    SpawnLocalClients();
 
     MILAN_INFOW(L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
     MILAN_INFOW(L"ordinal instance = %d", ::GetGameInstanceOrdinal());
@@ -192,6 +193,82 @@ void RegisterNonshipCommands()
             MILAN_INFOW(L"dumping replist calculation addresses - done in %.3f ms.", Timer.GetMilliseconds());
             return true;
         });
+
+#endif
+}
+
+void SpawnLocalClients()
+{
+#ifndef _FINAL_RELEASE
+
+    int const Instance = ::GetGameInstanceOrdinal();
+
+    FString const Command{ ::Milan::Globals::GetCmdString() };
+    FString const Arguments{ ::Milan::Globals::GetCmdArgs() };
+
+    if (Instance == 0)
+    {
+        int Count = 0;
+
+        if (Arguments.Contains(L"-spawnone")) Count = 1;
+        else if (Arguments.Contains(L"-spawntwo")) Count = 2;
+        else if (Arguments.Contains(L"-spawnthree")) Count = 3;
+
+        if (Count == 0)
+            return;
+
+        std::array<wchar_t, 512> WorkingDirectory{ L'\0' };
+        DWORD const WorkingDirectoryReturn = ::GetCurrentDirectoryW((DWORD)WorkingDirectory.size() - 1, WorkingDirectory.data());
+        MILAN_CHECKW(WorkingDirectoryReturn > 0, L"failed to get cwd, last error = %d", ::GetLastError());
+        MILAN_UNUSED(WorkingDirectoryReturn);
+
+        std::array<wchar_t, 512> ExecutableFilenameBuffer{ L'\0' };
+        std::copy_n(Command.Chars(), Command.Length() - Arguments.Length(), ExecutableFilenameBuffer.begin());
+
+        wchar_t* EndCursor = ExecutableFilenameBuffer.data() + ::wcslen(ExecutableFilenameBuffer.data());
+        while (EndCursor != ExecutableFilenameBuffer.data() && (*EndCursor == L'\"' || *EndCursor == L'\0'))
+        {
+            *EndCursor = L'\0';
+            EndCursor--;
+        }
+
+        wchar_t* ExecutableFilename = ExecutableFilenameBuffer.data();
+        while (ExecutableFilename != EndCursor && *ExecutableFilename != L'\0' && (*ExecutableFilename == L'\"'))
+            ExecutableFilename++;
+
+        MILAN_DEBUGW(L"spawning %d additional client(s)", Count);
+        MILAN_TRACEW(L"command arguments: %s", *Arguments);
+        MILAN_TRACEW(L"working directory: %s", WorkingDirectory.data());
+        MILAN_TRACEW(L"executable filename: %s", ExecutableFilename);
+
+        for (int i = 0; i < Count; ++i)
+        {
+            STARTUPINFOW StartupInfo{};
+            PROCESS_INFORMATION ProcessInfo{};
+
+            std::memset(&StartupInfo, 0, sizeof StartupInfo);
+            std::memset(&ProcessInfo, 0, sizeof ProcessInfo);
+            StartupInfo.cb = sizeof StartupInfo;
+
+            auto const Ret = CreateProcessW(
+                ExecutableFilename, (wchar_t*)*Arguments,
+                nullptr, nullptr, false, 0u, nullptr,
+                WorkingDirectory.data(), &StartupInfo, &ProcessInfo);
+
+            if (Ret != 0)
+            {
+                MILAN_TRACEW(L"spawned additional client %d / %d, pid = %d", i + 1, Count, ProcessInfo.dwProcessId);
+                ::CloseHandle(ProcessInfo.hProcess);
+                ::CloseHandle(ProcessInfo.hThread);
+            }
+            else
+            {
+                MILAN_ERRORW(L"failed to spawn additional client %d / %d", i + 1, Count);
+                MILAN_ERRORW(L"  last error code = %d", ::GetLastError());
+                break;
+            }
+        }
+    }
 
 #endif
 }

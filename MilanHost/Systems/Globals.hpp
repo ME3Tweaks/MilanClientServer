@@ -26,4 +26,5 @@ namespace Milan::Globals
     // ========================================
 
     wchar_t const* GetCmdString();
+    wchar_t const* GetCmdArgs();
 }

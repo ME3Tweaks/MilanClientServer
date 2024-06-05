@@ -182,4 +182,33 @@ namespace Milan::Globals
         return String;
     }
 
+    wchar_t const* GetCmdArgs()
+    {
+        static wchar_t const* String = nullptr;
+        if (String == nullptr)
+        {
+            // Algorithm originates from Wine's implementation.
+            // https://stackoverflow.com/a/36876057
+
+            wchar_t* Args = ::GetCommandLineW();
+            if (*Args == L'"')
+            {
+                ++Args;
+                while (*Args)
+                {
+                    if (*Args++ == L'"')
+                        break;
+                }
+            }
+            else
+            {
+                while (*Args && *Args != L' ' && *Args != L'\t')
+                    ++Args;
+            }
+
+            String = Args;
+        }
+        return String;
+    }
+
 }

@@ -7,4 +7,6 @@
 
 
 extern void SingleDetachImpl();
+
 void RegisterNonshipCommands();
+void SpawnLocalClients();
