@@ -295,25 +295,27 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
                 (*Iter)->eventStartMultiplayerFlow();
             }
         }
+    }
 
-        // Kinda tacked on, but this is a fairly safe place for this logic...
-
-        static bool s_updateWindow = true;
-        if (s_updateWindow && !s_checkMainMenuSplash && !s_checkMainMenuLobbyFlow)
+    static bool s_updateWindow = true;
+    if (s_updateWindow)
+    {
+        for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
         {
+            auto const Viewport = (*Iter)->Viewport;
+            if (Viewport == nullptr)
+                break;
+
+            auto const Window = *reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
+            auto const Name = reinterpret_cast<FString*>(reinterpret_cast<unsigned char*>(Viewport) + 0xD4);
+
+            MILAN_TRACEW(L"Updating title for %s, FViewport* = %p, HWND = %p, Name = %s",
+                *(*Iter)->StaticName(), Viewport, (void*)Window, Name->Chars());
+
+            *Name = FString::Printf(L"Mass Effect 3 (INST = %d) PID = %d", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
+            DefWindowProcW(Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
+
             s_updateWindow = false;
-            auto const Title = FString::Printf(L"Mass Effect 3 (Project Milan - %d) PID = %d",
-                GetGameInstanceOrdinal(), ::GetCurrentProcessId());
-            for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
-            {
-                auto const Viewport = (*Iter)->Viewport;
-                auto const Window = *reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
-                auto* const Name = reinterpret_cast<FString*>(reinterpret_cast<unsigned char*>(Viewport) + 0xD4);
-                MILAN_TRACEW(L"Updating title for %s, FViewport* = %p, HWND = %p, Name = %s",
-                    *(*Iter)->StaticName(), Viewport, (void*)Window, Name->Chars());
-                *Name = Title;
-                DefWindowProcW(Window, WM_SETTEXT, 0, (LPARAM)Name->Chars());
-            }
         }
     }
 #endif
