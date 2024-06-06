@@ -132,6 +132,7 @@ namespace Milan::Globals
         ::MiddleIntercept::Install(L"UActorChannel::ReplicateActor-3", 0x48D43D, MlnUActorChannelReplicateActor3, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"InternalReplicateFunction", 0x709CFC, MlnInternalReplicateFunction1, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"SeamlessTravelTick", 0x8CA57B, MlnSeamlessTravelTick1, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UTcpNetDriverTickDispatch", 0x90CEDA, MlnUTcpNetDriverTickDispatch, LocalCaveIndexer);
 
 #endif
 

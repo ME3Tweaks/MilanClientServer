@@ -86,3 +86,11 @@ void MlnSeamlessTravelTick1_Handler(FURL* const PendingUrl)
     TraceUrl(L"SeamlessTravelTick / world", WorldUrl);
     TraceUrl(L"SeamlessTravelTick / pending", PendingUrl);
 }
+
+void MlnUTcpNetDriverTickDispatch_Handler(UTcpipConnection* const Connection)
+{
+    auto const Address = reinterpret_cast<UTcpipConnection_Proxy*>(Connection)->Address;
+    auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
+    MILAN_TRACEW(L"NETPROF (call to FNetworkNotify::NotifyAcceptedConnection): %s", *Remote);
+    MILAN_UNUSED_2(Address, Remote);
+}

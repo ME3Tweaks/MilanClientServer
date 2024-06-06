@@ -180,4 +180,18 @@ MlnSeamlessTravelTick1 proc
     ret
 MlnSeamlessTravelTick1 endp
 
+externdef MlnUTcpNetDriverTickDispatch_Handler:proc
+MlnUTcpNetDriverTickDispatch proc
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, rdi  ; pointer to the fresh connection
+    call MlnUTcpNetDriverTickDispatch_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUTcpNetDriverTickDispatch endp
+
 end

@@ -9,6 +9,7 @@
 
 #include "Milan/Base.hpp"
 #include "Proxies/Core.hpp"
+#include "Proxies/Engine.hpp"
 
 
 /**
@@ -27,6 +28,7 @@ MILAN_DECLARE_EXTRACTOR(MlnUActorChannelReplicateActor2, FOutBunch* Bunch);
 MILAN_DECLARE_EXTRACTOR(MlnUActorChannelReplicateActor3, UProperty* Property, FOutBunch* Bunch);
 MILAN_DECLARE_EXTRACTOR(MlnInternalReplicateFunction1, UActorChannel* Channel, FOutBunch* Bunch, UFunction* Function);
 MILAN_DECLARE_EXTRACTOR(MlnSeamlessTravelTick1, FURL* PendingUrl);
+MILAN_DECLARE_EXTRACTOR(MlnUTcpNetDriverTickDispatch, UTcpipConnection* Connection);
 
 
 #undef MILAN_DECLARE_EXTRACTOR

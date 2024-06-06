@@ -247,7 +247,8 @@ public:
     FString                         ClientResponse;             // 0x120
     int                             ResponseId;                 // 0x130
     int                             NegotiatedVer;              // 0x134
-    unsigned char                   Unknown_138[0x2c4 - 0x138]; // 0x138
+    FString                         RequestURL;                 // 0x138
+    unsigned char                   Unknown_148[0x2c4 - 0x148]; // 0x148
     int                             InBytes;                    // 0x2C4
     int                             OutBytes;                   // 0x2C8
     int                             InPacketsLost;              // 0x2CC
