@@ -30,16 +30,20 @@ namespace Milan::Allocator
 }
 
 
-#define _INSTALL_HOOK_IMPL(Pattern, String, Function) \
-    auto* const MILAN_VARCAT(Function, _target) = Context.ResolveTyped<MILAN_VARCAT(t_, Function)>(Pattern); \
+#define _INSTALL_HOOK_ADDR(Address, String, Function) \
+    auto* const MILAN_VARCAT(Function, _target) = (MILAN_VARCAT(t_, Function)*)Address; \
     MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHook(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook))); \
     MILAN_DEBUGW(L"" String L" hooked: %p -> %p", (void*)MILAN_VARCAT(Function, _target), (void*)MILAN_VARCAT(Function, _orig))
 
-#define INSTALL_HOOK_ONE(Function, Pattern) \
-    _INSTALL_HOOK_IMPL(Pattern, #Function, Function)
+#define _INSTALL_HOOK_INIT(Pattern, String, Function) \
+    _INSTALL_HOOK_ADDR(Context.ResolveTyped<MILAN_VARCAT(t_, Function)>(Pattern), String, Function)
 
-#define INSTALL_HOOK_TWO(Class, Function, Pattern) \
-    _INSTALL_HOOK_IMPL(Pattern, #Class "::" #Function, MILAN_VARCAT(MILAN_VARCAT(Class, _), Function))
+
+#define INSTALL_HOOK_ONE(Function, Pattern)  _INSTALL_HOOK_INIT(Pattern, #Function, Function)
+#define INSTALL_HOOK_TWO(Class, Function, Pattern)  _INSTALL_HOOK_INIT(Pattern, #Class "::" #Function, MILAN_VARCAT(MILAN_VARCAT(Class, _), Function))
+
+#define INSTALL_HOOK_ONE_ADDR(Function, Address)  _INSTALL_HOOK_ADDR(Address, #Function, Function)
+#define INSTALL_HOOK_TWO_ADDR(Class, Function, Address)  _INSTALL_HOOK_ADDR(Address, #Class "::" #Function, MILAN_VARCAT(MILAN_VARCAT(Class, _), Function))
 
 
 namespace Milan::Globals
@@ -67,22 +71,14 @@ namespace Milan::Globals
         SFXName::GInitMethod = Context.ResolveTyped<SFXName::tInitMethod>(BUILTIN_SFXNAMEINIT_PHOOK);
         MILAN_DEBUGW(L"SFXName::Init found: %p", (void*)SFXName::GInitMethod);
 
-
         INSTALL_HOOK_ONE(BioRequestExit, GLOBAL_BIOREQUESTEXIT_PHOOK);
-
-        t_IDXGISwapChain_Present* IDXGISwapChain_Present_target = ::Milan::Imgui::FindSwapChainPresent();
-        IDXGISwapChain_Present_orig = (t_IDXGISwapChain_Present*)Context.InstallHook("IDXGISwapChain::Present", IDXGISwapChain_Present_target, IDXGISwapChain_Present_hook);
-        MILAN_DEBUGW(L"IDXGISwapChain::Present hooked: %p -> %p", (void*)IDXGISwapChain_Present_target, (void*)IDXGISwapChain_Present_orig);
-
-        t_CreateWindowExW* CreateWindowExW_target = CreateWindowExW;
-        CreateWindowExW_orig = (t_CreateWindowExW*)Context.InstallHook("CreateWindowExW", CreateWindowExW_target, CreateWindowExW_hook);
-        MILAN_DEBUGW(L"CreateWindowExW hooked: %p -> %p", (void*)CreateWindowExW_target, (void*)CreateWindowExW_orig);
-
-        WndProc_orig = Context.ResolveTyped<tWndProc>(GLOBAL_WNDPROC_RVA);
-        MILAN_DEBUGW(L"WndProc found: %p", (void*)WndProc_orig);
+        INSTALL_HOOK_TWO_ADDR(IDXGISwapChain, Present, ::Milan::Imgui::FindSwapChainPresent());
 
         // WndProc is not hooked but replaced using Win32 mechanism,
         // see ::Milan::Imgui::OnSwapChainPresent for more.
+
+        WndProc_orig = Context.ResolveTyped<tWndProc>(GLOBAL_WNDPROC_RVA);
+        MILAN_DEBUGW(L"WndProc found: %p", (void*)WndProc_orig);
 
         UUIString_StringSize = Context.ResolveTyped<t_UUIString_StringSize>(GLOBAL_UUISTRING_STRINGSIZE_PHOOK);
         MILAN_DEBUGW(L"UUIString::StringSize found: %p", (void*)UUIString_StringSize);

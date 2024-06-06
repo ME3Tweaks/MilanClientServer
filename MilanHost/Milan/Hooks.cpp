@@ -17,16 +17,6 @@ bool gb_logProcessEvent = false;
 bool gb_logProcessInternal = false;
 
 
-t_CreateWindowExW* CreateWindowExW_orig = nullptr;
-HWND __stdcall CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle,
-    int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
-{
-    HWND const Window = (*CreateWindowExW_orig)(dwExStyle, lpClassName, lpWindowName, dwStyle,
-        X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    //MILAN_TRACEW(L"CreateWindowExW: dwExStyle=%d, lpWindowName=%s  =>  %p", dwExStyle, lpWindowName, (void*)Window);
-    return Window;
-}
-
 tWndProc* WndProc_orig = nullptr;
 LRESULT CALLBACK WndProc_hook(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
 {
