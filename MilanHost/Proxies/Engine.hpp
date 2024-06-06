@@ -37,6 +37,26 @@ enum ENetRole
     ROLE_Max                        = 4
 };
 
+enum ESocketType
+{
+    SOCKTYPE_Unknown                = 0,
+    SOCKTYPE_Datagram               = 1,
+    SOCKTYPE_Streaming              = 2,
+};
+
+
+class FSocket
+{
+    void*                           Vtable;                     // 0x00
+
+public:
+
+    ESocketType                     Type;                       // 0x08
+    FString                         Description;                // 0x0C
+
+    // ...                          ...                         // ...
+};
+
 
 class UChannel_Proxy : public UObject
 {
@@ -273,6 +293,19 @@ static_assert(offsetof(UNetConnection_Proxy, DownloadInfo) == 0x6000);
 static_assert(offsetof(UNetConnection_Proxy, Children) == 0x6048);
 static_assert(offsetof(UNetConnection_Proxy, Unknown_6060) == 0x6060);
 static_assert(sizeof(UNetConnection_Proxy) == sizeof(UNetConnection));
+
+
+class UTcpipConnection_Proxy : public UNetConnection_Proxy
+{
+public:
+
+    SOCKADDR_IN                     Address;                    // 0x606C
+    unsigned char                   Unknown_607C[24];           // 0x607C
+};
+
+static_assert(offsetof(UTcpipConnection_Proxy, Address) == 0x606C);
+static_assert(offsetof(UTcpipConnection_Proxy, Unknown_607C) == 0x607C);
+static_assert(sizeof(UTcpipConnection_Proxy) == sizeof(UTcpipConnection));
 
 
 class UChildConnection_Proxy : public UNetConnection_Proxy

@@ -23,7 +23,7 @@ HWND __stdcall CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWST
 {
     HWND const Window = (*CreateWindowExW_orig)(dwExStyle, lpClassName, lpWindowName, dwStyle,
         X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
-    MILAN_TRACEW(L"CreateWindowExW: dwExStyle=%d, lpWindowName=%s  =>  %p", dwExStyle, lpWindowName, (void*)Window);
+    //MILAN_TRACEW(L"CreateWindowExW: dwExStyle=%d, lpWindowName=%s  =>  %p", dwExStyle, lpWindowName, (void*)Window);
     return Window;
 }
 
@@ -291,7 +291,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
 
             for (TypedObjectIterator<USFXGUI_MainMenu_RTT, false, false> Iter{}; Iter; ++Iter)
             {
-                MILAN_TRACEW(L"  %s: starting mp flow", *(*Iter)->StaticName());
+                //MILAN_TRACEW(L"  %s: starting mp flow", *(*Iter)->StaticName());
                 (*Iter)->eventStartMultiplayerFlow();
             }
         }
@@ -396,6 +396,27 @@ int UNetConnection_ClientSupportsLevel_hook(UNetConnection* const Context, UObje
     }
 
     return Return;
+}
+
+t_UNetConnection_Close* UNetConnection_Close_orig = nullptr;
+void UNetConnection_Close_hook(UNetConnection* const Context)
+{
+    auto* const Connection = reinterpret_cast<UNetConnection_Proxy*>(Context);
+    if (Connection->Driver != nullptr && Connection->ConnectionState != USOCK_Closed)
+    {
+        FString RemoteAddress{};
+
+        auto* const TcpipConnection = reinterpret_cast<UTcpipConnection_Proxy*>(Context->Cast<UTcpipConnection>());
+        if (TcpipConnection != nullptr)
+        {
+            auto const& Address = TcpipConnection->Address;
+            RemoteAddress = FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
+        }
+
+        MILAN_TRACEW(L"UNetConnection::Close, remote = %s", *RemoteAddress);
+    }
+
+    (*UNetConnection_Close_orig)(Context);
 }
 
 t_UPackageMap_SupportsObject* UPackageMap_SupportsObject_orig = nullptr;
@@ -513,6 +534,54 @@ void SortReplicatedActors_hook(CReplicatedActorRecord** const Actors, int const 
                 Record->SortKey);
         }
     }
+}
+
+t_FSocketWin_SendTo* FSocketWin_SendTo_orig = nullptr;
+UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, SOCKADDR_IN* Destination)
+{
+    UINT const Ret = (*FSocketWin_SendTo_orig)(Context, Data, Count, Sent, Destination);
+    if (Count > 0)
+    {
+        //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Destination->sin_addr), ntohs(Destination->sin_port));
+        //MILAN_TRACEW(L"FSocketWin::SendTo: type=%d, desc=%s, count=%d, sent=%d, dest=%s", Context->Type, *Context->Description, Count, *Sent, *Remote);
+    }
+    return Ret;
+}
+
+t_FSocketWin_Send* FSocketWin_Send_orig = nullptr;
+UINT FSocketWin_Send_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent)
+{
+    UINT const Ret = (*FSocketWin_Send_orig)(Context, Data, Count, Sent);
+    if (Count > 0)
+    {
+        // This remains uncommented because I haven't managed to trigger a call to this function yet...
+        MILAN_WARNW(L"FSocketWin::Send: type=%d, desc=%s, count=%d, sent=%d", Context->Type, *Context->Description, Count, *Sent);
+    }
+    return Ret;
+}
+
+t_FSocketWin_RecvFrom* FSocketWin_RecvFrom_orig = nullptr;
+UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read, SOCKADDR_IN* Source)
+{
+    UINT const Ret = (*FSocketWin_RecvFrom_orig)(Context, Buffer, Max, Read, Source);
+    if (*Read > 0)
+    {
+        //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Source->sin_addr), ntohs(Source->sin_port));
+        //MILAN_TRACEW(L"FSocketWin::RecvFrom: type=%d, desc=%s, read=%d, source=%s", Context->Type, *Context->Description, *Read, *Remote);
+    }
+    return Ret;
+}
+
+t_FSocketWin_Recv* FSocketWin_Recv_orig = nullptr;
+UINT FSocketWin_Recv_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read)
+{
+    UINT const Ret = (*FSocketWin_Recv_orig)(Context, Buffer, Max, Read);
+    if (*Read > 0)
+    {
+        // This remains uncommented because I haven't managed to trigger a call to this function yet...
+        MILAN_WARNW(L"FSocketWin::Recv: type=%d, desc=%s, read=%d", Context->Type, *Context->Description, *Read);
+    }
+    return Ret;
 }
 
 #endif

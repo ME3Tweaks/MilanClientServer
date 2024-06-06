@@ -29,6 +29,19 @@ namespace Milan::Allocator
     }
 }
 
+
+#define _INSTALL_HOOK_IMPL(Pattern, String, Function) \
+    auto* const MILAN_VARCAT(Function, _target) = Context.ResolveTyped<MILAN_VARCAT(t_, Function)>(Pattern); \
+    MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHook(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook))); \
+    MILAN_DEBUGW(L"" String L" hooked: %p -> %p", (void*)MILAN_VARCAT(Function, _target), (void*)MILAN_VARCAT(Function, _orig))
+
+#define INSTALL_HOOK_ONE(Function, Pattern) \
+    _INSTALL_HOOK_IMPL(Pattern, #Function, Function)
+
+#define INSTALL_HOOK_TWO(Class, Function, Pattern) \
+    _INSTALL_HOOK_IMPL(Pattern, #Class "::" #Function, MILAN_VARCAT(MILAN_VARCAT(Class, _), Function))
+
+
 namespace Milan::Globals
 {
     void Initialize(::LESDK::Initializer& Context)
@@ -54,9 +67,8 @@ namespace Milan::Globals
         SFXName::GInitMethod = Context.ResolveTyped<SFXName::tInitMethod>(BUILTIN_SFXNAMEINIT_PHOOK);
         MILAN_DEBUGW(L"SFXName::Init found: %p", (void*)SFXName::GInitMethod);
 
-        t_BioRequestExit* BioRequestExit_target = Context.ResolveTyped<t_BioRequestExit>(GLOBAL_BIOREQUESTEXIT_PHOOK);
-        BioRequestExit_orig = (t_BioRequestExit*)Context.InstallHook("BioRequestExit", BioRequestExit_target, BioRequestExit_hook);
-        MILAN_DEBUGW(L"BioRequestExit hooked: %p -> %p", (void*)BioRequestExit_target, (void*)BioRequestExit_orig);
+
+        INSTALL_HOOK_ONE(BioRequestExit, GLOBAL_BIOREQUESTEXIT_PHOOK);
 
         t_IDXGISwapChain_Present* IDXGISwapChain_Present_target = ::Milan::Imgui::FindSwapChainPresent();
         IDXGISwapChain_Present_orig = (t_IDXGISwapChain_Present*)Context.InstallHook("IDXGISwapChain::Present", IDXGISwapChain_Present_target, IDXGISwapChain_Present_hook);
@@ -78,44 +90,20 @@ namespace Milan::Globals
         UCanvas_WrappedPrint = Context.ResolveTyped<t_UCanvas_WrappedPrint>(GLOBAL_UCANVAS_WRAPPEDPRINT_PHOOK);
         MILAN_DEBUGW(L"UCanvas::WrappedPrint found: %p", (void*)UCanvas_WrappedPrint);
 
-        t_UFunction_Bind* UFunction_Bind_target = Context.ResolveTyped<t_UFunction_Bind>(GLOBAL_UFUNCTION_BIND_PHOOK);
-        UFunction_Bind_orig = (t_UFunction_Bind*)Context.InstallHook("UFunction::Bind", UFunction_Bind_target, UFunction_Bind_hook);
-        MILAN_DEBUGW(L"UFunction::Bind hooked: %p -> %p", (void*)UFunction_Bind_target, (void*)UFunction_Bind_orig);
+        INSTALL_HOOK_TWO(UFunction, Bind, GLOBAL_UFUNCTION_BIND_PHOOK);
+        INSTALL_HOOK_TWO(UGameEngine, Exec, GLOBAL_UGAMEENGINE_EXEC_PHOOK);
+        INSTALL_HOOK_TWO(UGameEngine, LoadMap, GLOBAL_UGAMEENGINE_LOADMAP_PHOOK);
+        INSTALL_HOOK_TWO(UGameEngine, Tick, GLOBAL_UGAMEENGINE_TICK_PHOOK);
 
-        t_UGameEngine_Exec* UGameEngine_Exec_target = Context.ResolveTyped<t_UGameEngine_Exec>(GLOBAL_UGAMEENGINE_EXEC_PHOOK);
-        UGameEngine_Exec_orig = (t_UGameEngine_Exec*)Context.InstallHook("UGameEngine::Exec", UGameEngine_Exec_target, UGameEngine_Exec_hook);
-        MILAN_DEBUGW(L"UGameEngine::Exec hooked: %p -> %p", (void*)UGameEngine_Exec_target, (void*)UGameEngine_Exec_orig);
-
-        t_UGameEngine_LoadMap* UGameEngine_LoadMap_target = Context.ResolveTyped<t_UGameEngine_LoadMap>(GLOBAL_UGAMEENGINE_LOADMAP_PHOOK);
-        UGameEngine_LoadMap_orig = (t_UGameEngine_LoadMap*)Context.InstallHook("UGameEngine::LoadMap", UGameEngine_LoadMap_target, UGameEngine_LoadMap_hook);
-        MILAN_DEBUGW(L"UGameEngine::LoadMap hooked: %p -> %p", (void*)UGameEngine_LoadMap_target, (void*)UGameEngine_LoadMap_orig);
-
-        t_UGameEngine_Tick* UGameEngine_Tick_target = Context.ResolveTyped<t_UGameEngine_Tick>(GLOBAL_UGAMEENGINE_TICK_PHOOK);
-        UGameEngine_Tick_orig = (t_UGameEngine_Tick*)Context.InstallHook("UGameEngine::Tick", UGameEngine_Tick_target, UGameEngine_Tick_hook);
-        MILAN_DEBUGW(L"UGameEngine::Tick hooked: %p -> %p", (void*)UGameEngine_Tick_target, (void*)UGameEngine_Tick_orig);
-
-        t_UObject_CallFunction* UObject_CallFunction_target = Context.ResolveTyped<t_UObject_CallFunction>(BUILTIN_CALLFUNCTION_PHOOK);
-        UObject_CallFunction_orig = (t_UObject_CallFunction*)Context.InstallHook("UObject::CallFunction", UObject_CallFunction_target, UObject_CallFunction_hook);
-        MILAN_DEBUGW(L"UObject::CallFunction hooked: %p -> %p", (void*)UObject_CallFunction_target, (void*)UObject_CallFunction_orig);
-
-        t_UObject_ProcessDelegate* UObject_ProcessDelegate_target = Context.ResolveTyped<t_UObject_ProcessDelegate>(GLOBAL_UOBJECT_PROCESSDELEGATE_PHOOK);
-        UObject_ProcessDelegate_orig = (t_UObject_ProcessDelegate*)Context.InstallHook("UObject::ProcessDelegate", UObject_ProcessDelegate_target, UObject_ProcessDelegate_hook);
-        MILAN_DEBUGW(L"UObject::ProcessDelegate hooked: %p -> %p", (void*)UObject_ProcessDelegate_target, (void*)UObject_ProcessDelegate_orig);
-
-        t_UObject_ProcessEvent* UObject_ProcessEvent_target = Context.ResolveTyped<t_UObject_ProcessEvent>(BUILTIN_PROCESSEVENT_PHOOK);
-        UObject_ProcessEvent_orig = (t_UObject_ProcessEvent*)Context.InstallHook("UObject::ProcessEvent", UObject_ProcessEvent_target, UObject_ProcessEvent_hook);
-        MILAN_DEBUGW(L"UObject::ProcessEvent hooked: %p -> %p", (void*)UObject_ProcessEvent_target, (void*)UObject_ProcessEvent_orig);
-
-        t_UObject_ProcessInternal* UObject_ProcessInternal_target = Context.ResolveTyped<t_UObject_ProcessInternal>(BUILTIN_PROCESSINTERNAL_PHOOK);
-        UObject_ProcessInternal_orig = (t_UObject_ProcessInternal*)Context.InstallHook("UObject::ProcessInternal", UObject_ProcessInternal_target, UObject_ProcessInternal_hook);
-        MILAN_DEBUGW(L"UObject::ProcessInternal hooked: %p -> %p", (void*)UObject_ProcessInternal_target, (void*)UObject_ProcessInternal_orig);
+        INSTALL_HOOK_TWO(UObject, CallFunction, BUILTIN_CALLFUNCTION_PHOOK);
+        INSTALL_HOOK_TWO(UObject, ProcessDelegate, GLOBAL_UOBJECT_PROCESSDELEGATE_PHOOK);
+        INSTALL_HOOK_TWO(UObject, ProcessEvent, BUILTIN_PROCESSEVENT_PHOOK);
+        INSTALL_HOOK_TWO(UObject, ProcessInternal, BUILTIN_PROCESSINTERNAL_PHOOK);
 
         UObject_SkipFunction = Context.ResolveTyped<t_UObject_SkipFunction>(GLOBAL_UOBJECT_SKIPFUNCTION_PHOOK);
         MILAN_DEBUGW(L"UObject::SkipFunction found: %p", (void*)UObject_SkipFunction);
 
-        t_UWorld_Tick* UWorld_Tick_target = Context.ResolveTyped<t_UWorld_Tick>(GLOBAL_UWORLD_TICK_PHOOK);
-        UWorld_Tick_orig = (t_UWorld_Tick*)Context.InstallHook("UWorld::Tick", UWorld_Tick_target, UWorld_Tick_hook);
-        MILAN_DEBUGW(L"UWorld::Tick hooked: %p -> %p", (void*)UWorld_Tick_target, (void*)UWorld_Tick_orig);
+        INSTALL_HOOK_TWO(UWorld, Tick, GLOBAL_UWORLD_TICK_PHOOK);
 
 
         // Network debug hooks.
@@ -125,25 +113,17 @@ namespace Milan::Globals
 
         // Full-function hooks:
 
-        t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_target = Context.ResolveTyped<t_UActorChannel_ReplicateActor>(GLOBAL_UACTORCHANNEL_REPLICATEACTOR_PHOOK);
-        UActorChannel_ReplicateActor_orig = (t_UActorChannel_ReplicateActor*)Context.InstallHook("UActorChannel::ReplicateActor", UActorChannel_ReplicateActor_target, UActorChannel_ReplicateActor_hook);
-        MILAN_DEBUGW(L"UActorChannel::ReplicateActor hooked: %p -> %p", (void*)UActorChannel_ReplicateActor_target, (void*)UActorChannel_ReplicateActor_orig);
+        INSTALL_HOOK_TWO(UActorChannel, ReplicateActor, GLOBAL_UACTORCHANNEL_REPLICATEACTOR_PHOOK);
+        INSTALL_HOOK_TWO(UNetConnection, ClientSupportsLevel, GLOBAL_UNETCONNECTION_CLIENTSUPPORTSLEVEL_PATTERN);
+        INSTALL_HOOK_TWO(UNetConnection, Close, GLOBAL_UNETCONNECTION_CLOSE_PATTERN);
+        INSTALL_HOOK_TWO(UPackageMap, SupportsObject, GLOBAL_UPACKAGEMAP_SUPPORTSOBJECT_PATTERN);
+        INSTALL_HOOK_TWO(UWorld, ServerTickClients, GLOBAL_UWORLD_SERVERTICKCLIENTS_PHOOK);
+        INSTALL_HOOK_ONE(SortReplicatedActors, GLOBAL_SORT_REPLICATED_ACTORS_OFFSET);
+        INSTALL_HOOK_TWO(FSocketWin, SendTo, GLOBAL_FSOCKETWIN_SENDTO_OFFSET);
+        INSTALL_HOOK_TWO(FSocketWin, Send, GLOBAL_FSOCKETWIN_SEND_OFFSET);
+        INSTALL_HOOK_TWO(FSocketWin, RecvFrom, GLOBAL_FSOCKETWIN_RECVFROM_OFFSET);
+        INSTALL_HOOK_TWO(FSocketWin, Recv, GLOBAL_FSOCKETWIN_RECV_OFFSET);
 
-        t_UNetConnection_ClientSupportsLevel* UNetConnection_ClientSupportsLevel_target = Context.ResolveTyped<t_UNetConnection_ClientSupportsLevel>(GLOBAL_UNETCONNECTION_CLIENTSUPPORTSLEVEL_PATTERN);
-        UNetConnection_ClientSupportsLevel_orig = (t_UNetConnection_ClientSupportsLevel*)Context.InstallHook("UNetConnection::ClientSupportsLevel", UNetConnection_ClientSupportsLevel_target, UNetConnection_ClientSupportsLevel_hook);
-        MILAN_DEBUGW(L"UNetConnection::ClientSupportsLevel hooked: %p -> %p", (void*)UNetConnection_ClientSupportsLevel_target, (void*)UNetConnection_ClientSupportsLevel_orig);
-
-        t_UPackageMap_SupportsObject* UPackageMap_SupportsObject_target = Context.ResolveTyped<t_UPackageMap_SupportsObject>(GLOBAL_UPACKAGEMAP_SUPPORTSOBJECT_PATTERN);
-        UPackageMap_SupportsObject_orig = (t_UPackageMap_SupportsObject*)Context.InstallHook("UPackageMap::SupportsObject", UPackageMap_SupportsObject_target, UPackageMap_SupportsObject_hook);
-        MILAN_DEBUGW(L"UPackageMap::SupportsObject hooked: %p -> %p", (void*)UPackageMap_SupportsObject_target, (void*)UPackageMap_SupportsObject_orig);
-
-        t_UWorld_ServerTickClients* UWorld_ServerTickClients_target = Context.ResolveTyped<t_UWorld_ServerTickClients>(GLOBAL_UWORLD_SERVERTICKCLIENTS_PHOOK);
-        UWorld_ServerTickClients_orig = (t_UWorld_ServerTickClients*)Context.InstallHook("UWorld::ServerTickClients", UWorld_ServerTickClients_target, UWorld_ServerTickClients_hook);
-        MILAN_DEBUGW(L"UWorld::ServerTickClients hooked: %p -> %p", (void*)UWorld_ServerTickClients_target, (void*)UWorld_ServerTickClients_orig);
-
-        t_SortReplicatedActors* SortReplicatedActors_target = Context.ResolveTyped<t_SortReplicatedActors>(GLOBAL_SORT_REPLICATED_ACTORS_OFFSET);
-        SortReplicatedActors_orig = (t_SortReplicatedActors*)(Context.InstallHook("SortReplicatedActors", SortReplicatedActors_target, SortReplicatedActors_hook));
-        MILAN_DEBUGW(L"SortReplicatedActors hooked: %p -> %p", (void*)SortReplicatedActors_target, (void*)SortReplicatedActors_orig);
 
         // Mid-function injections:
 

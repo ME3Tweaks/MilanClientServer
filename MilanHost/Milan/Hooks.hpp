@@ -9,6 +9,7 @@
 #include <imgui.h>
 
 #include <LESDK/Headers.hpp>
+#include "Proxies/Engine.hpp"
 
 
 #define GLOBAL_BIOREQUESTEXIT_PHOOK \
@@ -51,6 +52,9 @@
 #define GLOBAL_UNETCONNECTION_CLIENTSUPPORTSLEVEL_PATTERN \
     ::LESDK::Address::FromPattern("48 89 5C 24 ?? 57 48 83 EC 20 48 8B DA 48 8B F9 48 85 D2 74 ?? 48 8B 15 ?? ?? ?? ?? 0F 1F 40 00")
 
+#define GLOBAL_UNETCONNECTION_CLOSE_PATTERN \
+    ::LESDK::Address::FromPattern("40 53 48 83 EC 20 48 83 B9 ?? ?? ?? ?? 00 48 8B D9 74 ?? 48 8B 89 ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 01")
+
 #define GLOBAL_UPACKAGEMAP_SUPPORTSOBJECT_PATTERN \
     ::LESDK::Address::FromPattern("48 83 EC 28 48 8B 01 FF 90 ?? ?? ?? ?? 33 C9 83 F8 FF")
 
@@ -60,11 +64,14 @@
 #define GLOBAL_SORT_REPLICATED_ACTORS_OFFSET \
     ::LESDK::Address::FromOffset(0x58B0A0)
 
+#define GLOBAL_FSOCKETWIN_SENDTO_OFFSET     ::LESDK::Address::FromOffset(0x909F30)
+#define GLOBAL_FSOCKETWIN_SEND_OFFSET       ::LESDK::Address::FromOffset(0x9091D0)
+#define GLOBAL_FSOCKETWIN_RECVFROM_OFFSET   ::LESDK::Address::FromOffset(0x908520)
+#define GLOBAL_FSOCKETWIN_RECV_OFFSET       ::LESDK::Address::FromOffset(0x9084F0)
+
 
 // ! Miscellaneous functions / methods.
 // ========================================
-
-
 
 using t_CreateWindowExW = HWND __stdcall(DWORD, LPCWSTR, LPCWSTR, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, LPVOID);
 extern t_CreateWindowExW* CreateWindowExW_orig;
@@ -199,6 +206,11 @@ extern t_UNetConnection_ClientSupportsLevel* UNetConnection_ClientSupportsLevel_
 
 int UNetConnection_ClientSupportsLevel_hook(UNetConnection* Context, UObject* Object);
 
+using t_UNetConnection_Close = void(UNetConnection* Context);
+extern t_UNetConnection_Close* UNetConnection_Close_orig;
+
+void UNetConnection_Close_hook(UNetConnection* Context);
+
 using t_UPackageMap_SupportsObject = int(UPackageMap* Context, UObject* Object);
 extern t_UPackageMap_SupportsObject* UPackageMap_SupportsObject_orig;
 
@@ -224,5 +236,25 @@ using t_SortReplicatedActors = void(CReplicatedActorRecord** Actors, int Count);
 extern t_SortReplicatedActors* SortReplicatedActors_orig;
 
 void SortReplicatedActors_hook(CReplicatedActorRecord** Actors, int Count);
+
+using t_FSocketWin_SendTo = UINT(FSocket*, BYTE*, INT, INT*, SOCKADDR_IN*);
+extern t_FSocketWin_SendTo* FSocketWin_SendTo_orig;
+
+UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, SOCKADDR_IN* Destination);
+
+using t_FSocketWin_Send = UINT(FSocket*, BYTE*, INT, INT*);
+extern t_FSocketWin_Send* FSocketWin_Send_orig;
+
+UINT FSocketWin_Send_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent);
+
+using t_FSocketWin_RecvFrom = UINT(FSocket*, BYTE*, INT, INT*, SOCKADDR_IN*);
+extern t_FSocketWin_RecvFrom* FSocketWin_RecvFrom_orig;
+
+UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read, SOCKADDR_IN* Source);
+
+using t_FSocketWin_Recv = UINT(FSocket*, BYTE*, INT, INT*);
+extern t_FSocketWin_Recv* FSocketWin_Recv_orig;
+
+UINT FSocketWin_Recv_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read);
 
 #endif // _FINAL_RELEASE
