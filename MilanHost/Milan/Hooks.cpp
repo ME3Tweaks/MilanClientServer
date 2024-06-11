@@ -470,14 +470,15 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
 t_UNetPendingLevel_NotifyControlMessage* UNetPendingLevel_NotifyControlMessage_orig = nullptr;
 void UNetPendingLevel_NotifyControlMessage_hook(UNetPendingLevel* const Context, UNetConnection* const Connection, BYTE const Type, FInBunch* const InBunch)
 {
-    MILAN_DEBUGW(L"UNetPendingLevel::NotifyControlMessage: Connection=%s, Type=%d", *Connection->StaticName(), Type);
+    //MILAN_DEBUGW(L"UNetPendingLevel::NotifyControlMessage: Connection=%s, Type=%d", *Connection->StaticName(), Type);
     (*UNetPendingLevel_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
 }
 
 t_UWorld_NotifyControlMessage* UWorld_NotifyControlMessage_orig = nullptr;
 void UWorld_NotifyControlMessage_hook(UWorld* const Context, UNetConnection* const Connection, BYTE const Type, FInBunch* const InBunch)
 {
-    MILAN_DEBUGW(L"UWorld::NotifyControlMessage: Connection=%s, Type=%d", *Connection->StaticName(), Type);
+    // Server: 0, 4, 5, 8, 9;  Client: 19
+    //MILAN_TRACEW(L"UWorld::NotifyControlMessage: Connection=%s, Type=%d", *Connection->StaticName(), Type);
     (*UWorld_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
 }
 

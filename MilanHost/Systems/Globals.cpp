@@ -154,6 +154,12 @@ namespace Milan::Globals
         ::MiddleIntercept::Install(L"SeamlessTravelTick", 0x8CA57B, MlnSeamlessTravelTick1, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UTcpNetDriverTickDispatch", 0x90CEDA, MlnUTcpNetDriverTickDispatch, LocalCaveIndexer);
 
+        ::MiddleIntercept::Install(L"UWorldNotifyControlMessageHello", 0x8C48FD, MlnUWorldNotifyControlMessageHello, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UWorldNotifyControlMessageNetspeed", 0x8C4B96, MlnUWorldNotifyControlMessageNetspeed, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UWorldNotifyControlMessageLogin", 0x8C4FA2, MlnUWorldNotifyControlMessageLogin, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UWorldNotifyControlMessageHave", 0x8C4C39, MlnUWorldNotifyControlMessageHave, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UWorldNotifyControlMessageJoin", 0x8C518B, MlnUWorldNotifyControlMessageJoin, LocalCaveIndexer);
+
 #endif
 
         // ----------------------------------------

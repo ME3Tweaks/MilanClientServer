@@ -97,3 +97,36 @@ void MlnUTcpNetDriverTickDispatch_Handler(UTcpipConnection* const Connection)
     MILAN_TRACEW(L"NETPROF (call to FNetworkNotify::NotifyAcceptedConnection): %s", *Remote);
     MILAN_UNUSED_2(Address, Remote);
 }
+
+void MlnUWorldNotifyControlMessageHello_Handler(BYTE const Platform, INT const RemoteMinVersion, INT const RemoteVersion, FInBunch* const Bunch)
+{
+    MILAN_WARNW(L"UWorld::NotifyControlMessage (Hello): Platform=%hhu, RemoteMinVersion=%#x, RemoteVersion=%#x", Platform, Byteswap(RemoteMinVersion), Byteswap(RemoteVersion));
+    MILAN_UNUSED_4(Platform, RemoteMinVersion, RemoteVersion, Bunch);
+}
+
+void MlnUWorldNotifyControlMessageNetspeed_Handler(INT const Speed, INT const ClampedSpeed)
+{
+    MILAN_WARNW(L"UWorld::NotifyControlMessage (Netspeed): Speed=%d, Clamped=%d", Speed, ClampedSpeed);
+    MILAN_UNUSED_2(Speed, ClampedSpeed);
+}
+
+void MlnUWorldNotifyControlMessageLogin_Handler(UNetConnection* const Connection, FString* const LoginError)
+{
+    auto const NetConnection = reinterpret_cast<UNetConnection_Proxy*>(Connection);
+    MILAN_WARNW(L"UWorld::NotifyControlMessage (Login): ClientResponse=%s, RequestURL=%s, LoginError=%s",
+        *NetConnection->ClientResponse, *NetConnection->RequestURL, LoginError->Chars());
+    MILAN_UNUSED_2(NetConnection, LoginError);
+}
+
+void MlnUWorldNotifyControlMessageHave_Handler(FGuid* const Guid, INT const Generation)
+{
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Have): Guid=%08X%08X%08X%08X, Generation=%d", Guid->A, Guid->B, Guid->C, Guid->D, Generation);
+    MILAN_UNUSED_2(Guid, Generation);
+}
+
+void MlnUWorldNotifyControlMessageJoin_Handler(QWORD* const UniqueId, APlayerController* const Actor, FString* const SpawnError)
+{
+    MILAN_WARNW(L"UWorld::NotifyControlMessage (Join): UniqueId=%llu, Actor=%s, Error=%s",
+        *UniqueId, Actor ? *Actor->StaticName() : L"(null)", SpawnError->Chars());
+    MILAN_UNUSED_3(UniqueId, Actor, SpawnError);
+}

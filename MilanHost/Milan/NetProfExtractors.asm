@@ -47,15 +47,27 @@ endm
 
 .data
 
-UChannelSendBunch1_bunch                DQ ?
-UChannelSendBunch2_bunch                DQ ?
-UActorChannelReplicateActor1_actor      DQ ?
-UActorChannelReplicateActor2_bunch      DQ ?
-UActorChannelReplicateActor3_bunch      DQ ?
-UActorChannelReplicateActor3_prop       DQ ?
-InternalReplicateFunction1_chan         DQ ?
-InternalReplicateFunction1_bunch        DQ ?
-InternalReplicateFunction1_func         DQ ?
+UChannelSendBunch1_bunch                    DQ ?
+UChannelSendBunch2_bunch                    DQ ?
+UActorChannelReplicateActor1_actor          DQ ?
+UActorChannelReplicateActor2_bunch          DQ ?
+UActorChannelReplicateActor3_bunch          DQ ?
+UActorChannelReplicateActor3_prop           DQ ?
+InternalReplicateFunction1_chan             DQ ?
+InternalReplicateFunction1_bunch            DQ ?
+InternalReplicateFunction1_func             DQ ?
+UWorldNotifyControlMessageHello_plat        DQ ?
+UWorldNotifyControlMessageHello_ver         DQ ?
+UWorldNotifyControlMessageHello_minver      DQ ?
+UWorldNotifyControlMessageHello_bunch       DQ ?
+UWorldNotifyControlMessageNetspeed_speed    DQ ?
+UWorldNotifyControlMessageNetspeed_clamp    DQ ?
+UWorldNotifyControlMessageLogin_conn        DQ ?
+UWorldNotifyControlMessageLogin_err         DQ ?
+UWorldNotifyControlMessageHave_guid         DQ ?
+UWorldNotifyControlMessageHave_gen          DQ ?
+UWorldNotifyControlMessageJoin_id           DQ ?
+UWorldNotifyControlMessageJoin_err          DQ ?
 
 
 ;; FUNCTIONS
@@ -193,5 +205,115 @@ MlnUTcpNetDriverTickDispatch proc
     restoreall
     ret
 MlnUTcpNetDriverTickDispatch endp
+
+externdef MlnUWorldNotifyControlMessageHello_Handler:proc
+MlnUWorldNotifyControlMessageHello proc
+    ; mov cl, [rsp+80h]   ; PlatformType, [rsp+70h]
+    ; mov edx, [rbp-78h]  ; RemoteMinVersion
+    ; mov r8d, [rsp+88h]  ; RemoteVersion, [rsp+78h]
+    ; mov r9, rbx         ; Bunch
+
+    mov rax, [rsp+80h]  ; PlatformType, [rsp+70h]
+    mov UWorldNotifyControlMessageHello_plat, rax
+    mov rax, [rbp-78h]  ; RemoteMinVersion
+    mov UWorldNotifyControlMessageHello_ver, rax
+    mov rax, [rsp+88h]  ; RemoteVersion, [rsp+78h]
+    mov UWorldNotifyControlMessageHello_minver, rax
+    mov UWorldNotifyControlMessageHello_bunch, rbx  ; Bunch
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UWorldNotifyControlMessageHello_plat
+    mov rdx, UWorldNotifyControlMessageHello_ver
+    mov r8, UWorldNotifyControlMessageHello_minver
+    mov r9, UWorldNotifyControlMessageHello_bunch
+    call MlnUWorldNotifyControlMessageHello_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUWorldNotifyControlMessageHello endp
+
+extern MlnUWorldNotifyControlMessageNetspeed_Handler:proc
+MlnUWorldNotifyControlMessageNetspeed proc
+    mov rax, [rbp+130h]  ; Speed
+    mov UWorldNotifyControlMessageNetspeed_speed, rax
+    mov rax, [r15+70h]   ; ClampedSpeed
+    mov UWorldNotifyControlMessageNetspeed_clamp, rax
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UWorldNotifyControlMessageNetspeed_speed
+    mov rdx, UWorldNotifyControlMessageNetspeed_clamp
+    call MlnUWorldNotifyControlMessageNetspeed_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUWorldNotifyControlMessageNetspeed endp
+
+extern MlnUWorldNotifyControlMessageLogin_Handler:proc
+MlnUWorldNotifyControlMessageLogin proc
+    mov UWorldNotifyControlMessageLogin_conn, r15  ; Connection
+    lea rax, [rsp+50h]  ; LoginError, [rsp+40h]
+    mov UWorldNotifyControlMessageLogin_err, rax
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UWorldNotifyControlMessageLogin_conn
+    mov rdx, UWorldNotifyControlMessageLogin_err
+    call MlnUWorldNotifyControlMessageLogin_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUWorldNotifyControlMessageLogin endp
+
+extern MlnUWorldNotifyControlMessageHave_Handler:proc
+MlnUWorldNotifyControlMessageHave proc
+    lea rax, [rsp + 60h]  ; Guid, [rsp + 50h]
+    mov UWorldNotifyControlMessageHave_guid, rax
+    mov rax, [rbp + 130h]  ; Generation
+    mov UWorldNotifyControlMessageHave_gen, rax
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UWorldNotifyControlMessageHave_guid
+    mov rdx, UWorldNotifyControlMessageHave_gen
+    call MlnUWorldNotifyControlMessageHave_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUWorldNotifyControlMessageHave endp
+
+extern MlnUWorldNotifyControlMessageJoin_Handler:proc
+MlnUWorldNotifyControlMessageJoin proc
+    lea rax, [rsp + 88h]  ; UniqueId, [rsp + 78h]
+    mov UWorldNotifyControlMessageJoin_id, rax
+    lea rax, [rbp - 60h]  ; SpawnError
+    mov UWorldNotifyControlMessageJoin_err, rax
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UWorldNotifyControlMessageJoin_id
+    mov rdx, [r15 + 68h]  ; Actor
+    mov r8, UWorldNotifyControlMessageJoin_err
+    call MlnUWorldNotifyControlMessageJoin_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUWorldNotifyControlMessageJoin endp
 
 end
