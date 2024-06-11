@@ -58,6 +58,12 @@
 #define GLOBAL_UPACKAGEMAP_SUPPORTSOBJECT_PATTERN \
     ::LESDK::Address::FromPattern("48 83 EC 28 48 8B 01 FF 90 ?? ?? ?? ?? 33 C9 83 F8 FF")
 
+#define GLOBAL_UNETPENDINGLEVEL_NOTIFYCONTROLMESSAGE_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 8B C4 48 89 */ "50 ?? 48 89 48 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC F0 01 00 00 48 C7 45 00 FE FF FF FF")
+
+#define GLOBAL_UWORLD_NOTIFYCONTROLMESSAGE_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 8B C4 48 89 */ "48 ?? 55 41 54 41 55 41 56 41 57 48 8D A8 D8 FE FF FF 48 81 EC 00 02 00 00 48 C7 85 F0 00 00 00 FE FF FF FF")
+
 #define GLOBAL_UWORLD_SERVERTICKCLIENTS_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 48 89 */ "48 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 00 02 00 00")
 
@@ -210,6 +216,16 @@ using t_UPackageMap_SupportsObject = int(UPackageMap* Context, UObject* Object);
 extern t_UPackageMap_SupportsObject* UPackageMap_SupportsObject_orig;
 
 int UPackageMap_SupportsObject_hook(UPackageMap* Context, UObject* Object);
+
+using t_UNetPendingLevel_NotifyControlMessage = void(UNetPendingLevel* Context, UNetConnection* Connection, BYTE Type, FInBunch* InBunch);
+extern t_UNetPendingLevel_NotifyControlMessage* UNetPendingLevel_NotifyControlMessage_orig;
+
+void UNetPendingLevel_NotifyControlMessage_hook(UNetPendingLevel* Context, UNetConnection* Connection, BYTE Type, FInBunch* InBunch);
+
+using t_UWorld_NotifyControlMessage = void(UWorld* Context, UNetConnection* Connection, BYTE Type, FInBunch* InBunch);
+extern t_UWorld_NotifyControlMessage* UWorld_NotifyControlMessage_orig;
+
+void UWorld_NotifyControlMessage_hook(UWorld* Context, UNetConnection* Connection, BYTE Type, FInBunch* InBunch);
 
 using t_UWorld_ServerTickClients = int(UWorld* Context, float Delta);
 extern t_UWorld_ServerTickClients* UWorld_ServerTickClients_orig;

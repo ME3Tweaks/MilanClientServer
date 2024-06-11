@@ -467,6 +467,20 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
     return Return;
 }
 
+t_UNetPendingLevel_NotifyControlMessage* UNetPendingLevel_NotifyControlMessage_orig = nullptr;
+void UNetPendingLevel_NotifyControlMessage_hook(UNetPendingLevel* const Context, UNetConnection* const Connection, BYTE const Type, FInBunch* const InBunch)
+{
+    MILAN_DEBUGW(L"UNetPendingLevel::NotifyControlMessage: Connection=%s, Type=%d", *Connection->StaticName(), Type);
+    (*UNetPendingLevel_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
+}
+
+t_UWorld_NotifyControlMessage* UWorld_NotifyControlMessage_orig = nullptr;
+void UWorld_NotifyControlMessage_hook(UWorld* const Context, UNetConnection* const Connection, BYTE const Type, FInBunch* const InBunch)
+{
+    MILAN_DEBUGW(L"UWorld::NotifyControlMessage: Connection=%s, Type=%d", *Connection->StaticName(), Type);
+    (*UWorld_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
+}
+
 t_UWorld_ServerTickClients* UWorld_ServerTickClients_orig = nullptr;
 int UWorld_ServerTickClients_hook(UWorld* const Context, float const Delta)
 {

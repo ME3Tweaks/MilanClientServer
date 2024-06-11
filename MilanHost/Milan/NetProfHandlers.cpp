@@ -12,14 +12,17 @@ void TraceUrl(wchar_t const* const InLabel, FURL* const InUrl)
     MILAN_TRACEW(L"NETPROF (%s): proto=%s, host=%s, map=%s, portal=%s, port=%d, valid=%d",
         InLabel, *InUrl->Protocol, *InUrl->Host, *InUrl->Map, *InUrl->Portal, InUrl->Port, InUrl->Valid);
 
-    FString OpLine{};
-    for (auto const& Op : InUrl->Op)
+    if (InUrl->Op.Any())
     {
-        OpLine.Append(L'?');
-        OpLine.Append(Op);
-    }
+        FString OpLine{};
+        for (auto const& Op : InUrl->Op)
+        {
+            OpLine.Append(L'?');
+            OpLine.Append(Op);
+        }
 
-    MILAN_TRACEW(L"  > ops = %s", *OpLine);
+        MILAN_TRACEW(L"  > ops = %s", *OpLine);
+    }
 }
 
 
