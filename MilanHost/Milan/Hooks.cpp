@@ -17,7 +17,7 @@ bool gb_logProcessEvent = false;
 bool gb_logProcessInternal = false;
 
 
-tWndProc* WndProc_orig = nullptr;
+t_WndProc* WndProc_orig = nullptr;
 LRESULT CALLBACK WndProc_hook(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
 {
     if (::Milan::Imgui::OnWndProc(hWnd, uMsg, wParam, lParam))

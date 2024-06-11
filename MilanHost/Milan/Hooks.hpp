@@ -79,8 +79,8 @@
 // ! Miscellaneous functions / methods.
 // ========================================
 
-using tWndProc = LRESULT __stdcall(HWND, UINT, WPARAM, LPARAM);
-extern tWndProc* WndProc_orig;
+using t_WndProc = LRESULT __stdcall(HWND, UINT, WPARAM, LPARAM);
+extern t_WndProc* WndProc_orig;
 
 LRESULT __stdcall WndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
