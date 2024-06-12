@@ -216,17 +216,12 @@ MlnUTcpNetDriverTickDispatch endp
 
 externdef MlnUWorldNotifyControlMessageHello_Handler:proc
 MlnUWorldNotifyControlMessageHello proc
-    ; mov cl, [rsp+80h]   ; PlatformType, [rsp+70h]
-    ; mov edx, [rbp-78h]  ; RemoteMinVersion
-    ; mov r8d, [rsp+88h]  ; RemoteVersion, [rsp+78h]
-    ; mov r9, rbx         ; Bunch
-
-    mov rax, [rsp+80h]  ; PlatformType, [rsp+70h]
-    mov UWorldNotifyControlMessageHello_plat, rax
-    mov rax, [rbp-78h]  ; RemoteMinVersion
-    mov UWorldNotifyControlMessageHello_ver, rax
-    mov rax, [rsp+88h]  ; RemoteVersion, [rsp+78h]
-    mov UWorldNotifyControlMessageHello_minver, rax
+    mov rax, [rsp+80h]
+    mov UWorldNotifyControlMessageHello_plat, rax   ; PlatformType, [rsp+70h]
+    mov rax, [rbp-78h]
+    mov UWorldNotifyControlMessageHello_ver, rax    ; RemoteMinVersion
+    mov rax, [rsp+88h]
+    mov UWorldNotifyControlMessageHello_minver, rax ; RemoteVersion, [rsp+78h]
     mov UWorldNotifyControlMessageHello_bunch, rbx  ; Bunch
 
     storeall
@@ -246,10 +241,10 @@ MlnUWorldNotifyControlMessageHello endp
 
 extern MlnUWorldNotifyControlMessageNetspeed_Handler:proc
 MlnUWorldNotifyControlMessageNetspeed proc
-    mov rax, [rbp+130h]  ; Speed
-    mov UWorldNotifyControlMessageNetspeed_speed, rax
-    mov rax, [r15+70h]   ; ClampedSpeed
-    mov UWorldNotifyControlMessageNetspeed_clamp, rax
+    mov rax, [rbp+130h]
+    mov UWorldNotifyControlMessageNetspeed_speed, rax  ; Speed
+    mov rax, [r15+70h]
+    mov UWorldNotifyControlMessageNetspeed_clamp, rax  ; ClampedSpeed
 
     storeall
     mov rbp, rsp
@@ -267,8 +262,8 @@ MlnUWorldNotifyControlMessageNetspeed endp
 extern MlnUWorldNotifyControlMessageLogin_Handler:proc
 MlnUWorldNotifyControlMessageLogin proc
     mov UWorldNotifyControlMessageLogin_conn, r15  ; Connection
-    lea rax, [rsp+50h]  ; LoginError, [rsp+40h]
-    mov UWorldNotifyControlMessageLogin_err, rax
+    lea rax, [rsp+50h]
+    mov UWorldNotifyControlMessageLogin_err, rax   ; LoginError, [rsp+40h]
 
     storeall
     mov rbp, rsp
@@ -304,10 +299,10 @@ MlnUWorldNotifyControlMessageUses endp
 
 extern MlnUWorldNotifyControlMessageHave_Handler:proc
 MlnUWorldNotifyControlMessageHave proc
-    lea rax, [rsp + 60h]  ; Guid, [rsp + 50h]
-    mov UWorldNotifyControlMessageHave_guid, rax
-    mov rax, [rbp + 130h]  ; Generation
-    mov UWorldNotifyControlMessageHave_gen, rax
+    lea rax, [rsp + 60h]
+    mov UWorldNotifyControlMessageHave_guid, rax  ; Guid, [rsp + 50h]
+    mov rax, [rbp + 130h]
+    mov UWorldNotifyControlMessageHave_gen, rax   ; Generation
 
     storeall
     mov rbp, rsp
@@ -324,10 +319,10 @@ MlnUWorldNotifyControlMessageHave endp
 
 extern MlnUWorldNotifyControlMessageJoin_Handler:proc
 MlnUWorldNotifyControlMessageJoin proc
-    lea rax, [rsp + 88h]  ; UniqueId, [rsp + 78h]
-    mov UWorldNotifyControlMessageJoin_id, rax
-    lea rax, [rbp - 60h]  ; SpawnError
-    mov UWorldNotifyControlMessageJoin_err, rax
+    lea rax, [rsp + 88h]
+    mov UWorldNotifyControlMessageJoin_id, rax   ; UniqueId, [rsp + 78h]
+    lea rax, [rbp - 60h]
+    mov UWorldNotifyControlMessageJoin_err, rax  ; SpawnError
 
     storeall
     mov rbp, rsp
@@ -381,8 +376,8 @@ MlnUWorldNotifyControlMessageUnknown19 endp
 
 extern MlnUWorldNotifyControlMessageUnknown21_Handler:proc
 MlnUWorldNotifyControlMessageUnknown21 proc
-    lea rax, [rsp + 70h]  ; [rsp + 60h]
-    mov UWorldNotifyControlMessageUnknown21_guid, rax   ; Guid
+    lea rax, [rsp + 70h]
+    mov UWorldNotifyControlMessageUnknown21_guid, rax   ; Guid, [rsp + 60h]
     mov rax, [rbp + 130h]
     mov UWorldNotifyControlMessageUnknown21_flag, rax   ; Flag
     mov UWorldNotifyControlMessageUnknown21_bunch, rbx  ; Bunch

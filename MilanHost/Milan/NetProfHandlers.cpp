@@ -87,35 +87,36 @@ void MlnInternalReplicateFunction1_Handler(UActorChannel* const Channel, FOutBun
 void MlnSeamlessTravelTick1_Handler(FURL* const PendingUrl)
 {
     FURL* const WorldUrl = &reinterpret_cast<UWorld_Proxy*>(*GWorld)->URL;
-    TraceUrl(L"SeamlessTravelTick / world", WorldUrl);
-    TraceUrl(L"SeamlessTravelTick / pending", PendingUrl);
+    //TraceUrl(L"SeamlessTravelTick / world", WorldUrl);
+    //TraceUrl(L"SeamlessTravelTick / pending", PendingUrl);
+    MILAN_UNUSED_2(WorldUrl, PendingUrl);
 }
 
 void MlnUTcpNetDriverTickDispatch_Handler(UTcpipConnection* const Connection)
 {
     auto const Address = reinterpret_cast<UTcpipConnection_Proxy*>(Connection)->Address;
     auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
-    MILAN_TRACEW(L"NETPROF (call to FNetworkNotify::NotifyAcceptedConnection): %s", *Remote);
+    //MILAN_TRACEW(L"NETPROF (call to FNetworkNotify::NotifyAcceptedConnection): %s", *Remote);
     MILAN_UNUSED_2(Address, Remote);
 }
 
 void MlnUWorldNotifyControlMessageHello_Handler(BYTE const Platform, INT const RemoteMinVersion, INT const RemoteVersion, FInBunch* const Bunch)
 {
-    MILAN_WARNW(L"UWorld::NotifyControlMessage (Hello): Platform=%hhu, RemoteMinVersion=%#x, RemoteVersion=%#x", Platform, Byteswap(RemoteMinVersion), Byteswap(RemoteVersion));
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Hello): Platform=%hhu, RemoteMinVersion=%#x, RemoteVersion=%#x", Platform, Byteswap(RemoteMinVersion), Byteswap(RemoteVersion));
     MILAN_UNUSED_4(Platform, RemoteMinVersion, RemoteVersion, Bunch);
 }
 
 void MlnUWorldNotifyControlMessageNetspeed_Handler(INT const Speed, INT const ClampedSpeed)
 {
-    MILAN_WARNW(L"UWorld::NotifyControlMessage (Netspeed): Speed=%d, Clamped=%d", Speed, ClampedSpeed);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Netspeed): Speed=%d, Clamped=%d", Speed, ClampedSpeed);
     MILAN_UNUSED_2(Speed, ClampedSpeed);
 }
 
 void MlnUWorldNotifyControlMessageLogin_Handler(UNetConnection* const Connection, FString* const LoginError)
 {
     auto const NetConnection = reinterpret_cast<UNetConnection_Proxy*>(Connection);
-    MILAN_WARNW(L"UWorld::NotifyControlMessage (Login): ClientResponse=%s, RequestURL=%s, LoginError=%s",
-        *NetConnection->ClientResponse, *NetConnection->RequestURL, LoginError->Chars());
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Login): ClientResponse=%s, RequestURL=%s, LoginError=%s",
+    //    *NetConnection->ClientResponse, *NetConnection->RequestURL, LoginError->Chars());
     MILAN_UNUSED_2(NetConnection, LoginError);
 }
 
@@ -136,8 +137,8 @@ void MlnUWorldNotifyControlMessageHave_Handler(FGuid* const Guid, INT const Gene
 
 void MlnUWorldNotifyControlMessageJoin_Handler(QWORD* const UniqueId, APlayerController* const Actor, FString* const SpawnError)
 {
-    MILAN_WARNW(L"UWorld::NotifyControlMessage (Join): UniqueId=%llu, Actor=%s, Error=%s",
-        *UniqueId, Actor ? *Actor->StaticName() : L"(null)", SpawnError->Chars());
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Join): UniqueId=%llu, Actor=%s, Error=%s",
+    //    *UniqueId, Actor ? *Actor->StaticName() : L"(null)", SpawnError->Chars());
     MILAN_UNUSED_3(UniqueId, Actor, SpawnError);
 }
 
@@ -152,12 +153,12 @@ void MlnUWorldNotifyControlMessageUnknown19_Handler(INT const UnknownCrc, FInBun
     //MILAN_WARNW(L"UWorld::NotifyControlMessage (Unknown19): DLI CRC32 = %#10x, Position = %d/%d (bits)", UnknownCrc, Bunch->BunchPos, Bunch->NumBytes);
     //PrintHex(stdout, Bunch->Buffer.GetData(), Bunch->Buffer.Count(), "");
 
-    MILAN_WARNW(L"UWorld::NotifyControlMessage (Unknown19): DLI CRC32 = 0x%08x", UnknownCrc);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Unknown19): DLI CRC32 = 0x%08x", UnknownCrc);
     MILAN_UNUSED_2(UnknownCrc, Bunch);
 }
 
 void MlnUWorldNotifyControlMessageUnknown21_Handler(FGuid* const Guid, INT const Flag, FInBunch* const Bunch)
 {
-    MILAN_WARNW(L"UWorld::NotifyControlMessage (Unknown21): Guid = %08X%08X%08X%08X, Flag = %d", Guid->A, Guid->B, Guid->C, Guid->D, Flag);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Unknown21): Guid = %08X%08X%08X%08X, Flag = %d", Guid->A, Guid->B, Guid->C, Guid->D, Flag);
     MILAN_UNUSED_3(Guid, Flag, Bunch);
 }
