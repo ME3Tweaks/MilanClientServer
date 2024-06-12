@@ -467,11 +467,42 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
     return Return;
 }
 
+namespace
+{
+    wchar_t const* MessageTypeString(unsigned char const Type) noexcept
+    {
+        switch (Type)
+        {
+        case 0u:    return L"Hello";
+        case 1u:    return L"Welcome";
+        case 2u:    return L"Upgrade";
+        case 3u:    return L"Challenge";
+        case 4u:    return L"Netspeed";
+        case 5u:    return L"Login";
+        case 6u:    return L"Failure";
+        case 7u:    return L"Uses";
+        case 8u:    return L"Have";
+        case 9u:    return L"Join";
+        case 11u:   return L"DlMngr";
+        case 14u:   return L"Unload";
+        case 19u:   return L"Unk19_DLM";
+        case 21u:   return L"Unk21_VIS";
+        }
+        return nullptr;
+    }
+
+    wchar_t const* MessageTypeDesc(unsigned char const Type) noexcept
+    {
+        auto const Str = MessageTypeString(Type);
+        return Str != nullptr ? Str : L"???";
+    }
+}
+
 t_UNetPendingLevel_NotifyControlMessage* UNetPendingLevel_NotifyControlMessage_orig = nullptr;
 void UNetPendingLevel_NotifyControlMessage_hook(UNetPendingLevel* const Context, UNetConnection* const Connection, BYTE const Type, FInBunch* const InBunch)
 {
-    // 1, 3, 6, 7, 11
-    MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage: Connection=%s, Type=%d", *Connection->StaticName(), Type);
+    // 1, 3, 7, 11
+    MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
     (*UNetPendingLevel_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
 }
 
@@ -479,11 +510,9 @@ t_UWorld_NotifyControlMessage* UWorld_NotifyControlMessage_orig = nullptr;
 void UWorld_NotifyControlMessage_hook(UWorld* const Context, UNetConnection* const Connection, BYTE const Type, FInBunch* const InBunch)
 {
     // Server: 0, 4, 5, 8, 9, 21;  Client: 7, 14, 19
-
-    static std::array<unsigned char, 9> HandledTypes = { 0u, 4u, 5u, 7u, 8u, 9u, 14u, 19u, 21u };
-
+    static std::array<unsigned char, 9> HandledTypes{ 0u, 4u, 5u, 7u, 8u, 9u, 14u, 19u, 21u };
     if (std::find(HandledTypes.begin(), HandledTypes.end(), Type) == HandledTypes.end())
-        MILAN_WARNW(L"UWorld::NotifyControlMessage: Connection=%s, Type=%d (not intercepted)", *Connection->StaticName(), Type);
+        MILAN_WARNW(L"UWorld::NotifyControlMessage: Type = %d (%s) not intercepted", Type, MessageTypeDesc(Type));
 
     (*UWorld_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
 }
