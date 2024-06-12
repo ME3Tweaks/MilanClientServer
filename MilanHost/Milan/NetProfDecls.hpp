@@ -30,15 +30,15 @@ MILAN_DECLARE_EXTRACTOR(MlnInternalReplicateFunction1, UActorChannel* Channel, F
 MILAN_DECLARE_EXTRACTOR(MlnSeamlessTravelTick1, FURL* PendingUrl);
 MILAN_DECLARE_EXTRACTOR(MlnUTcpNetDriverTickDispatch, UTcpipConnection* Connection);
 
-MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHello, BYTE Platform, INT RemoteMinVersion, INT RemoteVersion, FInBunch* Bunch);
-MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageNetspeed, INT Speed, INT ClampedSpeed);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHello, UNetConnection* Connection, BYTE Platform, INT RemoteMinVersion, INT RemoteVersion);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageNetspeed, UNetConnection* Connection, INT Speed, INT ClampedSpeed);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageLogin, UNetConnection* Connection, FString* LoginError);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUses, UNetConnection* Connection, FPackageInfo* Package);
-MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHave, FGuid* Guid, INT Generation);
-MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageJoin, QWORD* UniqueId, APlayerController* Actor, FString* SpawnError);
-MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnload, FGuid* Guid);
-MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnknown19, INT UnknownCrc, FInBunch* Bunch);
-MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnknown21, FGuid* Guid, INT Flag, FInBunch* Bunch);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHave, UNetConnection* Connection, FGuid* Guid, INT Generation);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageJoin, UNetConnection* Connection, QWORD* UniqueId, FString* SpawnError);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnload, UNetConnection* Connection, FGuid* Guid);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnknown19, UNetConnection* Connection, INT UnknownCrc, FInBunch* Bunch);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnknown21, UNetConnection* Connection, FGuid* Guid, INT Flag, FInBunch* Bunch);
 
 
 #undef MILAN_DECLARE_EXTRACTOR

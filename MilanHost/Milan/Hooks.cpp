@@ -502,7 +502,7 @@ t_UNetPendingLevel_NotifyControlMessage* UNetPendingLevel_NotifyControlMessage_o
 void UNetPendingLevel_NotifyControlMessage_hook(UNetPendingLevel* const Context, UNetConnection* const Connection, BYTE const Type, FInBunch* const InBunch)
 {
     // 1, 3, 7, 11
-    MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
+    //MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
     (*UNetPendingLevel_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
 }
 

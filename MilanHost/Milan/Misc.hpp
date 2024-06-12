@@ -35,6 +35,11 @@ void WriteFileFull(std::wstring_view InPath, std::span<byte const> InBuffer);
 // ! Other output utilities.
 // ========================================
 
+inline FString FormatGuid(FGuid& In)
+{
+    return FString::Printf(L"%08X%08X%08X%08X", In.A, In.B, In.C, In.D);
+}
+
 template<SIZE_T HEXDUMP_LINE_LEN = 16u>
     requires (HEXDUMP_LINE_LEN >= 4 && HEXDUMP_LINE_LEN <= 32)
 void PrintHex(FILE* const OutStream, BYTE* const InBuffer, SIZE_T const InSize, char const* const InPrefix)

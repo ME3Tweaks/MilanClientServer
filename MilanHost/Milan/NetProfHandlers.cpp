@@ -94,71 +94,72 @@ void MlnSeamlessTravelTick1_Handler(FURL* const PendingUrl)
 
 void MlnUTcpNetDriverTickDispatch_Handler(UTcpipConnection* const Connection)
 {
-    auto const Address = reinterpret_cast<UTcpipConnection_Proxy*>(Connection)->Address;
-    auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
-    //MILAN_TRACEW(L"NETPROF (call to FNetworkNotify::NotifyAcceptedConnection): %s", *Remote);
-    MILAN_UNUSED_2(Address, Remote);
+    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    MILAN_TRACEW(L"NETPROF (call to FNetworkNotify::NotifyAcceptedConnection): %s", *TcpConn->FormatRemoteAddress());
+    MILAN_UNUSED(Connection);
 }
 
-void MlnUWorldNotifyControlMessageHello_Handler(BYTE const Platform, INT const RemoteMinVersion, INT const RemoteVersion, FInBunch* const Bunch)
+void MlnUWorldNotifyControlMessageHello_Handler(UNetConnection* const Connection, BYTE const Platform, INT const RemoteMinVersion, INT const RemoteVersion)
 {
-    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Hello): Platform=%hhu, RemoteMinVersion=%#x, RemoteVersion=%#x", Platform, Byteswap(RemoteMinVersion), Byteswap(RemoteVersion));
-    MILAN_UNUSED_4(Platform, RemoteMinVersion, RemoteVersion, Bunch);
+    //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Hello): Remote = %s, Platform = %hhu, RemoteMinVersion = %#x, RemoteVersion = %#x", *TcpConn->FormatRemoteAddress(), Platform, Byteswap(RemoteMinVersion), Byteswap(RemoteVersion));
+    MILAN_UNUSED_4(Connection, Platform, RemoteMinVersion, RemoteVersion);
 }
 
-void MlnUWorldNotifyControlMessageNetspeed_Handler(INT const Speed, INT const ClampedSpeed)
+void MlnUWorldNotifyControlMessageNetspeed_Handler(UNetConnection* const Connection, INT const Speed, INT const ClampedSpeed)
 {
-    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Netspeed): Speed=%d, Clamped=%d", Speed, ClampedSpeed);
-    MILAN_UNUSED_2(Speed, ClampedSpeed);
+    //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Netspeed): Remote = %s, Speed = %d, Clamped = %d", *TcpConn->FormatRemoteAddress(), Speed, ClampedSpeed);
+    MILAN_UNUSED_3(Connection, Speed, ClampedSpeed);
 }
 
 void MlnUWorldNotifyControlMessageLogin_Handler(UNetConnection* const Connection, FString* const LoginError)
 {
-    auto const NetConnection = reinterpret_cast<UNetConnection_Proxy*>(Connection);
-    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Login): ClientResponse=%s, RequestURL=%s, LoginError=%s",
-    //    *NetConnection->ClientResponse, *NetConnection->RequestURL, LoginError->Chars());
-    MILAN_UNUSED_2(NetConnection, LoginError);
+    //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Login): Remote = %s, ClientResponse = %s, RequestURL = %s, LoginError = %s",
+    //    *TcpConn->FormatRemoteAddress(), *TcpConn->ClientResponse, *TcpConn->RequestURL, LoginError->Chars());
+    MILAN_UNUSED_2(Connection, LoginError);
 }
 
 void MlnUWorldNotifyControlMessageUses_Handler(UNetConnection* const Connection, FPackageInfo* const Package)
 {
-    //auto const Address = reinterpret_cast<UTcpipConnection_Proxy*>(Connection)->Address;
-    //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
-    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Uses): Remote = %s, Package = %s, Guid = %08X%08X%08X%08X, Gen = %d",
-    //    *Remote, *Package->PackageName.ToString(), Package->Guid.A, Package->Guid.B, Package->Guid.C, Package->Guid.D, Package->RemoteGeneration);
+    //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Uses): Remote = %s, Package = %s, Guid = %s, Gen = %d",
+    //    *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *FormatGuid(Package->Guid), Package->RemoteGeneration);
     MILAN_UNUSED_2(Connection, Package);
 }
 
-void MlnUWorldNotifyControlMessageHave_Handler(FGuid* const Guid, INT const Generation)
+void MlnUWorldNotifyControlMessageHave_Handler(UNetConnection* const Connection, FGuid* const Guid, INT const Generation)
 {
-    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Have): Guid=%08X%08X%08X%08X, Generation=%d", Guid->A, Guid->B, Guid->C, Guid->D, Generation);
-    MILAN_UNUSED_2(Guid, Generation);
+    //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Have): Remote = %s, Guid = %s, Gen = %d", *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), Generation);
+    MILAN_UNUSED_3(Connection, Guid, Generation);
 }
 
-void MlnUWorldNotifyControlMessageJoin_Handler(QWORD* const UniqueId, APlayerController* const Actor, FString* const SpawnError)
+void MlnUWorldNotifyControlMessageJoin_Handler(UNetConnection* const Connection, QWORD* const UniqueId, FString* const SpawnError)
 {
-    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Join): UniqueId=%llu, Actor=%s, Error=%s",
-    //    *UniqueId, Actor ? *Actor->StaticName() : L"(null)", SpawnError->Chars());
-    MILAN_UNUSED_3(UniqueId, Actor, SpawnError);
+    //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Join): Remote = %s, UniqueId = %llu, Error = %s", *TcpConn->FormatRemoteAddress(), *UniqueId, SpawnError->Chars());
+    MILAN_UNUSED_3(Connection, UniqueId, SpawnError);
 }
 
-void MlnUWorldNotifyControlMessageUnload_Handler(FGuid* const Guid)
+void MlnUWorldNotifyControlMessageUnload_Handler(UNetConnection* const Connection, FGuid* const Guid)
 {
-    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Unload): Guid=%08X%08X%08X%08X", Guid->A, Guid->B, Guid->C, Guid->D);
-    MILAN_UNUSED(Guid);
+    //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Unload): Remote = %s, Guid = %s", *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid));
+    MILAN_UNUSED_2(Connection, Guid);
 }
 
-void MlnUWorldNotifyControlMessageUnknown19_Handler(INT const UnknownCrc, FInBunch* const Bunch)
+void MlnUWorldNotifyControlMessageUnknown19_Handler(UNetConnection* const Connection, INT const UnknownCrc, FInBunch* const Bunch)
 {
-    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Unknown19): DLI CRC32 = %#10x, Position = %d/%d (bits)", UnknownCrc, Bunch->BunchPos, Bunch->NumBytes);
-    //PrintHex(stdout, Bunch->Buffer.GetData(), Bunch->Buffer.Count(), "");
-
-    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Unknown19): DLI CRC32 = 0x%08x", UnknownCrc);
-    MILAN_UNUSED_2(UnknownCrc, Bunch);
+    //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Unk19_DLM): Remote = %s, DLI CRC32 = 0x%08x", *TcpConn->FormatRemoteAddress(), UnknownCrc);
+    MILAN_UNUSED_3(Connection, UnknownCrc, Bunch);
 }
 
-void MlnUWorldNotifyControlMessageUnknown21_Handler(FGuid* const Guid, INT const Flag, FInBunch* const Bunch)
+void MlnUWorldNotifyControlMessageUnknown21_Handler(UNetConnection* const Connection, FGuid* const Guid, INT const Flag, FInBunch* const Bunch)
 {
-    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Unknown21): Guid = %08X%08X%08X%08X, Flag = %d", Guid->A, Guid->B, Guid->C, Guid->D, Flag);
-    MILAN_UNUSED_3(Guid, Flag, Bunch);
+    //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Unk21_VIS): Remote = %s, Guid = %s, Flag = %d", *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), Flag);
+    MILAN_UNUSED_4(Connection, Guid, Flag, Bunch);
 }

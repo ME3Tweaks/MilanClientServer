@@ -302,6 +302,13 @@ public:
 
     SOCKADDR_IN                     Address;                    // 0x606C
     unsigned char                   Unknown_607C[24];           // 0x607C
+
+public:
+
+    inline FString FormatRemoteAddress() const
+    {
+        return FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
+    }
 };
 
 static_assert(offsetof(UTcpipConnection_Proxy, Address) == 0x606C);
