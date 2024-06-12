@@ -32,6 +32,52 @@ void ReadFileFull(std::wstring_view InPath, ::game::vector<byte>& OutBuffer);
 void WriteFileFull(std::wstring_view InPath, std::span<byte const> InBuffer);
 
 
+// ! Other output utilities.
+// ========================================
+
+template<SIZE_T HEXDUMP_LINE_LEN = 16u>
+    requires (HEXDUMP_LINE_LEN >= 4 && HEXDUMP_LINE_LEN <= 32)
+void PrintHex(FILE* const OutStream, BYTE* const InBuffer, SIZE_T const InSize, char const* const InPrefix)
+{
+    SIZE_T Line = 0;
+    for (auto i = 0u; i < InSize; i += HEXDUMP_LINE_LEN)
+    {
+        Line++;
+
+        SIZE_T MaxLen = HEXDUMP_LINE_LEN;
+        if (Line * HEXDUMP_LINE_LEN > InSize) {
+            MaxLen = InSize - HEXDUMP_LINE_LEN * (Line - 1);
+        }
+
+        // Address
+        fprintf_s(OutStream, "%s%08X  ", InPrefix, i);
+
+        // Hex bytes
+        for (auto j = 0u; j < MaxLen; j++)
+        {
+            auto const c = static_cast<BYTE>(InBuffer[i + j]);
+            fprintf_s(OutStream, "%02hhX ", c);
+        }
+
+        // Padding
+        for (int j = 0u; j < HEXDUMP_LINE_LEN - MaxLen + 1; j++)
+        {
+            fprintf_s(OutStream, "   ");
+        }
+
+        // Characters
+        for (int j = 0u; j < MaxLen; j++)
+        {
+            auto const l = static_cast<BYTE>(InBuffer[i + j]);
+            fprintf_s(OutStream, "%c", (l >= 0x20) ? l : '.');
+        }
+
+        // Newline
+        fprintf_s(OutStream, "\n");
+    }
+}
+
+
 // ! UObject & AActor utilities.
 // ========================================
 

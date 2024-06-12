@@ -1,6 +1,7 @@
 #include <intrin.h>
 
 #include "Milan/Base.hpp"
+#include "Milan/Misc.hpp"
 #include "Milan/NetProfDecls.hpp"
 #include "Proxies/Engine.hpp"
 #include "Systems/Output.hpp"
@@ -118,6 +119,15 @@ void MlnUWorldNotifyControlMessageLogin_Handler(UNetConnection* const Connection
     MILAN_UNUSED_2(NetConnection, LoginError);
 }
 
+void MlnUWorldNotifyControlMessageUses_Handler(UNetConnection* const Connection, FPackageInfo* const Package)
+{
+    //auto const Address = reinterpret_cast<UTcpipConnection_Proxy*>(Connection)->Address;
+    //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Uses): Remote = %s, Package = %s, Guid = %08X%08X%08X%08X, Gen = %d",
+    //    *Remote, *Package->PackageName.ToString(), Package->Guid.A, Package->Guid.B, Package->Guid.C, Package->Guid.D, Package->RemoteGeneration);
+    MILAN_UNUSED_2(Connection, Package);
+}
+
 void MlnUWorldNotifyControlMessageHave_Handler(FGuid* const Guid, INT const Generation)
 {
     //MILAN_WARNW(L"UWorld::NotifyControlMessage (Have): Guid=%08X%08X%08X%08X, Generation=%d", Guid->A, Guid->B, Guid->C, Guid->D, Generation);
@@ -129,4 +139,25 @@ void MlnUWorldNotifyControlMessageJoin_Handler(QWORD* const UniqueId, APlayerCon
     MILAN_WARNW(L"UWorld::NotifyControlMessage (Join): UniqueId=%llu, Actor=%s, Error=%s",
         *UniqueId, Actor ? *Actor->StaticName() : L"(null)", SpawnError->Chars());
     MILAN_UNUSED_3(UniqueId, Actor, SpawnError);
+}
+
+void MlnUWorldNotifyControlMessageUnload_Handler(FGuid* const Guid)
+{
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Unload): Guid=%08X%08X%08X%08X", Guid->A, Guid->B, Guid->C, Guid->D);
+    MILAN_UNUSED(Guid);
+}
+
+void MlnUWorldNotifyControlMessageUnknown19_Handler(INT const UnknownCrc, FInBunch* const Bunch)
+{
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Unknown19): DLI CRC32 = %#10x, Position = %d/%d (bits)", UnknownCrc, Bunch->BunchPos, Bunch->NumBytes);
+    //PrintHex(stdout, Bunch->Buffer.GetData(), Bunch->Buffer.Count(), "");
+
+    MILAN_WARNW(L"UWorld::NotifyControlMessage (Unknown19): DLI CRC32 = 0x%08x", UnknownCrc);
+    MILAN_UNUSED_2(UnknownCrc, Bunch);
+}
+
+void MlnUWorldNotifyControlMessageUnknown21_Handler(FGuid* const Guid, INT const Flag, FInBunch* const Bunch)
+{
+    MILAN_WARNW(L"UWorld::NotifyControlMessage (Unknown21): Guid = %08X%08X%08X%08X, Flag = %d", Guid->A, Guid->B, Guid->C, Guid->D, Flag);
+    MILAN_UNUSED_3(Guid, Flag, Bunch);
 }

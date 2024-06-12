@@ -477,8 +477,13 @@ void UNetPendingLevel_NotifyControlMessage_hook(UNetPendingLevel* const Context,
 t_UWorld_NotifyControlMessage* UWorld_NotifyControlMessage_orig = nullptr;
 void UWorld_NotifyControlMessage_hook(UWorld* const Context, UNetConnection* const Connection, BYTE const Type, FInBunch* const InBunch)
 {
-    // Server: 0, 4, 5, 8, 9;  Client: 19
-    //MILAN_TRACEW(L"UWorld::NotifyControlMessage: Connection=%s, Type=%d", *Connection->StaticName(), Type);
+    // Server: 0, 4, 5, 8, 9, 21;  Client: 7, 14, 19
+
+    static std::array<unsigned char, 9> HandledTypes = { 0u, 4u, 5u, 7u, 8u, 9u, 14u, 19u, 21u };
+
+    if (std::find(HandledTypes.begin(), HandledTypes.end(), Type) == HandledTypes.end())
+        MILAN_WARNW(L"UWorld::NotifyControlMessage: Connection=%s, Type=%d (not intercepted)", *Connection->StaticName(), Type);
+
     (*UWorld_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
 }
 

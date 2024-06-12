@@ -33,8 +33,12 @@ MILAN_DECLARE_EXTRACTOR(MlnUTcpNetDriverTickDispatch, UTcpipConnection* Connecti
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHello, BYTE Platform, INT RemoteMinVersion, INT RemoteVersion, FInBunch* Bunch);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageNetspeed, INT Speed, INT ClampedSpeed);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageLogin, UNetConnection* Connection, FString* LoginError);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUses, UNetConnection* Connection, FPackageInfo* Package);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHave, FGuid* Guid, INT Generation);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageJoin, QWORD* UniqueId, APlayerController* Actor, FString* SpawnError);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnload, FGuid* Guid);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnknown19, INT UnknownCrc, FInBunch* Bunch);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnknown21, FGuid* Guid, INT Flag, FInBunch* Bunch);
 
 
 #undef MILAN_DECLARE_EXTRACTOR

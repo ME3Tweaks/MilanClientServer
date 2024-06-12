@@ -64,10 +64,18 @@ UWorldNotifyControlMessageNetspeed_speed    DQ ?
 UWorldNotifyControlMessageNetspeed_clamp    DQ ?
 UWorldNotifyControlMessageLogin_conn        DQ ?
 UWorldNotifyControlMessageLogin_err         DQ ?
+UWorldNotifyControlMessageUses_conn         DQ ?
+UWorldNotifyControlMessageUses_pckg         DQ ?
 UWorldNotifyControlMessageHave_guid         DQ ?
 UWorldNotifyControlMessageHave_gen          DQ ?
 UWorldNotifyControlMessageJoin_id           DQ ?
 UWorldNotifyControlMessageJoin_err          DQ ?
+UWorldNotifyControlMessageUnload_guid       DQ ?
+UWorldNotifyControlMessageUnknown19_unkcrc  DQ ?
+UWorldNotifyControlMessageUnknown19_bunch   DQ ?
+UWorldNotifyControlMessageUnknown21_guid    DQ ?
+UWorldNotifyControlMessageUnknown21_flag    DQ ?
+UWorldNotifyControlMessageUnknown21_bunch   DQ ?
 
 
 ;; FUNCTIONS
@@ -275,6 +283,25 @@ MlnUWorldNotifyControlMessageLogin proc
     ret
 MlnUWorldNotifyControlMessageLogin endp
 
+extern MlnUWorldNotifyControlMessageUses_Handler:proc
+MlnUWorldNotifyControlMessageUses proc
+    lea rax, [rbp - 50h]
+    mov UWorldNotifyControlMessageUses_pckg, rax  ; Package
+    mov UWorldNotifyControlMessageUses_conn, r15  ; Connection
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UWorldNotifyControlMessageUses_conn
+    mov rdx, UWorldNotifyControlMessageUses_pckg
+    call MlnUWorldNotifyControlMessageUses_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUWorldNotifyControlMessageUses endp
+
 extern MlnUWorldNotifyControlMessageHave_Handler:proc
 MlnUWorldNotifyControlMessageHave proc
     lea rax, [rsp + 60h]  ; Guid, [rsp + 50h]
@@ -315,5 +342,63 @@ MlnUWorldNotifyControlMessageJoin proc
     restoreall
     ret
 MlnUWorldNotifyControlMessageJoin endp
+
+extern MlnUWorldNotifyControlMessageUnload_Handler:proc
+MlnUWorldNotifyControlMessageUnload proc
+    lea rax, [rsp + 50h]  ; Guid, [rsp + 40h]
+    mov UWorldNotifyControlMessageUnload_guid, rax
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UWorldNotifyControlMessageUnload_guid
+    call MlnUWorldNotifyControlMessageUnload_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUWorldNotifyControlMessageUnload endp
+
+extern MlnUWorldNotifyControlMessageUnknown19_Handler:proc
+MlnUWorldNotifyControlMessageUnknown19 proc
+    mov rax, [rbp + 130h]
+    mov UWorldNotifyControlMessageUnknown19_unkcrc, rax  ; Crc
+    mov UWorldNotifyControlMessageUnknown19_bunch, rbx   ; Bunch
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UWorldNotifyControlMessageUnknown19_unkcrc
+    mov rdx, UWorldNotifyControlMessageUnknown19_bunch
+    call MlnUWorldNotifyControlMessageUnknown19_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUWorldNotifyControlMessageUnknown19 endp
+
+extern MlnUWorldNotifyControlMessageUnknown21_Handler:proc
+MlnUWorldNotifyControlMessageUnknown21 proc
+    lea rax, [rsp + 70h]  ; [rsp + 60h]
+    mov UWorldNotifyControlMessageUnknown21_guid, rax   ; Guid
+    mov rax, [rbp + 130h]
+    mov UWorldNotifyControlMessageUnknown21_flag, rax   ; Flag
+    mov UWorldNotifyControlMessageUnknown21_bunch, rbx  ; Bunch
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UWorldNotifyControlMessageUnknown21_guid
+    mov rdx, UWorldNotifyControlMessageUnknown21_flag
+    mov r8, UWorldNotifyControlMessageUnknown21_bunch
+    call MlnUWorldNotifyControlMessageUnknown21_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUWorldNotifyControlMessageUnknown21 endp
 
 end
