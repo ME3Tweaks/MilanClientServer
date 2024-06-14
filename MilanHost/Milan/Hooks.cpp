@@ -242,8 +242,17 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
 #endif
 
+    if (Stack->Node->StaticName().Equals(L"GetProfileSettingFromAccomplishmentProgress"))
+    {
+        auto const Manager = Context->Cast<USFXAccomplishmentManager>();
+        MILAN_WARNW(L"GetProfileSettingFromAccomplishmentProgress: loop count = %u, code start = %p",
+            Manager->AccomplishmentProgressData.Count(), reinterpret_cast<void*>(Stack->Code));
+    }
+
     if (!::Milan::State::On_UObject_ProcessInternal_Pre(Context, Stack, Result))
+    {
         bCallOriginal = false;
+    }
 
     if (bCallOriginal)
     {
@@ -251,8 +260,10 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
         ::Milan::State::On_UObject_ProcessInternal_Post(Context, Stack, Result);
     }
 
-
 #ifndef _FINAL_RELEASE
+
+    // Utilities for speeding up multiplayer launch.
+
     static bool s_skipMainMenuChecked = false;
     static bool s_skipMainMenu = false;
 
@@ -270,9 +281,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
         {
             s_checkMainMenuSplash = false;
 
-            MILAN_TRACEW(L"BioSeqAct_ShouldShowSplashSequence activated, overriding");
             auto* const Action = Context->CastDirect<UBioSeqAct_ShouldShowSplashSequence>();
-
             Action->GetWorldInfo()->Game->ShowSplashScreen = FALSE;
             Action->OutputLinks(0).bHasImpulse = FALSE;
             Action->OutputLinks(1).bHasImpulse = TRUE;
@@ -283,15 +292,12 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
             .Equals(L"Function SFXGameContentLiveKismet.BioSeqAct_ShowMainMenu.Activated"))
         {
             s_checkMainMenuLobbyFlow = false;
-            MILAN_TRACEW(L"BioSeqAct_ShowMainMenu activated");
-
             for (TypedObjectIterator<USFXGUI_MainMenu_RTT, false, false> Iter{}; Iter; ++Iter)
-            {
-                //MILAN_TRACEW(L"  %s: starting mp flow", *(*Iter)->StaticName());
                 (*Iter)->eventStartMultiplayerFlow();
-            }
         }
     }
+
+    // Additional information in the title bar for debugging.
 
     static bool s_updateWindow = true;
     if (s_updateWindow)
@@ -299,17 +305,15 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
         for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
         {
             auto const Viewport = (*Iter)->Viewport;
-            if (Viewport == nullptr)
-                break;
+            if (Viewport == nullptr) break;
 
-            auto const Window = *reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
+            auto const Window = reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
             auto const Name = reinterpret_cast<FString*>(reinterpret_cast<unsigned char*>(Viewport) + 0xD4);
 
-            MILAN_TRACEW(L"Updating title for %s, FViewport* = %p, HWND = %p, Name = %s",
-                *(*Iter)->StaticName(), Viewport, (void*)Window, Name->Chars());
+            MILAN_TRACEW(L"Updating title for %s, FViewport* = %p, HWND = %p", *(*Iter)->StaticName(), Viewport, (void*)*Window);
 
             *Name = FString::Printf(L"Mass Effect 3 (INST = %d) PID = %d", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
-            DefWindowProcW(Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
+            DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
 
             s_updateWindow = false;
         }

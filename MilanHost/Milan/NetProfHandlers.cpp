@@ -167,9 +167,9 @@ void MlnUWorldNotifyControlMessageJoin_Handler(UNetConnection* const Connection,
 
 void MlnUWorldNotifyControlMessageAbort_Handler(UNetConnection* const Connection, FGuid* const Guid)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
-    MILAN_WARNW(L"UWorld::NotifyControlMessage (Abort): Remote = %s, Guid = %s (%s)",
-        *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid));
+    //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    //MILAN_WARNW(L"UWorld::NotifyControlMessage (Abort): Remote = %s, Guid = %s (%s)",
+    //    *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid));
     MILAN_UNUSED_2(Connection, Guid);
 }
 

@@ -194,6 +194,13 @@ void RegisterNonshipCommands()
             return true;
         });
 
+    ::Milan::Console::RegisterCommand(L"log", L"processinternal",
+        [](wchar_t const*)
+        {
+            gb_logProcessInternal = !gb_logProcessInternal;
+            return true;
+        });
+
 #endif
 }
 

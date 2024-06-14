@@ -123,7 +123,7 @@ namespace Milan::Globals
         // Network debug hooks.
         // ----------------------------------------
 
-#ifndef _FINAL_RELEASE
+#if !defined(_FINAL_RELEASE)
 
         // Full-function hooks:
 
@@ -143,6 +143,7 @@ namespace Milan::Globals
 
         // Mid-function injections:
 
+        [[maybe_unused]]
         ::CaveIndexer LocalCaveIndexer{ /* MinSize: */ 20 };
 
         ::MiddleIntercept::Install(L"UChannel::SendBunch-1", 0x48E3D9, MlnUChannelSendBunch1, LocalCaveIndexer);
