@@ -5,10 +5,10 @@
 
 #pragma once
 #include <functional>
+#include <LESDK/Init.hpp>
 
 
 class UGameEngine;
-namespace LESDK { class Initializer; }
 
 namespace Milan::Console
 {

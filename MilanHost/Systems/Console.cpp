@@ -1,11 +1,10 @@
 #include <algorithm>
 #include <cwctype>
 
-#include <LESDK/Init.hpp>
 #include <LESDK/Headers.hpp>
 
-#include "Base.hpp"
-#include "Hooks.hpp"
+#include "Milan/Base.hpp"
+#include "Milan/Hooks.hpp"
 #include "Containers/string.hpp"
 #include "Containers/vector.hpp"
 #include "Systems/Console.hpp"
@@ -69,7 +68,7 @@ namespace Milan::Console
         ::StringToLower(NSCommand);
         gp_commands->push_back({ NSCommand, Callback });
 
-        MILAN_DEBUGW(L"registered command %s", NSCommand.c_str());
+        MILAN_TRACEW(L"registered command %s", NSCommand.c_str());
     }
 
     bool OnUGameEngineExec(UGameEngine* const Context, WCHAR const* const Command, void* const Output)
@@ -90,6 +89,9 @@ namespace Milan::Console
                 wchar_t const* const ParamsEnd = ScopedCommand.c_str() + ScopedCommand.size();
 
                 while (*Params != L' ' && Params != ParamsEnd)
+                    ++Params;
+
+                while (*Params == L' ' && Params != ParamsEnd)
                     ++Params;
 
                 if (Callback(Params))

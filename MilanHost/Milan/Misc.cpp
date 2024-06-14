@@ -1,8 +1,42 @@
 #include <Windows.h>
+
+#include <atomic>
 #include <fstream>
 
+#include "Milan/Misc.hpp"
 #include "Systems/Output.hpp"
-#include "Misc.hpp"
+
+
+
+int GetGameInstanceOrdinal()
+{
+    static std::atomic_bool s_initialized{ false };
+    static int s_ordinal{ -1 };
+
+    if (!s_initialized.exchange(true))
+    {
+        HANDLE  Mutex = nullptr;
+        int     Ordinal = 0;
+
+        while (true)
+        {
+            auto const Name = FString::Printf(L"MilanHost-%d", Ordinal);
+            Mutex = ::CreateMutexW(nullptr, true, *Name);
+
+            if (Mutex != nullptr && ::GetLastError() != ERROR_ALREADY_EXISTS)
+            {
+                s_ordinal = Ordinal;
+                break;
+            }
+
+            Mutex = nullptr;
+            Ordinal++;
+        }
+
+    }
+
+    return s_ordinal;
+}
 
 
 // ! RelativeTimer implementation.

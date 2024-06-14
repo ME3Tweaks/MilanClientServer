@@ -4,12 +4,10 @@
  */
 
 #pragma once
+#include <LESDK/Init.hpp>
 
-
-struct FFrame;
 class UObject;
-
-namespace LESDK { class Initializer; }
+struct FFrame;
 
 
 namespace Milan::State

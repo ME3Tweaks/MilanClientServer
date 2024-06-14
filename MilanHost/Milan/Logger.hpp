@@ -1,5 +1,5 @@
 /**
- * @file        MilanHost/Logger.hpp
+ * @file        MilanHost/Milan/Logger.hpp
  * @header      Logger implementations.
  */
 
@@ -9,9 +9,8 @@
 #include <mutex>
 
 #include "Containers/vector.hpp"
-
-#include "Base.hpp"
-#include "Misc.hpp"
+#include "Milan/Base.hpp"
+#include "Milan/Misc.hpp"
 
 
 // ! Output devices.

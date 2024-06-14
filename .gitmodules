@@ -7,3 +7,6 @@
 [submodule "ThirdParty/corrosion"]
 	path = ThirdParty/corrosion
 	url = https://github.com/corrosion-rs/corrosion.git
+[submodule "ThirdParty/zydis"]
+	path = ThirdParty/zydis
+	url = https://github.com/zyantific/zydis

@@ -1,6 +1,6 @@
 /**
- * @file        MilanHost/Canvas.hpp
- * @brief       Utilities for drawing profilers on @ref UCanvas instances.
+ * @file        MilanHost/Milan/Canvas.hpp
+ * @brief       Drawing profilers on @ref UCanvas instances.
  */
 
 #pragma once
@@ -8,7 +8,11 @@
 
 #include <string_view>
 #include <LESDK/Headers.hpp>
+#include "Proxies/Engine.hpp"
 
+
+// ! Enumerations.
+// ========================================
 
 enum ETextAlign : int
 {
@@ -22,6 +26,19 @@ inline bool IsValidAlign(ETextAlign const Value) noexcept
     return Value == ETA_Left || Value == ETA_Center || Value == ETA_Right;
 }
 
+enum ECanvasProfilerMode : int
+{
+    CPM_None = 0,
+    CPM_PlayerControllers = 1,
+    CPM_Network = 2,
+    CPM_WorldInfo = 3,
+
+    CPM_Max
+};
+
+
+// ! Classes and other types.
+// ========================================
 
 class CanvasDrawer
 {
@@ -52,8 +69,12 @@ public:
 
     FColor PopColor();
 
+    /** Draws a full-sized rectangle under all the drawing. */
+    void SetBackground(FColor Color);
     /** Updates canvas drawing color and clears out the stack. */
     void SetColor(FColor Color);
+
+    FVector2D GetPos() const;
 
     /** Adds given values to current coordinates. */
     void AdjustPos(float DX, float DY);
@@ -82,12 +103,14 @@ class MilanCanvasDrawer final : public CanvasDrawer
 
 public:
 
-    float const     k_canvasPadding = 20.f;
-    float const     k_indentSize = 10.f;
+    static constexpr float      k_canvasPadding = 20.f;
+    static constexpr float      k_indentSize = 10.f;
 
-    FColor const    k_warnColor{ .B = 0x00, .G = 0x64, .R = 0xFF, .A = 0xFF };
-    FColor const    k_infoColor{ .B = 0xFF, .G = 0x40, .R = 0x40, .A = 0xFF };
-    FColor const    k_textColor{ .B = 0xFF, .G = 0xFF, .R = 0xFF, .A = 0xFF };
+    // Remember that these colors are BGRA!!!
+
+    static constexpr FColor     k_warnColor{ 0x00, 0x80, 0xFF, 0xFF };
+    static constexpr FColor     k_infoColor{ 0xFF, 0x40, 0x40, 0xFF };
+    static constexpr FColor     k_textColor{ 0xFF, 0xFF, 0xFF, 0xFF };
 
 public:
 
@@ -106,3 +129,20 @@ private:
 
     FString const& FormatObjectName(UObject* Object);
 };
+
+struct CanvasProfilerRecord
+{
+    wchar_t const* Subtitle;
+    wchar_t const* Description;
+    void (*Function)(MilanCanvasDrawer& Drawer, UObject* Target);
+};
+
+
+// ! Implementation of canvas profilers.
+// ========================================
+
+void ProfilePlayerControllers(MilanCanvasDrawer& Drawer, UObject* Target);
+void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* Target);
+void ProfileWorldInfo(MilanCanvasDrawer& Drawer, UObject* Target);
+
+void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel_Proxy* Channel, unsigned int Index);

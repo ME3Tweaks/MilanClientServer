@@ -139,6 +139,7 @@ public:
 };
 
 static_assert(offsetof(FOutBunch, Next) == 0xA4);
+static_assert(offsetof(FOutBunch, bReliable) == 0xD2);
 
 
 class FPackageInfo
@@ -155,13 +156,13 @@ public:
     int                             PackageFlags;
     SFXName                         ForcedExportBasePackageName;
     FString                         Extension;
-    BYTE                            LoadingPhase;
 };
 
 static_assert(offsetof(FPackageInfo, ObjectBase) == 0x20);
 static_assert(offsetof(FPackageInfo, ObjectCount) == 0x24);
 static_assert(offsetof(FPackageInfo, LocalGeneration) == 0x28);
 static_assert(offsetof(FPackageInfo, RemoteGeneration) == 0x2C);
+static_assert(sizeof(FPackageInfo) == 0x4C);
 
 
 class UPackageMap_Proxy : public UObject

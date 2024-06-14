@@ -1,13 +1,13 @@
 /**
  * @file        MilanHost/Systems/Imgui.hpp
- * @header      Declarations for Imgui integration.
+ * @header      System for Imgui integration.
  */
 
 #pragma once
-#include "Hooks.hpp"
 
+#include <LESDK/Init.hpp>
+#include "Milan/Hooks.hpp"
 
-namespace LESDK { class Initializer; }
 
 namespace Milan::Imgui
 {
@@ -47,7 +47,7 @@ namespace Milan::Imgui
     t_IDXGISwapChain_Present* FindSwapChainPresent();
 
     /**
-     * @brief       Checks if a WndProc message pass through to the game.
+     * @brief       Checks if a WndProc message should pass through to the game.
      * @return      If this function returns FALSE, a hook WndProc must prevent it from reaching the game's WndProc.
      */
     bool MessageImguiPassthrough(UINT uMsg, WPARAM, LPARAM);

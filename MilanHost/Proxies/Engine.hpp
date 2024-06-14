@@ -25,7 +25,36 @@ enum ENetMode
     NM_DedicatedServer              = 1,
     NM_ListenServer                 = 2,
     NM_Client                       = 3,
-    NM_MAX                          = 4
+    NM_Max                          = 4
+};
+
+enum ENetRole
+{
+    ROLE_None                       = 0,
+    ROLE_SimulatedProxy             = 1,
+    ROLE_AutonomousProxy            = 2,
+    ROLE_Authority                  = 3,
+    ROLE_Max                        = 4
+};
+
+enum ESocketType
+{
+    SOCKTYPE_Unknown                = 0,
+    SOCKTYPE_Datagram               = 1,
+    SOCKTYPE_Streaming              = 2,
+};
+
+
+class FSocket
+{
+    void*                           Vtable;                     // 0x00
+
+public:
+
+    ESocketType                     Type;                       // 0x08
+    FString                         Description;                // 0x0C
+
+    // ...                          ...                         // ...
 };
 
 
@@ -34,26 +63,35 @@ class UChannel_Proxy : public UObject
 public:
 
     UNetConnection*                 Connection;                 // 0x60
-
-    int                             bOpenAcked : 1;             // 0x68 (& 0x01)
-    int                             bClosing : 1;               // 0x68 (& 0x02)
-    int                             bOpenTemporary : 1;         // 0x68 (& 0x04)
-    int                             bBroken : 1;                // 0x68 (& 0x08)
-    int                             bTornOff : 1;               // 0x68 (& 0x10)
-
+    long                            bOpenAcked : 1;             // 0x68 (& 0x01)
+    long                            bClosing : 1;               // 0x68 (& 0x02)
+    long                            bOpenTemporary : 1;         // 0x68 (& 0x04)
+    long                            bBroken : 1;                // 0x68 (& 0x08)
+    long                            bTornOff : 1;               // 0x68 (& 0x10)
     int                             ChannelIndex;               // 0x6C
-    int                             Unknown_70;                 // 0x70
+    int                             OpenedLocally;              // 0x70
     int                             OpenPacketId;               // 0x74
     int                             ChannelType;                // 0x78
     int                             NumInRec;                   // 0x7C
     int                             NumOutRec;                  // 0x80
-    int                             Unknown_84;                 // 0x84
+    int                             NegotiatedVer;              // 0x84
+
     unsigned char                   UnknownData_88[0x10];       // 0x88
 };
 
 static_assert(offsetof(UChannel_Proxy, ChannelIndex) == 0x6C);
-static_assert(offsetof(UChannel_Proxy, Unknown_84) == 0x84);
+//static_assert(offsetof(UChannel_Proxy, Unknown_84) == 0x84);
 static_assert(sizeof(UChannel_Proxy) == sizeof(UChannel));
+
+
+struct FReplicatedProperty
+{
+    int                             Offset;                     // 0x00
+    UProperty*                      Property;                   // 0x04
+};
+
+static_assert(offsetof(FReplicatedProperty, Property) == 4);
+static_assert(sizeof(FReplicatedProperty) == 12);
 
 
 class UActorChannel_Proxy : public UChannel_Proxy
@@ -63,29 +101,28 @@ public:
     UWorld*                         World;                      // 0x98
     AActor*                         Actor;                      // 0xA0
     UClass*                         ActorClass;                 // 0xA8
-    BYTE                            Unknown_B0[8];              // 0xB0
-    BYTE                            Unknown_B8[8];              // 0xB8
-
-    long                            SpawnAcked : 1;
-    long                            ActorDirty : 1;
-    long                            bActorMustStayDirty : 1;
-    long                            bActorStillInitial : 1;
+    double                          RelevantTime;               // 0xB0
+    double                          LastUpdateTime;             // 0xB8
+    long                            SpawnAcked : 1;             // 0xC0 (& 0x01)
+    long                            ActorDirty : 1;             // 0xC0 (& 0x02)
+    long                            bActorMustStayDirty : 1;    // 0xC0 (& 0x04)
+    long                            bActorStillInitial : 1;     // 0xC0 (& 0x08)
     long                            bIsReplicatingActor : 1;    // 0xC0 (& 0x10)
-    long                            bClearRecentActorRefs : 1;
-
+    long                            bClearRecentActorRefs : 1;  // 0xC0 (& 0x20)
     TArray<BYTE>                    Recent;                     // 0xC4
     TArray<BYTE>                    RepEval;                    // 0xD4
     TArray<int>                     Dirty;                      // 0xE4
     TArray<void*>                   Retirement;                 // 0xF4
-    TArray<void*>                   ReplicatedProperties;       // 0x104
+    TArray<FReplicatedProperty>     ReplicatedProperties;       // 0x104
+
     TArray<void*>                   Unknown_114;                // 0x114 (elements size = 0x78)
 };
 
 static_assert(offsetof(UActorChannel_Proxy, World) == 0x98);
 static_assert(offsetof(UActorChannel_Proxy, Actor) == 0xA0);
 static_assert(offsetof(UActorChannel_Proxy, ActorClass) == 0xA8);
-static_assert(offsetof(UActorChannel_Proxy, Unknown_B0) == 0xB0);
-static_assert(offsetof(UActorChannel_Proxy, Unknown_B8) == 0xB8);
+static_assert(offsetof(UActorChannel_Proxy, RelevantTime) == 0xB0);
+static_assert(offsetof(UActorChannel_Proxy, LastUpdateTime) == 0xB8);
 static_assert(offsetof(UActorChannel_Proxy, RepEval) == 0xD4);
 static_assert(offsetof(UActorChannel_Proxy, Dirty) == 0xE4);
 static_assert(offsetof(UActorChannel_Proxy, Retirement) == 0xF4);
@@ -156,7 +193,7 @@ public:
     unsigned char                   Unknown_A8[0x70];           // 0xA8
     UObject*                        Unknown_118;                // 0x118
     UNetDriver*                     NetDriver;                  // 0x120
-    unsigned char                   Unknown_128[0x58];          // 0x128
+    FURL                            URL;                        // 0x128
     UObject*                        Unknown_180;                // 0x180
     unsigned char                   Unknown_188[0x28];          // 0x188
     TArray<UObject*>                Unknown_1B0;                // 0x1B0
@@ -210,7 +247,8 @@ public:
     FString                         ClientResponse;             // 0x120
     int                             ResponseId;                 // 0x130
     int                             NegotiatedVer;              // 0x134
-    unsigned char                   Unknown_138[0x2c4 - 0x138]; // 0x138
+    FString                         RequestURL;                 // 0x138
+    unsigned char                   Unknown_148[0x2c4 - 0x148]; // 0x148
     int                             InBytes;                    // 0x2C4
     int                             OutBytes;                   // 0x2C8
     int                             InPacketsLost;              // 0x2CC
@@ -237,7 +275,8 @@ public:
     TArray<SFXName>                 ClientVisibleLevelNames;    //   checks out: 0x6028
     TArray<FGuid>                   PendingRemovePackageGuids;  //   checks out: 0x6038
     TArray<UChildConnection*>       Children;                   // 0x6048
-    unsigned char                   Unknown_6058[0x14];         // 0x6058
+    AActor*                         Viewer;                     // 0x6058
+    unsigned char                   Unknown_6060[0x0C];         // 0x6060
 };
 
 static_assert(offsetof(UNetConnection_Proxy, PackageMap) == 0xF0);
@@ -253,8 +292,28 @@ static_assert(offsetof(UNetConnection_Proxy, OpenChannels) == 0x5f90);
 static_assert(offsetof(UNetConnection_Proxy, Download) == 0x5ff8);
 static_assert(offsetof(UNetConnection_Proxy, DownloadInfo) == 0x6000);
 static_assert(offsetof(UNetConnection_Proxy, Children) == 0x6048);
-static_assert(offsetof(UNetConnection_Proxy, Unknown_6058) == 0x6058);
+static_assert(offsetof(UNetConnection_Proxy, Unknown_6060) == 0x6060);
 static_assert(sizeof(UNetConnection_Proxy) == sizeof(UNetConnection));
+
+
+class UTcpipConnection_Proxy : public UNetConnection_Proxy
+{
+public:
+
+    SOCKADDR_IN                     Address;                    // 0x606C
+    unsigned char                   Unknown_607C[24];           // 0x607C
+
+public:
+
+    inline FString FormatRemoteAddress() const
+    {
+        return FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
+    }
+};
+
+static_assert(offsetof(UTcpipConnection_Proxy, Address) == 0x606C);
+static_assert(offsetof(UTcpipConnection_Proxy, Unknown_607C) == 0x607C);
+static_assert(sizeof(UTcpipConnection_Proxy) == sizeof(UTcpipConnection));
 
 
 class UChildConnection_Proxy : public UNetConnection_Proxy

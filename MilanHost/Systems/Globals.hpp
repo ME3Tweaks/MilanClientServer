@@ -1,12 +1,10 @@
 /**
  * @file        MilanHost/Systems/Globals.hpp
- * @header      Subsystems for initializing global variables and hooks.
+ * @header      Systems for initializing global variables and hooks.
  */
 
 #pragma once
-
-
-namespace LESDK { class Initializer; }
+#include <LESDK/Init.hpp>
 
 
 namespace Milan::Allocator
@@ -17,6 +15,16 @@ namespace Milan::Allocator
 
 namespace Milan::Globals
 {
+    // ! Global subsystem functions.
+    // ========================================
+
     void Initialize(::LESDK::Initializer& Context);
     void Terminate();
+
+
+    // ! Public interface.
+    // ========================================
+
+    wchar_t const* GetCmdString();
+    wchar_t const* GetCmdArgs();
 }

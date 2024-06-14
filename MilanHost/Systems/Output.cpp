@@ -1,8 +1,19 @@
-#include <LESDK/Init.hpp>
 #include <LESDK/Headers.hpp>
 
+#include "Milan/Hooks.hpp"
+#include "Milan/Logger.hpp"
 #include "Systems/Output.hpp"
-#include "Logger.hpp"
+
+
+#ifndef _FINAL_RELEASE
+BOOL WINAPI MilanConsoleHandler(DWORD const dwCtrlType)
+{
+    if (dwCtrlType <= CTRL_CLOSE_EVENT)
+        ::SingleDetachImpl();
+
+    return false;
+}
+#endif
 
 
 namespace Milan::Output
@@ -19,6 +30,7 @@ namespace Milan::Output
 
 #ifndef _FINAL_RELEASE
         ::LESDK::InitializeConsole();
+        ::SetConsoleCtrlHandler(::MilanConsoleHandler, TRUE);
 #endif
 
         gp_mainLogger = new MilanLogger{};
@@ -26,13 +38,22 @@ namespace Milan::Output
         static constexpr int k_tagConsole = 200;
         static constexpr int k_tagFile = 201;
 
+        std::string LogFileName = "MilanHost.log";
+
+        int const OrdinalInstance = ::GetGameInstanceOrdinal();
+        if (OrdinalInstance > 0)
+        {
+            // This allows us to use different log files when running multiple local clients.
+            LogFileName = std::string{ "MilanHost-" } + std::to_string(OrdinalInstance) + ".log";
+        }
+
 #if defined(_DEBUG) || !defined(_FINAL_RELEASE)
         // In DEBUG and RELEASE builds keep both sinks, and set file to overwrite previous log.
         gp_mainLogger->RegisterOutput(k_tagConsole, new ConsoleLoggerOutput{});
-        gp_mainLogger->RegisterOutput(k_tagFile, new FileLoggerOutput{ "MilanHost.log", false });
+        gp_mainLogger->RegisterOutput(k_tagFile, new FileLoggerOutput{ LogFileName, false });
 #else
         // In FINAL_RELEASE builds only enable file sink, and set it to append.
-        gp_mainLogger->RegisterOutput(k_tagFile, new FileLoggerOutput{ "MilanHost.log", true });
+        gp_mainLogger->RegisterOutput(k_tagFile, new FileLoggerOutput{ LogFileName, true });
 #endif
 
         if (gp_activeLogger == nullptr)

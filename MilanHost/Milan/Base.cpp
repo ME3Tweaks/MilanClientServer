@@ -2,8 +2,8 @@
 #include <cstdio>
 #include <cwchar>
 
-#include "Base.hpp"
-#include "Hooks.hpp"
+#include "Milan/Base.hpp"
+#include "Milan/Hooks.hpp"
 #include "Systems/Output.hpp"
 
 
@@ -110,11 +110,11 @@ void Details::OnFatalErrorW(::CodePlaceW const& Place,
         std::fflush(stderr);
     }
 
-    if (BioRequestExit != nullptr)
+    if (BioRequestExit_orig != nullptr)
     {
         // If available, call the engine's termination routine.
-        // Bioware seems to have added some logic of their own there.
-        (*BioRequestExit)(TRUE, 0, 0);
+        // BioWare seem to have added some logic of their own there.
+        BioRequestExit_hook(TRUE, 0, 0);
         MILAN_UNREACHABLE;
     }
     else
