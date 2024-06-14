@@ -40,5 +40,10 @@ MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnload, UNetConnection* Con
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnknown19, UNetConnection* Connection, INT UnknownCrc, FInBunch* Bunch);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnknown21, UNetConnection* Connection, FGuid* Guid, INT Flag, FInBunch* Bunch);
 
+MILAN_DECLARE_EXTRACTOR(MlnUNetPendingLevelNotifyControlMessageWelcome, UNetConnection* Connection, FString* Map, FString* GameName);
+MILAN_DECLARE_EXTRACTOR(MlnUNetPendingLevelNotifyControlMessageChallenge, UNetConnection* Connection, INT Version, FString* Challenge);
+MILAN_DECLARE_EXTRACTOR(MlnUNetPendingLevelNotifyControlMessageUses, UNetConnection* Connection, FPackageInfo* Package);
+MILAN_DECLARE_EXTRACTOR(MlnUNetPendingLevelNotifyControlMessageDlMngr, /* no connection pointer! */ FString* Class, FString* Params, INT* bUseCompression);
+
 
 #undef MILAN_DECLARE_EXTRACTOR

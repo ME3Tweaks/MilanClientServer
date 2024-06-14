@@ -212,6 +212,12 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     }
 #endif
 
+    //if (Function->StaticFullName().Contains(L"NotifyConnectionError"))
+    //{
+    //    auto const CastParms = reinterpret_cast<USFXGameViewportClient_execNotifyConnectionError_Parms*>(Parms);
+    //    MILAN_ERRORW(L"NotifyConnectionError: Message = %s, Title = %s", *CastParms->Message, *CastParms->Title);
+    //}
+
     ::Milan::Profilers::On_UObject_ProcessEvent(Context, Function, Parms, Result);
     (*UObject_ProcessEvent_orig)(Context, Function, Parms, Result);
 }
@@ -501,18 +507,28 @@ namespace
 t_UNetPendingLevel_NotifyControlMessage* UNetPendingLevel_NotifyControlMessage_orig = nullptr;
 void UNetPendingLevel_NotifyControlMessage_hook(UNetPendingLevel* const Context, UNetConnection* const Connection, BYTE const Type, FInBunch* const InBunch)
 {
-    // 1, 3, 7, 11
-    //MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
+    static std::array<unsigned char, 4> HandledTypes{ 1u, 3u, 7u, 11u };
+
+    if (std::find(HandledTypes.begin(), HandledTypes.end(), Type) == HandledTypes.end() && Type != 6u)  // if not handled
+        MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
+
+    if (Type == 6u)  // if failure
+        MILAN_ERRORW(L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
+
     (*UNetPendingLevel_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
 }
 
 t_UWorld_NotifyControlMessage* UWorld_NotifyControlMessage_orig = nullptr;
 void UWorld_NotifyControlMessage_hook(UWorld* const Context, UNetConnection* const Connection, BYTE const Type, FInBunch* const InBunch)
 {
-    // Server: 0, 4, 5, 8, 9, 21;  Client: 7, 14, 19
+    // Server: 0, 4, 5, 8, 9, 13, 21;  Client: 7, 14, 19
     static std::array<unsigned char, 9> HandledTypes{ 0u, 4u, 5u, 7u, 8u, 9u, 14u, 19u, 21u };
-    if (std::find(HandledTypes.begin(), HandledTypes.end(), Type) == HandledTypes.end())
-        MILAN_WARNW(L"UWorld::NotifyControlMessage: Type = %d (%s) not intercepted", Type, MessageTypeDesc(Type));
+
+    if (std::find(HandledTypes.begin(), HandledTypes.end(), Type) == HandledTypes.end() && Type != 6u)  // if not handled
+        MILAN_WARNW(L"UWorld::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
+
+    if (Type == 6u)  // if failure
+        MILAN_ERRORW(L"UWorld::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
 
     (*UWorld_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
 }

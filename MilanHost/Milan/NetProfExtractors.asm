@@ -47,41 +47,52 @@ endm
 
 .data
 
-UChannelSendBunch1_bunch                    DQ ?
-UChannelSendBunch2_bunch                    DQ ?
-UActorChannelReplicateActor1_actor          DQ ?
-UActorChannelReplicateActor2_bunch          DQ ?
-UActorChannelReplicateActor3_bunch          DQ ?
-UActorChannelReplicateActor3_prop           DQ ?
-InternalReplicateFunction1_chan             DQ ?
-InternalReplicateFunction1_bunch            DQ ?
-InternalReplicateFunction1_func             DQ ?
-UWorldNotifyControlMessageHello_conn        DQ ?
-UWorldNotifyControlMessageHello_plat        DQ ?
-UWorldNotifyControlMessageHello_ver         DQ ?
-UWorldNotifyControlMessageHello_minver      DQ ?
-UWorldNotifyControlMessageNetspeed_conn     DQ ?
-UWorldNotifyControlMessageNetspeed_speed    DQ ?
-UWorldNotifyControlMessageNetspeed_clamp    DQ ?
-UWorldNotifyControlMessageLogin_conn        DQ ?
-UWorldNotifyControlMessageLogin_err         DQ ?
-UWorldNotifyControlMessageUses_conn         DQ ?
-UWorldNotifyControlMessageUses_pckg         DQ ?
-UWorldNotifyControlMessageHave_conn         DQ ?
-UWorldNotifyControlMessageHave_guid         DQ ?
-UWorldNotifyControlMessageHave_gen          DQ ?
-UWorldNotifyControlMessageJoin_conn         DQ ?
-UWorldNotifyControlMessageJoin_id           DQ ?
-UWorldNotifyControlMessageJoin_err          DQ ?
-UWorldNotifyControlMessageUnload_conn       DQ ?
-UWorldNotifyControlMessageUnload_guid       DQ ?
-UWorldNotifyControlMessageUnknown19_conn    DQ ?
-UWorldNotifyControlMessageUnknown19_unkcrc  DQ ?
-UWorldNotifyControlMessageUnknown19_bunch   DQ ?
-UWorldNotifyControlMessageUnknown21_conn    DQ ?
-UWorldNotifyControlMessageUnknown21_guid    DQ ?
-UWorldNotifyControlMessageUnknown21_flag    DQ ?
-UWorldNotifyControlMessageUnknown21_bunch   DQ ?
+UChannelSendBunch1_bunch                                DQ ?
+UChannelSendBunch2_bunch                                DQ ?
+UActorChannelReplicateActor1_actor                      DQ ?
+UActorChannelReplicateActor2_bunch                      DQ ?
+UActorChannelReplicateActor3_bunch                      DQ ?
+UActorChannelReplicateActor3_prop                       DQ ?
+InternalReplicateFunction1_chan                         DQ ?
+InternalReplicateFunction1_bunch                        DQ ?
+InternalReplicateFunction1_func                         DQ ?
+UWorldNotifyControlMessageHello_conn                    DQ ?
+UWorldNotifyControlMessageHello_plat                    DQ ?
+UWorldNotifyControlMessageHello_ver                     DQ ?
+UWorldNotifyControlMessageHello_minver                  DQ ?
+UWorldNotifyControlMessageNetspeed_conn                 DQ ?
+UWorldNotifyControlMessageNetspeed_speed                DQ ?
+UWorldNotifyControlMessageNetspeed_clamp                DQ ?
+UWorldNotifyControlMessageLogin_conn                    DQ ?
+UWorldNotifyControlMessageLogin_err                     DQ ?
+UWorldNotifyControlMessageUses_conn                     DQ ?
+UWorldNotifyControlMessageUses_pckg                     DQ ?
+UWorldNotifyControlMessageHave_conn                     DQ ?
+UWorldNotifyControlMessageHave_guid                     DQ ?
+UWorldNotifyControlMessageHave_gen                      DQ ?
+UWorldNotifyControlMessageJoin_conn                     DQ ?
+UWorldNotifyControlMessageJoin_id                       DQ ?
+UWorldNotifyControlMessageJoin_err                      DQ ?
+UWorldNotifyControlMessageUnload_conn                   DQ ?
+UWorldNotifyControlMessageUnload_guid                   DQ ?
+UWorldNotifyControlMessageUnknown19_conn                DQ ?
+UWorldNotifyControlMessageUnknown19_unkcrc              DQ ?
+UWorldNotifyControlMessageUnknown19_bunch               DQ ?
+UWorldNotifyControlMessageUnknown21_conn                DQ ?
+UWorldNotifyControlMessageUnknown21_guid                DQ ?
+UWorldNotifyControlMessageUnknown21_flag                DQ ?
+UWorldNotifyControlMessageUnknown21_bunch               DQ ?
+UNetPendingLevelNotifyControlMessageWelcome_conn        DQ ?
+UNetPendingLevelNotifyControlMessageWelcome_map         DQ ?
+UNetPendingLevelNotifyControlMessageWelcome_name        DQ ?
+UNetPendingLevelNotifyControlMessageChallenge_conn      DQ ?
+UNetPendingLevelNotifyControlMessageChallenge_ver       DQ ?
+UNetPendingLevelNotifyControlMessageChallenge_chlng     DQ ?
+UNetPendingLevelNotifyControlMessageUses_conn           DQ ?
+UNetPendingLevelNotifyControlMessageUses_pckg           DQ ?
+UNetPendingLevelNotifyControlMessageDlMngr_class        DQ ?
+UNetPendingLevelNotifyControlMessageDlMngr_params       DQ ?
+UNetPendingLevelNotifyControlMessageDlMngr_compr        DQ ?
 
 
 ;; FUNCTIONS
@@ -412,5 +423,99 @@ MlnUWorldNotifyControlMessageUnknown21 proc
     restoreall
     ret
 MlnUWorldNotifyControlMessageUnknown21 endp
+
+extern MlnUNetPendingLevelNotifyControlMessageWelcome_Handler:proc
+MlnUNetPendingLevelNotifyControlMessageWelcome proc
+    lea rax, [r13 - 38h]
+    mov UNetPendingLevelNotifyControlMessageWelcome_map, rax   ; LevelMap
+    lea rax, [rsp + 60h]
+    mov UNetPendingLevelNotifyControlMessageWelcome_name, rax  ; GameName, [rsp + 50h]
+    mov UNetPendingLevelNotifyControlMessageWelcome_conn, r15  ; Connection
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UNetPendingLevelNotifyControlMessageWelcome_conn
+    mov rdx, UNetPendingLevelNotifyControlMessageWelcome_map
+    mov r8, UNetPendingLevelNotifyControlMessageWelcome_name
+    call MlnUNetPendingLevelNotifyControlMessageWelcome_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUNetPendingLevelNotifyControlMessageWelcome endp
+
+extern MlnUNetPendingLevelNotifyControlMessageChallenge_Handler:proc
+MlnUNetPendingLevelNotifyControlMessageChallenge proc
+    mov rax, [r15 + 134h]
+    mov UNetPendingLevelNotifyControlMessageChallenge_ver, rax      ; Version
+    lea rax, [r15 + 110h]
+    mov UNetPendingLevelNotifyControlMessageChallenge_chlng, rax    ; Challenge
+    mov UNetPendingLevelNotifyControlMessageChallenge_conn, r15     ; Connection
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UNetPendingLevelNotifyControlMessageChallenge_conn
+    mov rdx, UNetPendingLevelNotifyControlMessageChallenge_ver
+    mov r8, UNetPendingLevelNotifyControlMessageChallenge_chlng
+    call MlnUNetPendingLevelNotifyControlMessageChallenge_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUNetPendingLevelNotifyControlMessageChallenge endp
+
+extern MlnUNetPendingLevelNotifyControlMessageUses_Handler:proc
+MlnUNetPendingLevelNotifyControlMessageUses proc
+    lea rax, [rbp - 60h]
+    mov UNetPendingLevelNotifyControlMessageUses_pckg, rax          ; Package
+    mov UNetPendingLevelNotifyControlMessageUses_conn, r15          ; Connection
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UNetPendingLevelNotifyControlMessageUses_conn
+    mov rdx, UNetPendingLevelNotifyControlMessageUses_pckg
+    call MlnUNetPendingLevelNotifyControlMessageUses_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUNetPendingLevelNotifyControlMessageUses endp
+
+extern MlnUNetPendingLevelNotifyControlMessageDlMngr_Handler:proc
+MlnUNetPendingLevelNotifyControlMessageDlMngr proc
+    mov rax, qword ptr [rsi]
+    lea rax, [rax + 08h]
+    add rax, r12
+    mov UNetPendingLevelNotifyControlMessageDlMngr_class, rax       ; ClassName
+
+    mov rax, qword ptr [rsi]
+    lea rax, [rax + 18h]
+    add rax, r12
+    mov UNetPendingLevelNotifyControlMessageDlMngr_params, rax      ; Params
+
+    mov rax, qword ptr [rsi]
+    lea rax, [rax + 28h]
+    add rax, r12
+    mov UNetPendingLevelNotifyControlMessageDlMngr_compr, rax       ; bUseCompression
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UNetPendingLevelNotifyControlMessageDlMngr_class
+    mov rdx, UNetPendingLevelNotifyControlMessageDlMngr_params
+    mov r8, UNetPendingLevelNotifyControlMessageDlMngr_compr
+    call MlnUNetPendingLevelNotifyControlMessageDlMngr_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUNetPendingLevelNotifyControlMessageDlMngr endp
 
 end
