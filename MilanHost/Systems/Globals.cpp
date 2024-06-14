@@ -160,6 +160,7 @@ namespace Milan::Globals
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageUses", 0x8C43D7, MlnUWorldNotifyControlMessageUses, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageHave", 0x8C4C39, MlnUWorldNotifyControlMessageHave, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageJoin", 0x8C518B, MlnUWorldNotifyControlMessageJoin, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UWorldNotifyControlMessageAbort", 0x8C4DAE, MlnUWorldNotifyControlMessageAbort, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageUnload", 0x8C4309, MlnUWorldNotifyControlMessageUnload, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageUnknown19", 0x8C42B3, MlnUWorldNotifyControlMessageUnknown19, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageUnknown21", 0x8C57B2, MlnUWorldNotifyControlMessageUnknown21, LocalCaveIndexer);

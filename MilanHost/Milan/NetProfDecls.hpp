@@ -36,6 +36,7 @@ MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageLogin, UNetConnection* Conn
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUses, UNetConnection* Connection, FPackageInfo* Package);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHave, UNetConnection* Connection, FGuid* Guid, INT Generation);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageJoin, UNetConnection* Connection, QWORD* UniqueId, FString* SpawnError);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageAbort, UNetConnection* Connection, FGuid* Guid);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnload, UNetConnection* Connection, FGuid* Guid);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnknown19, UNetConnection* Connection, INT UnknownCrc, FInBunch* Bunch);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnknown21, UNetConnection* Connection, FGuid* Guid, INT Flag, FInBunch* Bunch);

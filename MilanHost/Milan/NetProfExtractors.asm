@@ -73,6 +73,8 @@ UWorldNotifyControlMessageHave_gen                      DQ ?
 UWorldNotifyControlMessageJoin_conn                     DQ ?
 UWorldNotifyControlMessageJoin_id                       DQ ?
 UWorldNotifyControlMessageJoin_err                      DQ ?
+UWorldNotifyControlMessageAbort_conn                    DQ ?
+UWorldNotifyControlMessageAbort_guid                    DQ ?
 UWorldNotifyControlMessageUnload_conn                   DQ ?
 UWorldNotifyControlMessageUnload_guid                   DQ ?
 UWorldNotifyControlMessageUnknown19_conn                DQ ?
@@ -359,6 +361,25 @@ MlnUWorldNotifyControlMessageJoin proc
     restoreall
     ret
 MlnUWorldNotifyControlMessageJoin endp
+
+extern MlnUWorldNotifyControlMessageAbort_Handler:proc
+MlnUWorldNotifyControlMessageAbort proc
+    lea rax, [rsp + 70h]
+    mov UWorldNotifyControlMessageAbort_guid, rax   ; Guid, [rsp + 60h]
+    mov UWorldNotifyControlMessageAbort_conn, r15   ; Connection
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UWorldNotifyControlMessageAbort_conn
+    mov rdx, UWorldNotifyControlMessageAbort_guid
+    call MlnUWorldNotifyControlMessageAbort_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUWorldNotifyControlMessageAbort endp
 
 extern MlnUWorldNotifyControlMessageUnload_Handler:proc
 MlnUWorldNotifyControlMessageUnload proc

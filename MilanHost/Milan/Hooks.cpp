@@ -490,6 +490,7 @@ namespace
         case 8u:    return L"Have";
         case 9u:    return L"Join";
         case 11u:   return L"DlMngr";
+        case 13u:   return L"Abort";
         case 14u:   return L"Unload";
         case 19u:   return L"Unk19_DLM";
         case 21u:   return L"Unk21_VIS";
@@ -509,11 +510,10 @@ void UNetPendingLevel_NotifyControlMessage_hook(UNetPendingLevel* const Context,
 {
     static std::array<unsigned char, 4> HandledTypes{ 1u, 3u, 7u, 11u };
 
-    if (std::find(HandledTypes.begin(), HandledTypes.end(), Type) == HandledTypes.end() && Type != 6u)  // if not handled
-        MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
-
     if (Type == 6u)  // if failure
         MILAN_ERRORW(L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
+    else if (std::find(HandledTypes.begin(), HandledTypes.end(), Type) == HandledTypes.end())  // if not handled
+        MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
 
     (*UNetPendingLevel_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
 }
@@ -521,14 +521,13 @@ void UNetPendingLevel_NotifyControlMessage_hook(UNetPendingLevel* const Context,
 t_UWorld_NotifyControlMessage* UWorld_NotifyControlMessage_orig = nullptr;
 void UWorld_NotifyControlMessage_hook(UWorld* const Context, UNetConnection* const Connection, BYTE const Type, FInBunch* const InBunch)
 {
-    // Server: 0, 4, 5, 8, 9, 13, 21;  Client: 7, 14, 19
-    static std::array<unsigned char, 9> HandledTypes{ 0u, 4u, 5u, 7u, 8u, 9u, 14u, 19u, 21u };
-
-    if (std::find(HandledTypes.begin(), HandledTypes.end(), Type) == HandledTypes.end() && Type != 6u)  // if not handled
-        MILAN_WARNW(L"UWorld::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
+    // Server: 0, 4, 5, 8, 9, 13, 21;  Client: 7, 14, 19   (- receives)
+    static std::array<unsigned char, 10> HandledTypes{ 0u, 4u, 5u, 7u, 8u, 9u, 13u, 14u, 19u, 21u };
 
     if (Type == 6u)  // if failure
         MILAN_ERRORW(L"UWorld::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
+    else if (std::find(HandledTypes.begin(), HandledTypes.end(), Type) == HandledTypes.end())  // if not handled
+        MILAN_WARNW(L"UWorld::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
 
     (*UWorld_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
 }
