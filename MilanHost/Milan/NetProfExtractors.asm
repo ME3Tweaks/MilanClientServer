@@ -65,6 +65,8 @@ UWorldNotifyControlMessageNetspeed_speed                DQ ?
 UWorldNotifyControlMessageNetspeed_clamp                DQ ?
 UWorldNotifyControlMessageLogin_conn                    DQ ?
 UWorldNotifyControlMessageLogin_err                     DQ ?
+UWorldNotifyControlMessageFailure_conn                  DQ ?
+UWorldNotifyControlMessageFailure_err                   DQ ?
 UWorldNotifyControlMessageUses_conn                     DQ ?
 UWorldNotifyControlMessageUses_pckg                     DQ ?
 UWorldNotifyControlMessageHave_conn                     DQ ?
@@ -87,14 +89,21 @@ UWorldNotifyControlMessageUnknown21_bunch               DQ ?
 UNetPendingLevelNotifyControlMessageWelcome_conn        DQ ?
 UNetPendingLevelNotifyControlMessageWelcome_map         DQ ?
 UNetPendingLevelNotifyControlMessageWelcome_name        DQ ?
+UNetPendingLevelNotifyControlMessageUpgrade_conn        DQ ?
+UNetPendingLevelNotifyControlMessageUpgrade_static      DQ ?
+UNetPendingLevelNotifyControlMessageUpgrade_dynamic     DQ ?
 UNetPendingLevelNotifyControlMessageChallenge_conn      DQ ?
 UNetPendingLevelNotifyControlMessageChallenge_ver       DQ ?
 UNetPendingLevelNotifyControlMessageChallenge_chlng     DQ ?
+UNetPendingLevelNotifyControlMessageFailure_conn        DQ ?
+UNetPendingLevelNotifyControlMessageFailure_err         DQ ?
 UNetPendingLevelNotifyControlMessageUses_conn           DQ ?
 UNetPendingLevelNotifyControlMessageUses_pckg           DQ ?
 UNetPendingLevelNotifyControlMessageDlMngr_class        DQ ?
 UNetPendingLevelNotifyControlMessageDlMngr_params       DQ ?
 UNetPendingLevelNotifyControlMessageDlMngr_compr        DQ ?
+UNetPendingLevelNotifyControlMessageUnload_conn         DQ ?
+UNetPendingLevelNotifyControlMessageUnload_guid         DQ ?
 
 
 ;; FUNCTIONS
@@ -299,6 +308,25 @@ MlnUWorldNotifyControlMessageLogin proc
     ret
 MlnUWorldNotifyControlMessageLogin endp
 
+extern MlnUWorldNotifyControlMessageFailure_Handler:proc
+MlnUWorldNotifyControlMessageFailure proc
+    lea rax, [rsp + 50h]
+    mov UWorldNotifyControlMessageFailure_err, rax      ; Error, [rsp + 40h]
+    mov UWorldNotifyControlMessageFailure_conn, r15     ; Connection
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UWorldNotifyControlMessageFailure_conn
+    mov rdx, UWorldNotifyControlMessageFailure_err
+    call MlnUWorldNotifyControlMessageFailure_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUWorldNotifyControlMessageFailure endp
+
 extern MlnUWorldNotifyControlMessageUses_Handler:proc
 MlnUWorldNotifyControlMessageUses proc
     lea rax, [rbp - 50h]
@@ -467,6 +495,29 @@ MlnUNetPendingLevelNotifyControlMessageWelcome proc
     ret
 MlnUNetPendingLevelNotifyControlMessageWelcome endp
 
+extern MlnUNetPendingLevelNotifyControlMessageUpgrade_Handler:proc
+MlnUNetPendingLevelNotifyControlMessageUpgrade proc
+    mov rax, [RBP + 140h]
+    mov UNetPendingLevelNotifyControlMessageUpgrade_static, rax     ; StaticVersion
+    mov rax, [RSP + 70h]
+    mov UNetPendingLevelNotifyControlMessageUpgrade_dynamic, rax    ; DynamicVersion
+    mov rax, [RBP + 138h]
+    mov UNetPendingLevelNotifyControlMessageUpgrade_conn, rax       ; Connection
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UNetPendingLevelNotifyControlMessageUpgrade_conn
+    mov rdx, UNetPendingLevelNotifyControlMessageUpgrade_static
+    mov r8, UNetPendingLevelNotifyControlMessageUpgrade_dynamic
+    call MlnUNetPendingLevelNotifyControlMessageUpgrade_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUNetPendingLevelNotifyControlMessageUpgrade endp
+
 extern MlnUNetPendingLevelNotifyControlMessageChallenge_Handler:proc
 MlnUNetPendingLevelNotifyControlMessageChallenge proc
     mov rax, [r15 + 134h]
@@ -488,6 +539,25 @@ MlnUNetPendingLevelNotifyControlMessageChallenge proc
     restoreall
     ret
 MlnUNetPendingLevelNotifyControlMessageChallenge endp
+
+extern MlnUNetPendingLevelNotifyControlMessageFailure_Handler:proc
+MlnUNetPendingLevelNotifyControlMessageFailure proc
+    lea rax, [rsp + 50h]
+    mov UNetPendingLevelNotifyControlMessageFailure_err, rax        ; Error, [rsp + 40h]
+    mov UNetPendingLevelNotifyControlMessageFailure_conn, r15       ; Connection
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UNetPendingLevelNotifyControlMessageFailure_conn
+    mov rdx, UNetPendingLevelNotifyControlMessageFailure_err
+    call MlnUNetPendingLevelNotifyControlMessageFailure_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUNetPendingLevelNotifyControlMessageFailure endp
 
 extern MlnUNetPendingLevelNotifyControlMessageUses_Handler:proc
 MlnUNetPendingLevelNotifyControlMessageUses proc
@@ -538,5 +608,24 @@ MlnUNetPendingLevelNotifyControlMessageDlMngr proc
     restoreall
     ret
 MlnUNetPendingLevelNotifyControlMessageDlMngr endp
+
+extern MlnUNetPendingLevelNotifyControlMessageUnload_Handler:proc
+MlnUNetPendingLevelNotifyControlMessageUnload proc
+    lea rax, [rsp + 40h]
+    mov UNetPendingLevelNotifyControlMessageUnload_guid, rax  ; Guid, [rsp + 30h]
+    mov UNetPendingLevelNotifyControlMessageUnload_conn, r15  ; Connection
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UWorldNotifyControlMessageUnload_conn
+    mov rdx, UWorldNotifyControlMessageUnload_guid
+    call MlnUNetPendingLevelNotifyControlMessageUnload_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUNetPendingLevelNotifyControlMessageUnload endp
 
 end

@@ -33,6 +33,7 @@ MILAN_DECLARE_EXTRACTOR(MlnUTcpNetDriverTickDispatch, UTcpipConnection* Connecti
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHello, UNetConnection* Connection, BYTE Platform, INT RemoteMinVersion, INT RemoteVersion);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageNetspeed, UNetConnection* Connection, INT Speed, INT ClampedSpeed);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageLogin, UNetConnection* Connection, FString* LoginError);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageFailure, UNetConnection* Connection, FString* Error);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUses, UNetConnection* Connection, FPackageInfo* Package);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHave, UNetConnection* Connection, FGuid* Guid, INT Generation);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageJoin, UNetConnection* Connection, QWORD* UniqueId, FString* SpawnError);
@@ -42,9 +43,12 @@ MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnknown19, UNetConnection* 
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageUnknown21, UNetConnection* Connection, FGuid* Guid, INT Flag, FInBunch* Bunch);
 
 MILAN_DECLARE_EXTRACTOR(MlnUNetPendingLevelNotifyControlMessageWelcome, UNetConnection* Connection, FString* Map, FString* GameName);
+MILAN_DECLARE_EXTRACTOR(MlnUNetPendingLevelNotifyControlMessageUpgrade, UNetConnection* Connection, INT StaticVersion, INT DynamicVersion);
 MILAN_DECLARE_EXTRACTOR(MlnUNetPendingLevelNotifyControlMessageChallenge, UNetConnection* Connection, INT Version, FString* Challenge);
+MILAN_DECLARE_EXTRACTOR(MlnUNetPendingLevelNotifyControlMessageFailure, UNetConnection* Connection, FString* Error);
 MILAN_DECLARE_EXTRACTOR(MlnUNetPendingLevelNotifyControlMessageUses, UNetConnection* Connection, FPackageInfo* Package);
 MILAN_DECLARE_EXTRACTOR(MlnUNetPendingLevelNotifyControlMessageDlMngr, /* no connection pointer! */ FString* Class, FString* Params, INT* bUseCompression);
+MILAN_DECLARE_EXTRACTOR(MlnUNetPendingLevelNotifyControlMessageUnload, UNetConnection* Connection, FGuid* Guid);
 
 
 #undef MILAN_DECLARE_EXTRACTOR

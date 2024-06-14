@@ -70,6 +70,9 @@
 #define GLOBAL_SORT_REPLICATED_ACTORS_OFFSET \
     ::LESDK::Address::FromOffset(0x58B0A0)
 
+#define GLOBAL_GLOBALDYNAMICBUILDVERSION_PATTERN \
+    ::LESDK::Address::FromPattern("48 83 EC 28 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 85 C0 74 ?? 48 8B 88 ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 01 48 83 C4 28 48 FF A0 ?? ?? ?? ?? 33 C0")
+
 #define GLOBAL_FSOCKETWIN_SENDTO_OFFSET     ::LESDK::Address::FromOffset(0x909F30)
 #define GLOBAL_FSOCKETWIN_SEND_OFFSET       ::LESDK::Address::FromOffset(0x9091D0)
 #define GLOBAL_FSOCKETWIN_RECVFROM_OFFSET   ::LESDK::Address::FromOffset(0x908520)
@@ -247,6 +250,11 @@ using t_SortReplicatedActors = void(CReplicatedActorRecord** Actors, int Count);
 extern t_SortReplicatedActors* SortReplicatedActors_orig;
 
 void SortReplicatedActors_hook(CReplicatedActorRecord** Actors, int Count);
+
+using t_GlobalDynamicBuildVersion = UINT();
+extern t_GlobalDynamicBuildVersion* GlobalDynamicBuildVersion_orig;
+
+UINT GlobalDynamicBuildVersion_hook();
 
 using t_FSocketWin_SendTo = UINT(FSocket*, BYTE*, INT, INT*, SOCKADDR_IN*);
 extern t_FSocketWin_SendTo* FSocketWin_SendTo_orig;

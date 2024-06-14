@@ -220,6 +220,21 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
 
     ::Milan::Profilers::On_UObject_ProcessEvent(Context, Function, Parms, Result);
     (*UObject_ProcessEvent_orig)(Context, Function, Parms, Result);
+
+#ifndef _FINAL_RELEASE
+
+    static constexpr auto kbForceFailureNetMessagePrelogin = false;
+    if (kbForceFailureNetMessagePrelogin && Context->IsA<AGameInfo>() && Function->StaticName().Contains(L"PreLogin"))
+    {
+        auto const CastParms = reinterpret_cast<AGameInfo_eventPreLogin_Parms*>(Parms);
+        MILAN_DEBUGW(L"AGameInfo::PreLogin: Options = %s, Address = %s, Error = %s",
+            *CastParms->Options, *CastParms->Address, *CastParms->ErrorMessage);
+
+        if (CastParms->ErrorMessage.Empty())
+            CastParms->ErrorMessage = L"debug forced error";
+    }
+
+#endif
 }
 
 t_UObject_ProcessInternal* UObject_ProcessInternal_orig = nullptr;
@@ -242,12 +257,12 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
 #endif
 
-    if (Stack->Node->StaticName().Equals(L"GetProfileSettingFromAccomplishmentProgress"))
-    {
-        auto const Manager = Context->Cast<USFXAccomplishmentManager>();
-        MILAN_WARNW(L"GetProfileSettingFromAccomplishmentProgress: loop count = %u, code start = %p",
-            Manager->AccomplishmentProgressData.Count(), reinterpret_cast<void*>(Stack->Code));
-    }
+    //if (Stack->Node->StaticName().Equals(L"GetProfileSettingFromAccomplishmentProgress"))
+    //{
+    //    auto const Manager = Context->Cast<USFXAccomplishmentManager>();
+    //    MILAN_WARNW(L"GetProfileSettingFromAccomplishmentProgress: loop count = %u, code start = %p",
+    //        Manager->AccomplishmentProgressData.Count(), reinterpret_cast<void*>(Stack->Code));
+    //}
 
     if (!::Milan::State::On_UObject_ProcessInternal_Pre(Context, Stack, Result))
     {
@@ -593,6 +608,18 @@ void SortReplicatedActors_hook(CReplicatedActorRecord** const Actors, int const 
                 Record->SortKey);
         }
     }
+}
+
+t_GlobalDynamicBuildVersion* GlobalDynamicBuildVersion_orig = nullptr;
+UINT GlobalDynamicBuildVersion_hook()
+{
+    UINT const Version = (*GlobalDynamicBuildVersion_orig)();
+
+    static constexpr bool kbForceUpgradeNetMessage = false;
+    if (kbForceUpgradeNetMessage && GetGameInstanceOrdinal() != 0)
+        return 123456u;
+
+    return Version;
 }
 
 t_FSocketWin_SendTo* FSocketWin_SendTo_orig = nullptr;

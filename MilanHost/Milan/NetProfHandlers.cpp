@@ -142,6 +142,16 @@ void MlnUWorldNotifyControlMessageLogin_Handler(UNetConnection* const Connection
     MILAN_UNUSED_2(Connection, LoginError);
 }
 
+void MlnUWorldNotifyControlMessageFailure_Handler(UNetConnection* const Connection, FString* const Error)
+{
+    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    MILAN_ERRORW(L"UWorld::NotifyControlMessage (Failure): Remote = %s, Error = %s", *TcpConn->FormatRemoteAddress(), Error->Chars());
+    MILAN_UNUSED_2(Connection, Error);
+
+    // This injection hasn't been tested yet.
+    MILAN_BREAK_ATTACHED();
+}
+
 void MlnUWorldNotifyControlMessageUses_Handler(UNetConnection* const Connection, FPackageInfo* const Package)
 {
     //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
@@ -204,12 +214,27 @@ void MlnUNetPendingLevelNotifyControlMessageWelcome_Handler(UNetConnection* cons
     MILAN_UNUSED_3(Connection, Map, GameName);
 }
 
+void MlnUNetPendingLevelNotifyControlMessageUpgrade_Handler(UNetConnection* const Connection, INT const StaticVersion, INT const DynamicVersion)
+{
+    //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    //MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage (Upgrade): Remote = %s, StaticVersion = 0x%08X, DynamicVersion = 0x%08X",
+    //    *TcpConn->FormatRemoteAddress(), StaticVersion, DynamicVersion);
+    MILAN_UNUSED_3(Connection, StaticVersion, DynamicVersion);
+}
+
 void MlnUNetPendingLevelNotifyControlMessageChallenge_Handler(UNetConnection* const Connection, INT const Version, FString* const Challenge)
 {
     //auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
     //MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage (Challenge): Remote = %s, Version = %d, Challenge = %s",
     //    *TcpConn->FormatRemoteAddress(), Version, Challenge->Chars());
     MILAN_UNUSED_3(Connection, Version, Challenge);
+}
+
+void MlnUNetPendingLevelNotifyControlMessageFailure_Handler(UNetConnection* const Connection, FString* const Error)
+{
+    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    MILAN_ERRORW(L"UNetPendingLevel::NotifyControlMessage (Failure): Remote = %s, Error = %s", *TcpConn->FormatRemoteAddress(), Error->Chars());
+    MILAN_UNUSED_2(Connection, Error);
 }
 
 void MlnUNetPendingLevelNotifyControlMessageUses_Handler(UNetConnection* const Connection, FPackageInfo* const Package)
@@ -225,4 +250,15 @@ void MlnUNetPendingLevelNotifyControlMessageDlMngr_Handler(FString* const Class,
     //MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage (DlMngr): Remote = n/a, Class = %s, Params = %s, bUseCompression = %d",
     //    Class->Chars(), Params->Chars(), *bUseCompression);
     MILAN_UNUSED_3(Class, Params, bUseCompression);
+}
+
+void MlnUNetPendingLevelNotifyControlMessageUnload_Handler(UNetConnection* const Connection, FGuid* const Guid)
+{
+    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage (Unload): Remote = %s, Guid = %s (%s)",
+        *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid));
+    MILAN_UNUSED_2(Connection, Guid);
+
+    // This injection hasn't been tested yet.
+    MILAN_BREAK_ATTACHED();
 }

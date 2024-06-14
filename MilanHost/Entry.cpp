@@ -194,6 +194,20 @@ void RegisterNonshipCommands()
             return true;
         });
 
+    ::Milan::Console::RegisterCommand(L"dump", L"onlinevers",
+        [](wchar_t const*)
+        {
+            for (TypedObjectIterator<UOnlineSubsystem, true, false> Iter{}; Iter; ++Iter)
+            {
+                auto const Subsystem = *Iter;
+                auto const Name = Subsystem->GetName();
+                MILAN_INFOW(L"%s.GetBuildUniqueId() => 0x%08x", *Name, (unsigned)Subsystem->GetBuildUniqueId());
+                MILAN_INFOW(L"%s.GetBioStaticBuildVersion() => 0x%08x", *Name, (unsigned)Subsystem->GetBioStaticBuildVersion());
+                MILAN_INFOW(L"%s.GetBioDynamicBuildVersion() => 0x%08x", *Name, (unsigned)Subsystem->GetBioDynamicBuildVersion());
+            }
+            return true;
+        });
+
     ::Milan::Console::RegisterCommand(L"log", L"processinternal",
         [](wchar_t const*)
         {

@@ -135,6 +135,7 @@ namespace Milan::Globals
         INSTALL_HOOK_TWO(UWorld, NotifyControlMessage, GLOBAL_UWORLD_NOTIFYCONTROLMESSAGE_PHOOK);
         INSTALL_HOOK_TWO(UWorld, ServerTickClients, GLOBAL_UWORLD_SERVERTICKCLIENTS_PHOOK);
         INSTALL_HOOK_ONE(SortReplicatedActors, GLOBAL_SORT_REPLICATED_ACTORS_OFFSET);
+        INSTALL_HOOK_ONE(GlobalDynamicBuildVersion, GLOBAL_GLOBALDYNAMICBUILDVERSION_PATTERN);
         INSTALL_HOOK_TWO(FSocketWin, SendTo, GLOBAL_FSOCKETWIN_SENDTO_OFFSET);
         INSTALL_HOOK_TWO(FSocketWin, Send, GLOBAL_FSOCKETWIN_SEND_OFFSET);
         INSTALL_HOOK_TWO(FSocketWin, RecvFrom, GLOBAL_FSOCKETWIN_RECVFROM_OFFSET);
@@ -158,6 +159,7 @@ namespace Milan::Globals
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageHello", 0x8C48FD, MlnUWorldNotifyControlMessageHello, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageNetspeed", 0x8C4B96, MlnUWorldNotifyControlMessageNetspeed, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageLogin", 0x8C4FA2, MlnUWorldNotifyControlMessageLogin, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UWorldNotifyControlMessageFailure", 0x8C4559, MlnUWorldNotifyControlMessageFailure, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageUses", 0x8C43D7, MlnUWorldNotifyControlMessageUses, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageHave", 0x8C4C39, MlnUWorldNotifyControlMessageHave, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageJoin", 0x8C518B, MlnUWorldNotifyControlMessageJoin, LocalCaveIndexer);
@@ -167,9 +169,12 @@ namespace Milan::Globals
         ::MiddleIntercept::Install(L"UWorldNotifyControlMessageUnknown21", 0x8C57B2, MlnUWorldNotifyControlMessageUnknown21, LocalCaveIndexer);
 
         ::MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageWelcome", 0x660814, MlnUNetPendingLevelNotifyControlMessageWelcome, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageUpgrade", 0x65F99C, MlnUNetPendingLevelNotifyControlMessageUpgrade, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageChallenge", 0x6600F7, MlnUNetPendingLevelNotifyControlMessageChallenge, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageFailure", 0x65FF4C, MlnUNetPendingLevelNotifyControlMessageFailure, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageUses", 0x65FB11, MlnUNetPendingLevelNotifyControlMessageUses, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageDlMngr", 0x66075A, MlnUNetPendingLevelNotifyControlMessageDlMngr, LocalCaveIndexer);
+        ::MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageUnload", 0x65FF1B, MlnUNetPendingLevelNotifyControlMessageUnload, LocalCaveIndexer);
 
 #endif
 
