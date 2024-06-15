@@ -59,15 +59,12 @@ void MlnUChannelSendBunch1_Handler(FOutBunch* const Bunch)
     SendBunch1_BitsWrittenBefore = Bunch->Num;
 }
 
-void MlnUChannelSendBunch2_Handler(FOutBunch* const Bunch)
+void MlnUChannelSendBunch2_Handler(UChannel* const Channel, FOutBunch* const Bunch)
 {
-    MILAN_UNUSED(Bunch);
-    // Note that Bunch pointers here and in the 1st handler are not necessarily the same!
+    MILAN_UNUSED_2(Channel, Bunch); // Bunches here and in the 1st handler might not be the same!
 
-    //INT const BitsWrittenAfter = Bunch->Num;
-    //MILAN_TRACEW(L"NETPROF (UChannel::SendBunch): %s, bits = %d",
-    //    Bunch->Channel ? *Bunch->Channel->StaticName() : L"???",
-    //    BitsWrittenAfter - SendBunch1_BitsWrittenBefore);
+    //auto const BitsSent = Bunch->Num - SendBunch1_BitsWrittenBefore;
+    //MILAN_TRACEW(L"UChannel::SendBunch: %s, bits = %d", *Channel->StaticName(), BitsSent);
 
     SendBunch1_BitsWrittenBefore = 0;
 }
@@ -75,10 +72,10 @@ void MlnUChannelSendBunch2_Handler(FOutBunch* const Bunch)
 // Used by UActorChannel::ReplicateActor handlers: stored by 2nd, loaded and cleared by 3rd.
 static INT ReplicateActor_BitsWrittenBeforeProp = 0;
 
-void MlnUActorChannelReplicateActor1_Handler(AActor* const Actor)
+void MlnUActorChannelReplicateActor1_Handler(UActorChannel* const Channel, AActor* const Actor)
 {
-    MILAN_UNUSED(Actor);
-    //MILAN_TRACEW(L"NETPROF (UActorChannel::ReplicateActor / actor): %s", *Actor->StaticName());
+    MILAN_UNUSED_2(Channel, Actor);
+    //MILAN_TRACEW(L"UActorChannel::ReplicateActor: %s, actor = %s", *Channel->StaticName(), *Actor->StaticName());
 }
 
 void MlnUActorChannelReplicateActor2_Handler(FOutBunch* const Bunch)
@@ -86,12 +83,13 @@ void MlnUActorChannelReplicateActor2_Handler(FOutBunch* const Bunch)
     ReplicateActor_BitsWrittenBeforeProp = Bunch->Num;
 }
 
-void MlnUActorChannelReplicateActor3_Handler(UProperty* const Property, FOutBunch* const Bunch)
+void MlnUActorChannelReplicateActor3_Handler(UActorChannel* const Channel, UProperty* const Property, FOutBunch* const Bunch)
 {
-    MILAN_UNUSED_2(Property, Bunch);
-    //INT const BitsWrittenAfterProp = Bunch->Num;
-    //MILAN_TRACEW(L"NETPROF (UActorChannel::ReplicateActor / property): %s, bits = %d",
-    //    *Property->StaticName(), BitsWrittenAfterProp - ReplicateActor_BitsWrittenBeforeProp);
+    MILAN_UNUSED_3(Channel, Property, Bunch);
+
+    //auto const BitsWritten = Bunch->Num - ReplicateActor_BitsWrittenBeforeProp;
+    //MILAN_TRACEW(L"UActorChannel::ReplicateActor: %s, property = %s, bits = %d", *Channel->GetName(), *Property->StaticName(), BitsWritten);
+
     ReplicateActor_BitsWrittenBeforeProp = 0;
 }
 
