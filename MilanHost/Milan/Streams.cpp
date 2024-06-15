@@ -1,4 +1,5 @@
 #include "Milan/Streams.hpp"
+#include "Systems/Output.hpp"
 
 
 // ! IInputStream implementation.
@@ -130,6 +131,8 @@ INT64 BufferedFileOutputStream::Write(BYTE const* const Input, INT64 const Lengt
 
 void BufferedFileOutputStream::Flush()
 {
+    MILAN_TRACEW(L"BufferedFileOutputStream - flushing with offset = %llu", m_buffer.Offset);
+
     if (m_buffer.Offset > 0)
     {
         std::fwrite(m_buffer.Buffer.data(), 1, m_buffer.Offset, mp_file);

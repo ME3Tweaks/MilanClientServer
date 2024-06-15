@@ -30,7 +30,7 @@ MILAN_DECLARE_EXTRACTOR(MlnInternalReplicateFunction1, UActorChannel* Channel, F
 MILAN_DECLARE_EXTRACTOR(MlnSeamlessTravelTick1, FURL* PendingUrl);
 MILAN_DECLARE_EXTRACTOR(MlnUTcpNetDriverTickDispatch, UTcpipConnection* Connection);
 
-MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHello, UNetConnection* Connection, BYTE Platform, INT RemoteMinVersion, INT RemoteVersion);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHello, UNetConnection* Connection, BYTE Platform, INT StaticVersion, INT DynamicVersion);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageNetspeed, UNetConnection* Connection, INT Speed, INT ClampedSpeed);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageLogin, UNetConnection* Connection, FString* LoginError);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageFailure, UNetConnection* Connection, FString* Error);

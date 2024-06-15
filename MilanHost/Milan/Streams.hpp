@@ -278,7 +278,7 @@ public:
 
     // Own interface.
 
-    static constexpr size_t k_defaultBufferSize = 10 * 1024;  // 10 kb
+    static constexpr size_t k_defaultBufferSize = 40 * 1024;  // 40 kb
     explicit BufferedFileOutputStream(std::string_view Path, size_t Buffer = k_defaultBufferSize);
 
 };
