@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Net;
 using System.Text;
-using System.Threading.Channels;
 
 namespace NetworkProfiler.Core;
 
@@ -15,7 +14,7 @@ public interface IRecord
 
 public struct TieredStringLookupRecord : IRecord
 {
-    string[] Table;
+    public string[] Table;
 
     public readonly RecordType Type => RecordType.TieredStringLookup;
     public void Read(ICaptureReader reader)
@@ -23,9 +22,9 @@ public struct TieredStringLookupRecord : IRecord
         Span<byte> buffer = stackalloc byte[2048];
 
         int count = reader.ReadInt32();
-        Table = new string[count];
+        Table = new string[count + 1];
 
-        for (int i = 0; i < count; ++i)
+        for (int i = 0; i <= count; ++i)
         {
             short length = reader.ReadInt16();
             Debug.Assert(length >= 0);
@@ -35,9 +34,9 @@ public struct TieredStringLookupRecord : IRecord
                 continue;
 
             Debug.Assert(length < 2048);
-            reader.ReadBlob(length, buffer);
-
             var bytes = buffer[..length];
+
+            reader.ReadBlob(bytes);
             var str = Encoding.Unicode.GetString(bytes);
 
             Table[i] = str;
