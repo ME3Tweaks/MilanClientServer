@@ -38,7 +38,7 @@ internal class LoggingVisitor(NetworkCapture owner) : ICaptureVisitor
 
     public void OnSendBunch(ref SendBunchRecord record, int frame, float time)
     {
-
+        Console.WriteLine($"send bunch of {record.Bits} bit(s) on {Owner.ResolveName(record.Channel)} to {record.Remote}");
     }
 
     public void OnSessionEvent(ref SessionEventRecord record, int frame, float time)
@@ -49,7 +49,8 @@ internal class LoggingVisitor(NetworkCapture owner) : ICaptureVisitor
 
     public void OnSocketCall(ref SocketCallRecord record, int frame, float time)
     {
-
+        var method = record.Direction == SocketDirection.Receiving ? "RecvFrom" : "SendTo";
+        Console.WriteLine($"FSocketWin::{method} {record.Bits} bit(s) to {record.Remote}");
     }
 
     public void OnTieredStringLookup(ref TieredStringLookupRecord record, int frame, float time)

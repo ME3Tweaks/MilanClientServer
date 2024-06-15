@@ -23,8 +23,6 @@ public class NetworkCapture : IDisposable, ICaptureReader
         skipping = true;
 
         InitializingVisitor visitor = new();
-        visitor.BaseStream = stream;
-
         AcceptVisitor(visitor);
         stringTable = visitor.OutputStrings;
         frameTable = visitor.OutputFrames;
@@ -94,8 +92,6 @@ public class NetworkCapture : IDisposable, ICaptureReader
             var recordPosition = reader.BaseStream.Position;
 
             RecordType type = ReadRecordType();
-
-            // This is very verbose but avoids a lot of allocations.
             switch (type)
             {
                 case RecordType.TieredStringLookup:
@@ -323,7 +319,6 @@ internal class InitializingVisitor : ICaptureVisitor
 {
     public List<string> OutputStrings = [];
     public List<FrameEntry> OutputFrames = [];
-    public Stream? BaseStream;
 
     public void OnActorReplication(ref ActorReplicationRecord record, int frame, float time) { }
     public void OnControlMessage(ref ControlMessageRecord record, int frame, float time) { }

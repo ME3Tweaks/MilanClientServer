@@ -1,4 +1,3 @@
-using System;
 using NetworkProfiler.Core;
 using NetworkProfiler.Dumper;
 
