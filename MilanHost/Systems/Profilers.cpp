@@ -103,6 +103,12 @@ namespace Milan::Profilers
         g_canvas.~MilanCanvasDrawer();
     }
 
+    void On_VectoredException(void* const Address, DWORD const Code, _EXCEPTION_POINTERS* const Exceptions)
+    {
+        MILAN_WARNW(L"profilers: handling vectored exception, address = %p, code = 0x%08X", Address, Code);
+        MILAN_UNUSED_3(Address, Code, Exceptions);
+    }
+
     void On_UObject_ProcessEvent(UObject* const Context, UFunction* const Function, void* const Parms, void* const Result)
     {
         MILAN_UNUSED_4(Context, Function, Parms, Result);
