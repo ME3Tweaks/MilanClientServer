@@ -58,8 +58,11 @@ void NetworkCapture::CaptureFrameStart(float const Delta)
 void NetworkCapture::CaptureLevelStart(FURL* const Url)
 {
     std::lock_guard<std::mutex> const _(Mutex);
+
     *this << NPRecord::LevelStart;
     *this << Url->Protocol << Url->Host << Url->Map << Url->Portal << Url->Port;
+
+    *this << static_cast<int>(Url->Op.Count());
     for (auto const& Op : Url->Op)
         *this << Op;
 }
@@ -125,20 +128,26 @@ void NetworkCapture::CaptureSendBunch(UChannel* const Channel, INT const Bits)
 
 void NetworkCapture::RecordStringTable_NoLock()
 {
+    MILAN_DEBUGW(L"netprof: writing tiered string table, offset = %llu, size = %llu",
+        StringTierOffset, StringTable.size());
+
     if (StringTierOffset >= StringTable.size())
     {
         // Let's avoid empty records.
         return;
     }
 
+    int const Count = static_cast<int>(StringTable.size() - StringTierOffset) - 1;
+
     *this << NPRecord::TieredStringLookup;
-    Stream->WriteNumeric<LITTLE, INT>(static_cast<int>(StringTable.size() - StringTierOffset) - 1);
-    for (size_t i = StringTierOffset; i < StringTable.size(); ++i)
+    *this << Count;
+
+    size_t i;
+    for (i = StringTierOffset; i < StringTable.size(); ++i)
     {
         auto const Length = StringTable[i].length();
-
         MILAN_CHECKW(Length < UINT16_MAX, L"");
-        Stream->WriteNumeric<LITTLE, SHORT>(static_cast<short>(Length));
+        *this << static_cast<short>(Length);
 
         if (Length != 0)
         {
@@ -148,6 +157,8 @@ void NetworkCapture::RecordStringTable_NoLock()
     }
 
     StringTierOffset = StringTable.size();
+
+    MILAN_TRACEW(L"netprof: last serialized index = %d, new offset = %llu", i, StringTable.size());
 }
 
 NetworkCapture& NetworkCapture::operator<<(NPRecord const Type)
