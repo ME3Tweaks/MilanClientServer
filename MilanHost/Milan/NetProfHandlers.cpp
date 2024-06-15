@@ -3,6 +3,7 @@
 #include "Milan/Base.hpp"
 #include "Milan/Misc.hpp"
 #include "Milan/NetProfDecls.hpp"
+#include "Milan/NetProfStream.hpp"
 #include "Proxies/Engine.hpp"
 #include "Systems/Output.hpp"
 
@@ -76,6 +77,8 @@ void MlnUActorChannelReplicateActor1_Handler(UActorChannel* const Channel, AActo
 {
     MILAN_UNUSED_2(Channel, Actor);
     //MILAN_TRACEW(L"UActorChannel::ReplicateActor: %s, actor = %s", *Channel->StaticName(), *Actor->StaticName());
+
+    NETPROF(CaptureActorReplication(reinterpret_cast<UActorChannel_Proxy*>(Channel)->Connection, Actor));
 }
 
 void MlnUActorChannelReplicateActor2_Handler(FOutBunch* const Bunch)
@@ -87,9 +90,10 @@ void MlnUActorChannelReplicateActor3_Handler(UActorChannel* const Channel, UProp
 {
     MILAN_UNUSED_3(Channel, Property, Bunch);
 
-    //auto const BitsWritten = Bunch->Num - ReplicateActor_BitsWrittenBeforeProp;
+    auto const BitsWritten = Bunch->Num - ReplicateActor_BitsWrittenBeforeProp;
     //MILAN_TRACEW(L"UActorChannel::ReplicateActor: %s, property = %s, bits = %d", *Channel->GetName(), *Property->StaticName(), BitsWritten);
 
+    NETPROF(CapturePropertyReplication(reinterpret_cast<UActorChannel_Proxy*>(Channel)->Connection, Property, BitsWritten));
     ReplicateActor_BitsWrittenBeforeProp = 0;
 }
 

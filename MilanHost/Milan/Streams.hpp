@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <cstdio>
 #include <span>
 
 #include "Containers/string.hpp"
@@ -153,6 +154,8 @@ public:
 
     // Shared implementation.
 
+    virtual void        Flush();
+
     virtual INT64       Rewind();
     virtual INT64       Skip(INT64 Forward);
 
@@ -249,6 +252,36 @@ void IOutputStream::WriteString(FStringBase<bWithRaii> const& InValue)
         this->WriteExact(Bytes);
     }
 }
+
+
+// ! File-backed streams.
+// ========================================
+
+class BufferedFileOutputStream final
+    : public IOutputStream, public NonCopyable
+{
+    size_t          m_size;
+    MemoryBuffer    m_buffer;
+    std::FILE*      mp_file;
+
+public:
+
+    // IOutputStream implementation.
+
+    ~BufferedFileOutputStream() noexcept override;
+
+    INT64 Length() const override;
+    INT64 Position() const override;
+    INT64 Seek(SeekOrigin Origin, INT64 Offset) override;
+    INT64 Write(BYTE const* Input, INT64 Length) override;
+    void  Flush() override;
+
+    // Own interface.
+
+    static constexpr size_t k_defaultBufferSize = 10 * 1024;  // 10 kb
+    explicit BufferedFileOutputStream(std::string_view Path, size_t Buffer = k_defaultBufferSize);
+
+};
 
 
 // ! Memory-backed streams.

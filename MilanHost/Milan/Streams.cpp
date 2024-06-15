@@ -31,6 +31,11 @@ void IInputStream::ReadExact(std::span<BYTE> const Output)
 // ! IOutputStream implementation.
 // ========================================
 
+void IOutputStream::Flush()
+{
+    // ...
+}
+
 INT64 IOutputStream::Rewind()
 {
     return this->Seek(SeekOrigin::Begin, 0);
@@ -52,6 +57,86 @@ void IOutputStream::WriteExact(std::span<BYTE const> const Input)
     auto const WrittenBytes = this->Write(Input);
     auto const InputBytes = static_cast<INT64>(Input.size());
     MILAN_VERIFYW(WrittenBytes == InputBytes, L"wrote %lld byte(s) of %lld expected", WrittenBytes, InputBytes);
+}
+
+
+// ! BufferedFileOutputStream implementation.
+// ========================================
+
+BufferedFileOutputStream::BufferedFileOutputStream(std::string_view const Path, size_t const Buffer)
+    : m_buffer{}, mp_file{ nullptr }
+{
+    MILAN_VERIFYW(!Path.empty(), L"");
+    MILAN_VERIFYW(Buffer >= 8 && Buffer <= 1024 * 1024 * 1024, L"");
+
+    m_size = Buffer;
+    m_buffer.Buffer.resize(m_size, 0u);
+    mp_file = std::fopen(Path.data(), "wb");
+
+    MILAN_VERIFYW(mp_file != nullptr,
+        L"failed to create or open file, path = %S, err = %d (%S)",
+        Path.data(), errno, std::strerror(errno));
+}
+
+BufferedFileOutputStream::~BufferedFileOutputStream() noexcept
+{
+    Flush();
+    std::fclose(mp_file);
+}
+
+INT64 BufferedFileOutputStream::Length() const
+{
+    return static_cast<INT64>(std::ftell(mp_file)) + m_buffer.Offset;
+}
+
+INT64 BufferedFileOutputStream::Position() const
+{
+    return static_cast<INT64>(std::ftell(mp_file)) + m_buffer.Offset;
+}
+
+INT64 BufferedFileOutputStream::Seek(SeekOrigin const Origin, INT64 const Offset)
+{
+    MILAN_UNUSED_2(Origin, Offset);
+    MILAN_FATALW(L"BufferedFileOutputStream does not support seeking");
+}
+
+INT64 BufferedFileOutputStream::Write(BYTE const* const Input, INT64 const Length)
+{
+    MILAN_CHECKW(Input != nullptr, L"");
+    MILAN_CHECKW(Length > 0, L"");
+
+    if (Length < static_cast<INT64>(m_size))
+    {
+        // If the blob won't fit into the remaining buffer, flush it first.
+        if (static_cast<INT64>(m_buffer.Remaining().size()) < Length)
+            Flush();
+
+        // Copy input blob to the buffer and mark its length.
+        std::copy_n(Input, Length, m_buffer.Remaining().begin());
+        m_buffer.Advance(Length);
+    }
+    else  // Length >= m_size
+    {
+        // Flush buffered contents.
+        Flush();
+
+        // Write the big blob directly to file and flush it.
+        std::fwrite(Input, 1, static_cast<size_t>(Length), mp_file);
+        std::fflush(mp_file);
+    }
+
+    return Length;
+}
+
+void BufferedFileOutputStream::Flush()
+{
+    if (m_buffer.Offset > 0)
+    {
+        std::fwrite(m_buffer.Buffer.data(), 1, m_buffer.Offset, mp_file);
+        m_buffer.Offset = 0;
+    }
+
+    std::fflush(mp_file);
 }
 
 
