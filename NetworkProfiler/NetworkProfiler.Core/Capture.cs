@@ -5,11 +5,16 @@ using System.Text;
 namespace NetworkProfiler.Core;
 
 
+internal record struct FrameEntry(long Offset, float Time);
+
 public class NetworkCapture : IDisposable, ICaptureReader
 {
-    readonly BinaryReader   reader;
-    readonly List<string>   stringTable = [];
-    readonly bool           skipping = false;
+    readonly BinaryReader       reader;
+    readonly List<string>       stringTable = [];
+    readonly List<FrameEntry>   frameTable = [];
+    readonly bool               skipping = false;
+
+    public long FrameCount => frameTable.Count;
 
     public NetworkCapture(Stream stream)
     {
@@ -17,9 +22,13 @@ public class NetworkCapture : IDisposable, ICaptureReader
         reader = new BinaryReader(stream, Encoding.Default, leaveOpen: false);
         skipping = true;
 
-        StringConsolidatingVisitor visitor = new();
+        InitializingVisitor visitor = new();
+        visitor.BaseStream = stream;
+
         AcceptVisitor(visitor);
-        stringTable = visitor.OutputTable;
+        stringTable = visitor.OutputStrings;
+        frameTable = visitor.OutputFrames;
+
         skipping = false;
     }
 
@@ -48,19 +57,43 @@ public class NetworkCapture : IDisposable, ICaptureReader
 
     public delegate bool VisitorPredicate(RecordType type, int frame, float time);
 
-    public void AcceptVisitor(ICaptureVisitor visitor, VisitorPredicate predicate)
+    public void AcceptVisitor(ICaptureVisitor visitor)
+    {
+        AcceptVisitorInternal(
+            visitor, 0, 0, 0,
+            (type, frame, time) => true,
+            (type, frame, time) => false
+        );
+    }
+
+    public void AcceptVisitorSingleFrame(ICaptureVisitor visitor, int frameIndex)
+    {
+        if (frameIndex >= frameTable.Count)
+            throw new ArgumentException("index out of bounds", nameof(frameIndex));
+
+        var (offset, time) = frameTable[frameIndex];
+        AcceptVisitorInternal(
+            visitor, offset, frameIndex, time,
+            (type, frame, time) => frame == frameIndex,
+            (type, frame, time) => false
+        );
+    }
+
+    private void AcceptVisitorInternal(ICaptureVisitor visitor,
+        long startOffset, int startFrame, float startTime,
+        VisitorPredicate callPredicate, VisitorPredicate breakPredicate)
     {
         int counter = -1;
-        int frameIndex = 0;
-        float timerTotal = 0;
+        int frameIndex = startFrame - 1;
+        float timerTotal = startTime;
 
-        reader.BaseStream.Seek(0, SeekOrigin.Begin);
+        reader.BaseStream.Seek(startOffset, SeekOrigin.Begin);
         while (reader.BaseStream.Position < reader.BaseStream.Length)
         {
             counter += 1;
-            RecordType type = ReadRecordType();
+            var recordPosition = reader.BaseStream.Position;
 
-            //Console.WriteLine($"record #{counter}, type {type}, frame {frameIndex}, time {timerTotal}");
+            RecordType type = ReadRecordType();
 
             // This is very verbose but avoids a lot of allocations.
             switch (type)
@@ -68,82 +101,80 @@ public class NetworkCapture : IDisposable, ICaptureReader
                 case RecordType.TieredStringLookup:
                     {
                         var record = ParseRecord<TieredStringLookupRecord>();
-                        if (predicate(type, frameIndex, timerTotal))
+                        if (callPredicate(type, frameIndex, timerTotal))
                             visitor.OnTieredStringLookup(ref record, frameIndex, timerTotal);
                         break;
                     }
                 case RecordType.FrameStart:
                     {
                         var record = ParseRecord<FrameStartRecord>();
-                        if (predicate(type, frameIndex, timerTotal))
-                            visitor.OnFrameStart(ref record, frameIndex, timerTotal);
                         frameIndex += 1;
+                        if (callPredicate(type, frameIndex, timerTotal))
+                            visitor.OnFrameStart(ref record, frameIndex, timerTotal, recordPosition);
                         timerTotal += record.Delta;
                         break;
                     }
                 case RecordType.LevelStart:
                     {
                         var record = ParseRecord<LevelStartRecord>();
-                        if (predicate(type, frameIndex, timerTotal))
+                        if (callPredicate(type, frameIndex, timerTotal))
                             visitor.OnLevelStart(ref record, frameIndex, timerTotal);
                         break;
                     }
                 case RecordType.RemoteFunction:
                     {
                         var record = ParseRecord<RemoteFunctionRecord>();
-                        if (predicate(type, frameIndex, timerTotal))
+                        if (callPredicate(type, frameIndex, timerTotal))
                             visitor.OnRemoteFunction(ref record, frameIndex, timerTotal);
                         break;
                     }
                 case RecordType.ActorReplication:
                     {
                         var record = ParseRecord<ActorReplicationRecord>();
-                        if (predicate(type, frameIndex, timerTotal))
+                        if (callPredicate(type, frameIndex, timerTotal))
                             visitor.OnActorReplication(ref record, frameIndex, timerTotal);
                         break;
                     }
                 case RecordType.PropertyReplication:
                     {
                         var record = ParseRecord<PropertyReplicationRecord>();
-                        if (predicate(type, frameIndex, timerTotal))
+                        if (callPredicate(type, frameIndex, timerTotal))
                             visitor.OnPropertyReplication(ref record, frameIndex, timerTotal);
                         break;
                     }
                 case RecordType.ControlMessage:
                     {
                         var record = ParseRecord<ControlMessageRecord>();
-                        if (predicate(type, frameIndex, timerTotal))
+                        if (callPredicate(type, frameIndex, timerTotal))
                             visitor.OnControlMessage(ref record, frameIndex, timerTotal);
                         break;
                     }
                 case RecordType.SessionEvent:
                     {
                         var record = ParseRecord<SessionEventRecord>();
-                        if (predicate(type, frameIndex, timerTotal))
+                        if (callPredicate(type, frameIndex, timerTotal))
                             visitor.OnSessionEvent(ref record, frameIndex, timerTotal);
                         break;
                     }
                 case RecordType.SocketCall:
                     {
                         var record = ParseRecord<SocketCallRecord>();
-                        if (predicate(type, frameIndex, timerTotal))
+                        if (callPredicate(type, frameIndex, timerTotal))
                             visitor.OnSocketCall(ref record, frameIndex, timerTotal);
                         break;
                     }
                 case RecordType.SendBunch:
                     {
                         var record = ParseRecord<SendBunchRecord>();
-                        if (predicate(type, frameIndex, timerTotal))
+                        if (callPredicate(type, frameIndex, timerTotal))
                             visitor.OnSendBunch(ref record, frameIndex, timerTotal);
                         break;
                     }
             }
-        }
-    }
 
-    public void AcceptVisitor(ICaptureVisitor visitor)
-    {
-        AcceptVisitor(visitor, (type, frame, time) => true);
+            if (breakPredicate(type, frameIndex, timerTotal))
+                break;
+        }
     }
 
     private T ParseRecord<T>() where T : IRecord, new()
@@ -277,7 +308,7 @@ public class NetworkCapture : IDisposable, ICaptureReader
 public interface ICaptureVisitor
 {
     void OnTieredStringLookup(ref TieredStringLookupRecord record, int frame, float time);
-    void OnFrameStart(ref FrameStartRecord record, int frame, float time);
+    void OnFrameStart(ref FrameStartRecord record, int frame, float time, long recordPosition);
     void OnLevelStart(ref LevelStartRecord record, int frame, float time);
     void OnRemoteFunction(ref RemoteFunctionRecord record, int frame, float time);
     void OnActorReplication(ref ActorReplicationRecord record, int frame, float time);
@@ -288,13 +319,14 @@ public interface ICaptureVisitor
     void OnSendBunch(ref SendBunchRecord record, int frame, float time);
 }
 
-class StringConsolidatingVisitor : ICaptureVisitor
+internal class InitializingVisitor : ICaptureVisitor
 {
-    public List<string> OutputTable = new();
+    public List<string> OutputStrings = [];
+    public List<FrameEntry> OutputFrames = [];
+    public Stream? BaseStream;
 
     public void OnActorReplication(ref ActorReplicationRecord record, int frame, float time) { }
     public void OnControlMessage(ref ControlMessageRecord record, int frame, float time) { }
-    public void OnFrameStart(ref FrameStartRecord record, int frame, float time) { }
     public void OnLevelStart(ref LevelStartRecord record, int frame, float time) { }
     public void OnPropertyReplication(ref PropertyReplicationRecord record, int frame, float time) { }
     public void OnRemoteFunction(ref RemoteFunctionRecord record, int frame, float time) { }
@@ -302,9 +334,15 @@ class StringConsolidatingVisitor : ICaptureVisitor
     public void OnSessionEvent(ref SessionEventRecord record, int frame, float time) { }
     public void OnSocketCall(ref SocketCallRecord record, int frame, float time) { }
 
+    public void OnFrameStart(ref FrameStartRecord record, int frame, float time, long offset)
+    {
+        Debug.Assert(frame == OutputFrames.Count);
+        OutputFrames.Add(new FrameEntry(offset, time));
+    }
+
     public void OnTieredStringLookup(ref TieredStringLookupRecord record, int frame, float time)
     {
         Debug.WriteLine($"adding tiered string lookup record with {record.Table.Length} item(s) at frame {frame}");
-        OutputTable.AddRange(record.Table);
+        OutputStrings.AddRange(record.Table);
     }
 }

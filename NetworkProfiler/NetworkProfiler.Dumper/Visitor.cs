@@ -11,9 +11,9 @@ internal class LoggingVisitor(NetworkCapture owner) : ICaptureVisitor
             $"received by {record.Recipient} from {record.Remote}");
     }
 
-    public void OnFrameStart(ref FrameStartRecord record, int frame, float time)
+    public void OnFrameStart(ref FrameStartRecord record, int frame, float time, long recordPosition)
     {
-        Console.WriteLine($"==== FRAME START == #{frame} == {time} ms ====");
+        Console.WriteLine($"==== FRAME START == #{frame} == {time} ms == {recordPosition} byte(s) ====");
     }
 
     public void OnLevelStart(ref LevelStartRecord record, int frame, float time)
