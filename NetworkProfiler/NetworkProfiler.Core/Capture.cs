@@ -20,7 +20,6 @@ public class NetworkCapture : IDisposable, ICaptureReader
         StringConsolidatingVisitor visitor = new();
         AcceptVisitor(visitor);
         stringTable = visitor.OutputTable;
-
         skipping = false;
     }
 
