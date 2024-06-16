@@ -81,39 +81,48 @@
             <TabItem Header="Summary / chart" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}"/>
             <TabItem Header="Actors / properties" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}">
                 <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="3*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="2*" MinWidth="400"/>
                     </Grid.ColumnDefinitions>
-                    <ListView Grid.Column="0" SelectionMode="Single"
+                    <ListView Grid.Row="0" Grid.Column="0" SelectionMode="Single"
                               ItemsSource="{Binding Path=ActiveCapture.ReplicatedActors}"
                               SelectedValue="{Binding Path=SelectedActorCategory}">
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Header="Total bytes" Width="80" DisplayMemberBinding="{Binding AccumBytes, StringFormat=N2}"/>
-                                <GridViewColumn Header="Avg bytes" Width="80" DisplayMemberBinding="{Binding AvgBytes, StringFormat=N2}"/>
-                                <GridViewColumn Header="Avg bits" Width="80" DisplayMemberBinding="{Binding AvgBits, StringFormat=N2}"/>
                                 <GridViewColumn Header="Count" Width="80" DisplayMemberBinding="{Binding Count}"/>
+                                <GridViewColumn Header="(Non empty)" Width="80" DisplayMemberBinding="{Binding NonEmptyCount}"/>
+                                <GridViewColumn Header="Avg bytes" Width="80" DisplayMemberBinding="{Binding AvgBytes, StringFormat=N1}"/>
+                                <GridViewColumn Header="Avg bits" Width="80" DisplayMemberBinding="{Binding AvgBits, StringFormat=N1}"/>
                                 <GridViewColumn Header="Actor class" Width="380" DisplayMemberBinding="{Binding ActorName}"/>
                             </GridView>
                         </ListView.View>
                     </ListView>
-                    <GridSplitter Grid.Column="1" Width="2" Margin="5"
+                    <GridSplitter Grid.Row="0" Grid.Column="1" Width="2" Margin="5"
                                   VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
                                   Background="LightGray"/>
-                    <ListView Grid.Column="2" SelectionMode="Single"
+                    <ListView Grid.Row="0" Grid.Column="2" SelectionMode="Single"
                               ItemsSource="{Binding Path=SelectedActorCategory.Properties}">
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Header="Total bytes" Width="80" DisplayMemberBinding="{Binding AccumBytes, StringFormat=N2}"/>
-                                <GridViewColumn Header="Avg bytes" Width="80" DisplayMemberBinding="{Binding AvgBytes, StringFormat=N2}"/>
-                                <GridViewColumn Header="Avg bits" Width="80" DisplayMemberBinding="{Binding AvgBits, StringFormat=N2}"/>
                                 <GridViewColumn Header="Count" Width="80" DisplayMemberBinding="{Binding Count}"/>
+                                <GridViewColumn Header="Avg bytes" Width="80" DisplayMemberBinding="{Binding AvgBytes, StringFormat=N1}"/>
+                                <GridViewColumn Header="Avg bits" Width="80" DisplayMemberBinding="{Binding AvgBits, StringFormat=N1}"/>
                                 <GridViewColumn Header="Property class" Width="380" DisplayMemberBinding="{Binding PropertyName}"/>
                             </GridView>
                         </ListView.View>
                     </ListView>
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="3" Padding="0,3,0,2" Foreground="Red">
+                        Note that average size for actors is only calculated for non-empty actor sends.
+                        Average property sizes are counted normally.
+                    </TextBlock>
                 </Grid>
             </TabItem>
             <TabItem Header="RPCs" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}"/>

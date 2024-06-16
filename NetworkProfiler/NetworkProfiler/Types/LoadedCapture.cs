@@ -11,10 +11,13 @@ public class ActorReplicationCategory
     public List<PropertyReplicationCategory> Properties { get; init; } = [];
     public int Count { get; set; } = 0;
 
+    internal bool bNonEmpty = false;
+    public int NonEmptyCount { get; set; } = 0;
+
     public int AccumBits { get; set; } = 0;
     public float AccumBytes => (float)AccumBits / 8;
 
-    public float AvgBits => (float)AccumBits / Count;
+    public float AvgBits => (float)AccumBits / NonEmptyCount;
     public float AvgBytes => AvgBits / 8;
 }
 
@@ -69,6 +72,16 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
     public void OnRemoteFunction(ref RemoteFunctionRecord record, int frame, float time) { }
     public void OnActorReplication(ref ActorReplicationRecord record, int frame, float time)
     {
+        if (lastActorReplicationIndex != -1)
+        {
+            ActorReplicationCategory prevActorReplicationCategory = ActorReplicationCategories[lastActorReplicationIndex];
+            if (prevActorReplicationCategory.bNonEmpty)
+            {
+                prevActorReplicationCategory.NonEmptyCount++;
+                prevActorReplicationCategory.bNonEmpty = false;
+            }
+        }
+
         var actorName = capture.ResolveString(record.Actor);
 
         if (!actorReplicationLookup.TryGetValue(actorName, out int actorReplIndex))
@@ -78,7 +91,10 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
             actorReplicationLookup[actorName] = actorReplIndex;
         }
 
-        ActorReplicationCategories[actorReplIndex].Count += 1;
+        ActorReplicationCategory actorReplCategory = ActorReplicationCategories[actorReplIndex];
+
+        actorReplCategory.bNonEmpty = false;
+        actorReplCategory.Count += 1;
         lastActorReplicationIndex = actorReplIndex;
     }
     public void OnPropertyReplication(ref PropertyReplicationRecord record, int frame, float time)
@@ -92,6 +108,7 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
         var propertyName = capture.ResolveString(record.Property);
 
         ActorReplicationCategory actorCategory = ActorReplicationCategories[lastActorReplicationIndex];
+        actorCategory.bNonEmpty = true;
 
         int propertyCategoryIndex = actorCategory.Properties
             .FindIndex((propRecord) => propRecord.PropertyName == propertyName);
