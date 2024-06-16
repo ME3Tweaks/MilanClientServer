@@ -46,9 +46,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     }
 
     private LoadedCaptureViewModel? _activeCapture = null;
-    public LoadedCaptureViewModel? ActiveCapture {
+    public LoadedCaptureViewModel? ActiveCapture
+    {
         get => _activeCapture;
         set { _activeCapture = value;  OnPropertyChanged(); }
+    }
+
+    private ActorReplicationCategory? _selectedActorCategory = null;
+    public ActorReplicationCategory? SelectedActorCategory
+    {
+        get => _selectedActorCategory;
+        set { _selectedActorCategory = value; OnPropertyChanged(); }
     }
 
     #endregion
@@ -156,7 +164,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 () => {
                     SetWindowTitle(fullPath);
                     SetWindowStatus("Capture loaded.");
-                    MainTabs.SelectedIndex = 1;
+                    MainTabs.SelectedIndex = 2;  // temp debug thing, should be 1 normally
                     MainTabs.IsEnabled = true;
                 });
         });

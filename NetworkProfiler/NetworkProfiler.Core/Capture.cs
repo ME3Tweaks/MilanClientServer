@@ -38,6 +38,14 @@ public class NetworkCapture : IDisposable, ICaptureReader
         return stringTable[reference.Index];
     }
 
+    public string ResolveString(NameReference reference)
+    {
+        if (reference.Index < 0 || reference.Index >= stringTable.Count)
+            throw new ArgumentException("string reference out of bounds", nameof(reference));
+
+        return stringTable[reference.Index];
+    }
+
     public string ResolveName(NameReference reference)
     {
         if (reference.Index < 0 || reference.Index >= stringTable.Count)
@@ -49,7 +57,7 @@ public class NetworkCapture : IDisposable, ICaptureReader
         return reference.Number switch
         {
             0 => stringTable[reference.Index],
-            int num => $"{stringTable[reference.Index]}_{num}",
+            int num => $"{stringTable[reference.Index]}_{num-1}",
         };
     }
 
