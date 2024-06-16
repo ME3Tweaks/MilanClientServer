@@ -168,7 +168,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     MainTabs.IsEnabled = true;
 
                     #if DEBUG
-                    MainTabs.SelectedIndex = 4;
+                    MainTabs.SelectedIndex = 2;
                     #endif
                 });
         });
@@ -182,6 +182,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ResetWindowTitle();
         ResetWindowStatus();
         MainTabs.SelectedIndex = 0;
+
+        GC.Collect();
     }
 
 

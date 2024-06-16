@@ -7,8 +7,8 @@ internal class LoggingVisitor(NetworkCapture owner) : ICaptureVisitor
 
     public void OnControlMessage(ref ControlMessageRecord record, int frame, float time)
     {
-        Console.WriteLine($"control message '{record.MsgType}' ({Owner.ResolveString(record.Params)}) " +
-            $"received by {record.Recipient} from {record.Remote}");
+        //Console.WriteLine($"control message '{record.MsgType}' ({Owner.ResolveString(record.Params)}) " +
+        //    $"received by {record.Recipient} from {record.Remote}");
     }
 
     public void OnFrameStart(ref FrameStartRecord record, int frame, float time, long recordPosition)

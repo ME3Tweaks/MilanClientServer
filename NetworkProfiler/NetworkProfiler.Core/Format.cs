@@ -70,6 +70,8 @@ public readonly struct NameReference(int index, int number)
 
 public interface ICaptureReader
 {
+    bool Skipping { get; }
+
     RecordType ReadRecordType();
     bool ReadBool();
     short ReadInt16();

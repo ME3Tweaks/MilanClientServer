@@ -79,7 +79,25 @@
                 </Grid>
             </TabItem>
             <TabItem Header="Summary / chart" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}"/>
-            <TabItem Header="Control messages" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}"/>
+            <TabItem Header="Control messages" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <ListView Grid.Row="0" Grid.Column="0" SelectionMode="Single"
+                              ItemsSource="{Binding Path=ActiveCapture.ControlMessages}">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Remote" Width="100" DisplayMemberBinding="{Binding Remote}"/>
+                                <GridViewColumn Header="Recipient" Width="80" DisplayMemberBinding="{Binding Recipient}"/>
+                                <GridViewColumn Header="Type" Width="80" DisplayMemberBinding="{Binding MessageType}"/>
+                                <GridViewColumn Header="Params" Width="1000" DisplayMemberBinding="{Binding Params}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </Grid>
+            </TabItem>
             <TabItem Header="Actors / properties" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}">
                 <Grid>
                     <Grid.RowDefinitions>

@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using NetworkProfiler.Core;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Net;
 using System.Text.RegularExpressions;
 
 namespace NetworkProfiler.Types;
@@ -52,6 +53,15 @@ public class RemoteCallCategory
     public float AvgBytes => AvgBits / 8;
 }
 
+
+public class ControlMessageEntry
+{
+    public ControlMessageType MessageType { get; set; }
+    public ControlMessageHandler Recipient { get; set; }
+    public string Params { get; set; } = string.Empty;
+    public string Remote { get; set; } = string.Empty;
+}
+
 #endregion
 
 
@@ -68,6 +78,8 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
 
     public readonly List<RemoteCallCategory> RemoteCallCategories = [];
     readonly Dictionary<(string, string), int> remoteCallLookup = [];
+
+    public readonly List<ControlMessageEntry> ControlMessageEntries = [];
 
 
     public LoadedCapture(NetworkCapture source)
@@ -165,7 +177,19 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
         propertyCategory.AccumBits += record.Bits;
         propertyCategory.Count += 1;
     }
-    public void OnControlMessage(ref ControlMessageRecord record, int frame, float time) { }
+    public void OnControlMessage(ref ControlMessageRecord record, int frame, float time)
+    {
+        var paramString = capture.ResolveString(record.Params);
+        //Debug.WriteLine($">> CONTROL MESSAGE {record.MsgType}: {paramString}");
+
+        ControlMessageEntries.Add(new()
+        {
+            MessageType = record.MsgType,
+            Recipient = record.Recipient,
+            Params = paramString,
+            Remote = record.Remote!.ToString(),
+        });
+    }
     public void OnSessionEvent(ref SessionEventRecord record, int frame, float time) { }
     public void OnSocketCall(ref SocketCallRecord record, int frame, float time) { }
     public void OnSendBunch(ref SendBunchRecord record, int frame, float time) { }
@@ -202,6 +226,7 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
 
     public IEnumerable<ActorReplicationCategory> ReplicatedActors => capture.ActorReplicationCategories;
     public ObservableCollection<RemoteCallCategory> RemoteCalls { get; private set; }
+    public IEnumerable<ControlMessageEntry> ControlMessages => capture.ControlMessageEntries;
 
     private string _remoteCallQuery = "";
     public string RemoteCallQuery

@@ -30,8 +30,20 @@ NetworkCapture::NetworkCapture()
     MILAN_TRACEW(L"netprof database path = %S", FileName);
     Stream = new BufferedFileOutputStream(FileName);
 
-    StringTable.reserve(100);
-    StringLookup.reserve(100);
+    StringTable.reserve(500);
+    StringLookup.reserve(500);
+
+    // Serialize header.
+
+    std::span<BYTE> const Magic{ (BYTE*)k_serialMagic, k_serialMagicSize };
+    std::array<BYTE, 52> const ReservedSpace{ 0u };
+
+    Stream->WriteExact(Magic);
+    Stream->WriteNumeric<LITTLE, INT>(k_serialVersion);
+    Stream->WriteExact(ReservedSpace);
+
+    MILAN_CHECKW(Magic.size() + sizeof(k_serialVersion) + ReservedSpace.size() == 64, L"");
+    MILAN_CHECKW(Stream->Position() == 64, L"");
 }
 
 NetworkCapture::~NetworkCapture()
@@ -95,10 +107,8 @@ void NetworkCapture::CaptureControlMessage(UNetConnection* const Connection, boo
     std::lock_guard<std::mutex> const _(Mutex);
     *this << NPRecord::ControlMessage;
 
-    if (Connection != nullptr)
-        *this << true << Connection;
-    else
-        *this << false;
+    *this << (Connection != nullptr);
+    if (Connection) *this << Connection;
 
     *this << bPendingLevel << (unsigned char)Type << Params;
 }

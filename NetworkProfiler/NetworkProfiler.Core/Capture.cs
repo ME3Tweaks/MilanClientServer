@@ -7,6 +7,12 @@ namespace NetworkProfiler.Core;
 
 internal record struct FrameEntry(long Offset, float Time);
 
+public class BadCaptureFormatException(string reason)
+    : Exception($"invalid capture format: {reason}")
+{
+    public string Reason { get; set; } = reason;
+}
+
 public class NetworkCapture : IDisposable, ICaptureReader
 {
     readonly BinaryReader       reader;
@@ -16,11 +22,25 @@ public class NetworkCapture : IDisposable, ICaptureReader
 
     public long FrameCount => frameTable.Count;
 
+    public const int HEADER_SIZE = 64;
+    public const int SUPPORTED_VERSION = 1; 
+
     public NetworkCapture(Stream stream)
     {
         Debug.Assert(stream.CanRead && stream.CanSeek);
         reader = new BinaryReader(stream, Encoding.Default, leaveOpen: false);
         skipping = true;
+
+        var magicBytes = reader.ReadBytes(8);
+        var magicString = Encoding.ASCII.GetString(magicBytes);
+        if (magicString != "MLNNTPRF")
+            throw new BadCaptureFormatException("wrong magic");
+
+        var magicVersion = reader.ReadInt32();
+        if (magicVersion != SUPPORTED_VERSION)
+            throw new BadCaptureFormatException("unsupported version");
+
+        reader.BaseStream.Seek(HEADER_SIZE, SeekOrigin.Begin);
 
         InitializingVisitor visitor = new();
         AcceptVisitor(visitor);
@@ -66,7 +86,7 @@ public class NetworkCapture : IDisposable, ICaptureReader
     public void AcceptVisitor(ICaptureVisitor visitor)
     {
         AcceptVisitorInternal(
-            visitor, 0, 0, 0,
+            visitor, HEADER_SIZE, 0, 0,
             (type, frame, time) => true,
             (type, frame, time) => false
         );
@@ -216,6 +236,8 @@ public class NetworkCapture : IDisposable, ICaptureReader
     #endregion
 
     #region ICaptureReader implementation.
+
+    public bool Skipping => skipping;
 
     public RecordType ReadRecordType()
     {

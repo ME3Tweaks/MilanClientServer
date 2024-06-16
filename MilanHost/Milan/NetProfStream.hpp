@@ -55,6 +55,10 @@ class NetworkCapture final : public NonCopyable, public AllocateThroughEngine
 
 public:
 
+    static constexpr size_t         k_serialMagicSize = 8;
+    static constexpr char const     k_serialMagic[k_serialMagicSize + 1] = "MLNNTPRF";
+    static constexpr int            k_serialVersion = 1;
+
     NetworkCapture();
     ~NetworkCapture();
 
