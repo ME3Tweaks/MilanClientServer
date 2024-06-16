@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetworkProfiler.Core", "Net
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetworkProfiler.Dumper", "NetworkProfiler.Dumper\NetworkProfiler.Dumper.csproj", "{80A53219-8CF5-4486-8FB6-9F7E2EF42C07}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetworkProfiler", "NetworkProfiler\NetworkProfiler.csproj", "{F7F4913D-0A98-4D37-8BCC-5B745E8FBF0E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{80A53219-8CF5-4486-8FB6-9F7E2EF42C07}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{80A53219-8CF5-4486-8FB6-9F7E2EF42C07}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{80A53219-8CF5-4486-8FB6-9F7E2EF42C07}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F7F4913D-0A98-4D37-8BCC-5B745E8FBF0E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F7F4913D-0A98-4D37-8BCC-5B745E8FBF0E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F7F4913D-0A98-4D37-8BCC-5B745E8FBF0E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F7F4913D-0A98-4D37-8BCC-5B745E8FBF0E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
