@@ -164,8 +164,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 () => {
                     SetWindowTitle(fullPath);
                     SetWindowStatus("Capture loaded.");
-                    MainTabs.SelectedIndex = 2;  // temp debug thing, should be 1 normally
+                    MainTabs.SelectedIndex = 1;
                     MainTabs.IsEnabled = true;
+
+                    #if DEBUG
+                    MainTabs.SelectedIndex = 4;
+                    #endif
                 });
         });
     }

@@ -1,9 +1,13 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using NetworkProfiler.Core;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace NetworkProfiler.Types;
 
+
+#region Small data classes shared between model and viewmodel.
 
 public class ActorReplicationCategory
 {
@@ -17,7 +21,7 @@ public class ActorReplicationCategory
     public int AccumBits { get; set; } = 0;
     public float AccumBytes => (float)AccumBits / 8;
 
-    public float AvgBits => (float)AccumBits / NonEmptyCount;
+    public float AvgBits => NonEmptyCount > 0 ? (float)AccumBits / NonEmptyCount : 0;
     public float AvgBytes => AvgBits / 8;
 }
 
@@ -33,6 +37,23 @@ public class PropertyReplicationCategory
     public float AvgBytes => AvgBits / 8;
 }
 
+public class RemoteCallCategory
+{
+    public string ObjectName { get; init; } = string.Empty;
+    public string FunctionName { get; init; } = string.Empty;
+    public int Count { get; set; } = 0;
+
+    public string JointName => $"{ObjectName}.{FunctionName}";
+
+    public int AccumBits { get; set; } = 0;
+    public float AccumBytes => (float)AccumBits / 8;
+
+    public float AvgBits => (float)AccumBits / Count;
+    public float AvgBytes => AvgBits / 8;
+}
+
+#endregion
+
 
 /// <summary>
 /// Parsed network capture ready for providing general overview.
@@ -44,6 +65,9 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
     public readonly List<ActorReplicationCategory> ActorReplicationCategories = [];
     readonly Dictionary<string, int> actorReplicationLookup = [];
     int lastActorReplicationIndex = -1;
+
+    public readonly List<RemoteCallCategory> RemoteCallCategories = [];
+    readonly Dictionary<(string, string), int> remoteCallLookup = [];
 
 
     public LoadedCapture(NetworkCapture source)
@@ -61,6 +85,8 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
             actorReplCategory.AccumBits = actorReplCategory.Properties.Select(prop => prop.AccumBits).Sum();
         }
         ActorReplicationCategories.Sort((a, b) => b.AccumBits.CompareTo(a.AccumBits));
+
+        RemoteCallCategories.Sort((a, b) => b.AccumBits.CompareTo(a.AccumBits));
     }
 
 
@@ -69,7 +95,23 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
     public void OnTieredStringLookup(ref TieredStringLookupRecord record, int frame, float time) { }
     public void OnFrameStart(ref FrameStartRecord record, int frame, float time, long recordPosition) { }
     public void OnLevelStart(ref LevelStartRecord record, int frame, float time) { }
-    public void OnRemoteFunction(ref RemoteFunctionRecord record, int frame, float time) { }
+    public void OnRemoteFunction(ref RemoteFunctionRecord record, int frame, float time)
+    {
+        var objectName = capture.ResolveString(record.Actor);
+        var functionName = capture.ResolveString(record.Function);
+
+        if (!remoteCallLookup.TryGetValue((objectName, functionName), out int remoteCallIndex))
+        {
+            remoteCallIndex = RemoteCallCategories.Count;
+            RemoteCallCategories.Add(new () { ObjectName = objectName, FunctionName = functionName });
+            remoteCallLookup[(objectName, functionName)] = remoteCallIndex;
+        }
+
+        RemoteCallCategory remoteCallCategory = RemoteCallCategories[remoteCallIndex];
+
+        remoteCallCategory.Count += 1;
+        remoteCallCategory.AccumBits += record.Bits;
+    }
     public void OnActorReplication(ref ActorReplicationRecord record, int frame, float time)
     {
         if (lastActorReplicationIndex != -1)
@@ -154,15 +196,58 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
     #endregion
 }
 
-public class LoadedCaptureViewModel(LoadedCapture model) : ObservableObject, IDisposable
+public class LoadedCaptureViewModel : ObservableObject, IDisposable
 {
-    private readonly LoadedCapture capture = model;
+    private readonly LoadedCapture capture;
 
     public IEnumerable<ActorReplicationCategory> ReplicatedActors => capture.ActorReplicationCategories;
+    public ObservableCollection<RemoteCallCategory> RemoteCalls { get; private set; }
+
+    private string _remoteCallQuery = "";
+    public string RemoteCallQuery
+    {
+        get => _remoteCallQuery;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length < _remoteCallQuery.Length)
+            {
+                RemoteCalls = new ObservableCollection<RemoteCallCategory>(capture.RemoteCallCategories);
+                OnPropertyChanged(nameof(RemoteCalls));
+            }
+
+            _remoteCallQuery = value;
+            OnPropertyChanged();
+
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+
+            for (int i = 0; i < RemoteCalls.Count; ++i)
+            {
+                var remoteCall = RemoteCalls[i];
+
+                var objectName = remoteCall.ObjectName;
+                var funcName = remoteCall.FunctionName;
+
+                var mode = StringComparison.InvariantCultureIgnoreCase;
+                if (!objectName.Contains(value, mode) && !funcName.Contains(value, mode))
+                {
+                    RemoteCalls.RemoveAt(i);
+                    i--;
+                }
+            }
+        }
+    }
+
+    public LoadedCaptureViewModel(LoadedCapture model)
+    {
+        capture = model;
+        RemoteCalls = new ObservableCollection<RemoteCallCategory>(capture.RemoteCallCategories);
+    }
 
     #region IDisposable implementation.
 
     private bool disposedValue;
+
     protected virtual void Dispose(bool disposing)
     {
         if (!disposedValue)
