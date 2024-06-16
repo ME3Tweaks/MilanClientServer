@@ -7,22 +7,28 @@
         xmlns:local="clr-namespace:NetworkProfiler"
         xmlns:conv="clr-namespace:NetworkProfiler.Converters"
         mc:Ignorable="d"
-        Title="Milan Network Profiler" Height="800" Width="1400">
+        Title="Milan Network Profiler" Height="800" Width="1400"
+        Closing="Window_Closing">
     <Window.Resources>
+        <conv:IsNullConverter x:Key="IsNullConverter"/>
+        <conv:IsNotNullConverter x:Key="IsNotNullConverter"/>
+        <conv:NullVisibilityConverter x:Key="NullVisibilityConverter"/>
+        <conv:InvertedNullVisibilityConverter x:Key="InvertedNullVisibilityConverter"/>
         <conv:VisibilityConverter x:Key="VisibilityConverter"/>
+        <conv:InvertedVisibilityConverter x:Key="InvertedVisibilityConverter"/>
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="auto"/>
         </Grid.RowDefinitions>
-        <TabControl Grid.Row="0" Margin="10">
+        <TabControl x:Name="MainTabs" Grid.Row="0" Margin="10">
             <TabControl.Resources>
                 <Style TargetType="TabControl">
                     <Setter Property="Padding" Value="5"/>
                 </Style>
             </TabControl.Resources>
-            <TabItem Header="Start">
+            <TabItem Header="Start" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNullConverter}}">
                 <Grid Margin="20">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="auto"/>
@@ -34,11 +40,12 @@
                                Text="Open a capture database" />
 
                     <DockPanel Grid.Row="1" Margin="0,0,0,20">
-                        <TextBlock Text="Select an .mnpsdb file from your preferred game installation..." Opacity="0.7"/>
-                        <Button HorizontalAlignment="Right" Padding="6,2" Command="{Binding OpenFreeCommand}">... or open a file directly.</Button>
+                        <TextBlock  VerticalAlignment="Center" Text="Select an .mnpsdb file from your preferred game installation..." Opacity="0.7"/>
+                        <Button HorizontalAlignment="Right" Padding="6,2" Command="{Binding OpenFreeCommand}">... or open a file directly</Button>
                     </DockPanel>
                     <ListView x:Name="LocalFilesView" Grid.Row="2" SelectionMode="Single"
                               Visibility="{Binding Path=LocalFilesAvailable, Converter={StaticResource VisibilityConverter}}"
+                              ToolTip="Double click on a capture element to begin loading it"
                               ItemsSource="{Binding Path=LocalFiles}">
                         <b:Interaction.Triggers>
                             <b:EventTrigger EventName="MouseDoubleClick">
@@ -66,15 +73,20 @@
                             </ContextMenu>
                         </ListView.ContextMenu>
                     </ListView>
-                    <TextBlock Grid.Row="2" Visibility="{Binding Path=LocalFilesHint, Converter={StaticResource VisibilityConverter}}"
+                    <TextBlock Grid.Row="2"
+                               Visibility="{Binding Path=LocalFilesAvailable, Converter={StaticResource InvertedVisibilityConverter}}"
                                Text="Set the MILAN_GAME_WIN64 environmental variable!"/>
                 </Grid>
             </TabItem>
-            <TabItem Header="Summary chart" IsEnabled="False"/>
-            <TabItem Header="Detailed log" IsEnabled="False"/>
-            <TabItem Header="Actors and properties" IsEnabled="False"/>
-            <TabItem Header="RPC" IsEnabled="False"/>
+            <TabItem Header="Summary chart" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}"/>
+            <TabItem Header="Network events" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}"/>
+            <TabItem Header="Actors and properties" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}"/>
+            <TabItem Header="RPC" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}"/>
         </TabControl>
+        <Button Grid.Row="0" Width="60" Height="22" Margin="10, 5"
+                VerticalAlignment="Top" HorizontalAlignment="Right"
+                Visibility="{Binding Path=ActiveCapture, Converter={StaticResource NullVisibilityConverter}}"
+                Command="{Binding CloseCommand}">Close</Button>
         <StatusBar Grid.Row="1" Padding="5, 0">
             <StatusBarItem>
                 <TextBlock x:Name="CurrentStatus" Text="Hello there"/>
