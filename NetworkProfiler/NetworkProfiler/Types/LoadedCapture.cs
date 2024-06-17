@@ -254,49 +254,22 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
     public ObservableCollection<RemoteCallCategory> RemoteCalls { get; private set; }
     public ObservableCollection<ControlMessageEntry> ControlMessages { get; private set; }
 
-    private string _remoteCallQuery = string.Empty;
-    public string RemoteCallQuery
-    {
-        get => _remoteCallQuery;
-        set
-        {
-            if (string.IsNullOrWhiteSpace(value) || value.Length < _remoteCallQuery.Length)
-            {
-                RemoteCalls = new ObservableCollection<RemoteCallCategory>(capture.RemoteCallCategories);
-                OnPropertyChanged(nameof(RemoteCalls));
-            }
-
-            _remoteCallQuery = value;
-            OnPropertyChanged();
-
-            if (string.IsNullOrWhiteSpace(value))
-                return;
-
-            for (int i = 0; i < RemoteCalls.Count; ++i)
-            {
-                var remoteCall = RemoteCalls[i];
-
-                var objectName = remoteCall.ObjectName;
-                var funcName = remoteCall.FunctionName;
-
-                var mode = StringComparison.InvariantCultureIgnoreCase;
-                if (!objectName.Contains(value, mode) && !funcName.Contains(value, mode))
-                {
-                    RemoteCalls.RemoveAt(i);
-                    i--;
-                }
-            }
-        }
-    }
-
+    public RemoteCallFilter RemoteCallFilter { get; private set; }
     public ControlMessageFilter ControlMessageFilter { get; private set; }
 
     public LoadedCaptureViewModel(LoadedCapture model)
     {
         capture = model;
+
         RemoteCalls = new ObservableCollection<RemoteCallCategory>(capture.RemoteCallCategories);
         ControlMessages = new ObservableCollection<ControlMessageEntry>(capture.ControlMessageEntries);
 
+        RemoteCallFilter = new RemoteCallFilter((filter, restore) =>
+        {
+            var filtered = capture.RemoteCallCategories.Where(e => filter.Apply(ref e));
+            RemoteCalls = new ObservableCollection<RemoteCallCategory>(filtered);
+            OnPropertyChanged(nameof(RemoteCalls));
+        });
         ControlMessageFilter = new ControlMessageFilter((filter, restore) =>
         {
             var filtered = capture.ControlMessageEntries.Where(e => filter.Apply(ref e));
@@ -330,6 +303,37 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
     #endregion
 }
 
+
+public class RemoteCallFilter(Action<RemoteCallFilter, bool> callback) : ObservableObject
+{
+    string _remoteCallQuery = string.Empty;
+    public string RemoteCallQuery
+    {
+        get => _remoteCallQuery;
+        set
+        {
+            _remoteCallQuery = value;
+            OnPropertyChanged();
+            callback(this, false);
+        }
+    }
+
+    const StringComparison COMPARE_MODE = StringComparison.InvariantCultureIgnoreCase;
+    public bool Apply(ref RemoteCallCategory entry)
+    {
+        if (!string.IsNullOrWhiteSpace(RemoteCallQuery))
+        {
+            var objectName = entry.ObjectName;
+            var funcName = entry.FunctionName;
+
+            if (!objectName.Contains(RemoteCallQuery, COMPARE_MODE)
+                && !funcName.Contains(RemoteCallQuery, COMPARE_MODE))
+                return false;
+        }
+
+        return true;
+    }
+}
 
 public class ControlMessageFilter(Action<ControlMessageFilter, bool> callback) : ObservableObject
 {

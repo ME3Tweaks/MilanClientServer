@@ -274,10 +274,9 @@
                     </ListView>
 
                     <TextBox x:Name="RpcSearchBox"
-                             Grid.Row="1" MinWidth="380" Margin="0,10,0,0" Padding="2"
-                             HorizontalAlignment="Left" 
-                             Text="{Binding Path=ActiveCapture.RemoteCallQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBlock Grid.Row="1" MinWidth="380" Margin="5,10,0,0" IsHitTestVisible="False"
+                             Grid.Row="1" MinWidth="395" Margin="0,10,0,0" Padding="2" HorizontalAlignment="Left" 
+                             Text="{Binding Path=ActiveCapture.RemoteCallFilter.RemoteCallQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    <TextBlock Grid.Row="1" MinWidth="395" Margin="5,10,0,0" IsHitTestVisible="False"
                                VerticalAlignment="Center" HorizontalAlignment="Left"
                                Text="Search RPCs by object or function names..." Opacity="0.6">
                         <TextBlock.Style>

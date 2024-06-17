@@ -120,7 +120,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             static string selectPredicate(string path) => System.IO.Path.GetFileName(path);
             static bool filterPredicate(string name) => name.StartsWith("netprof-") && name.EndsWith(".mnpsdb");
 
-            LocalFiles.Clear();
+
+            List<LocalFileViewModel> tempLocalFiles = [];
             foreach (var localPath in localPathList.Select(selectPredicate).Where(filterPredicate))
             {
                 Debug.WriteLine(localPath);
@@ -131,8 +132,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 localFile.Size = localInfo.Length;
                 localFile.Timestamp = localInfo.LastWriteTime;
 
-                LocalFiles.Add(new LocalFileViewModel(localFile));
+                tempLocalFiles.Add(new LocalFileViewModel(localFile));
             }
+
+            LocalFiles.Clear();
+            tempLocalFiles.Reverse();
+            tempLocalFiles.ForEach(LocalFiles.Add);
         }
     }
 
