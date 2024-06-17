@@ -150,6 +150,8 @@ public struct ControlMessageRecord : IRecord
         MsgType = (ControlMessageType)MsgTypeInt;
 
         Params = reader.ReadString();
+
+        //Debug.WriteLine($"control message - {MsgType} / {Recipient} - read");
     }
 }
 

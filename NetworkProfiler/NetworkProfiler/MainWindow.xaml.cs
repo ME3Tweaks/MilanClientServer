@@ -52,13 +52,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         set { _activeCapture = value;  OnPropertyChanged(); }
     }
 
-    private ActorReplicationCategory? _selectedActorCategory = null;
-    public ActorReplicationCategory? SelectedActorCategory
-    {
-        get => _selectedActorCategory;
-        set { _selectedActorCategory = value; OnPropertyChanged(); }
-    }
-
     #endregion
 
     public ICommand OpenLocalCommand { get; }

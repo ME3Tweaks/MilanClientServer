@@ -3,7 +3,6 @@ using NetworkProfiler.Core;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Net;
-using System.Text.RegularExpressions;
 
 namespace NetworkProfiler.Types;
 
@@ -53,13 +52,14 @@ public class RemoteCallCategory
     public float AvgBytes => AvgBits / 8;
 }
 
-
 public class ControlMessageEntry
 {
     public ControlMessageType MessageType { get; set; }
     public ControlMessageHandler Recipient { get; set; }
     public string Params { get; set; } = string.Empty;
     public string Remote { get; set; } = string.Empty;
+    public int FrameIndex { get; set; }
+    public float FrameTime { get; set; }
 }
 
 #endregion
@@ -71,6 +71,9 @@ public class ControlMessageEntry
 public class LoadedCapture : IDisposable, ICaptureVisitor
 {
     readonly NetworkCapture capture;
+
+    public readonly List<string> RemoteAddressMap = [];
+    readonly HashSet<IPEndPoint> remoteAddressHashset = [];
 
     public readonly List<ActorReplicationCategory> ActorReplicationCategories = [];
     readonly Dictionary<string, int> actorReplicationLookup = [];
@@ -99,6 +102,9 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
         ActorReplicationCategories.Sort((a, b) => b.AccumBits.CompareTo(a.AccumBits));
 
         RemoteCallCategories.Sort((a, b) => b.AccumBits.CompareTo(a.AccumBits));
+
+        var sortedAddresses = remoteAddressHashset.ToList().Select(ip => ip.ToString()).Order().ToList();
+        RemoteAddressMap.AddRange(sortedAddresses);
     }
 
 
@@ -123,6 +129,8 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
 
         remoteCallCategory.Count += 1;
         remoteCallCategory.AccumBits += record.Bits;
+
+        remoteAddressHashset.Add(record.Remote);
     }
     public void OnActorReplication(ref ActorReplicationRecord record, int frame, float time)
     {
@@ -150,6 +158,8 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
         actorReplCategory.bNonEmpty = false;
         actorReplCategory.Count += 1;
         lastActorReplicationIndex = actorReplIndex;
+
+        remoteAddressHashset.Add(record.Remote);
     }
     public void OnPropertyReplication(ref PropertyReplicationRecord record, int frame, float time)
     {
@@ -176,6 +186,8 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
 
         propertyCategory.AccumBits += record.Bits;
         propertyCategory.Count += 1;
+
+        remoteAddressHashset.Add(record.Remote);
     }
     public void OnControlMessage(ref ControlMessageRecord record, int frame, float time)
     {
@@ -188,11 +200,24 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
             Recipient = record.Recipient,
             Params = paramString,
             Remote = record.Remote!.ToString(),
+            FrameIndex = frame,
+            FrameTime = time,
         });
+
+        remoteAddressHashset.Add(record.Remote);
     }
-    public void OnSessionEvent(ref SessionEventRecord record, int frame, float time) { }
-    public void OnSocketCall(ref SocketCallRecord record, int frame, float time) { }
-    public void OnSendBunch(ref SendBunchRecord record, int frame, float time) { }
+    public void OnSessionEvent(ref SessionEventRecord record, int frame, float time)
+    {
+        remoteAddressHashset.Add(record.Remote);
+    }
+    public void OnSocketCall(ref SocketCallRecord record, int frame, float time)
+    {
+        remoteAddressHashset.Add(record.Remote);
+    }
+    public void OnSendBunch(ref SendBunchRecord record, int frame, float time)
+    {
+        remoteAddressHashset.Add(record.Remote);
+    }
 
     #endregion
 
@@ -224,11 +249,12 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
 {
     private readonly LoadedCapture capture;
 
+    public IEnumerable<string> RemoteAddresses => capture.RemoteAddressMap;
     public IEnumerable<ActorReplicationCategory> ReplicatedActors => capture.ActorReplicationCategories;
     public ObservableCollection<RemoteCallCategory> RemoteCalls { get; private set; }
-    public IEnumerable<ControlMessageEntry> ControlMessages => capture.ControlMessageEntries;
+    public ObservableCollection<ControlMessageEntry> ControlMessages { get; private set; }
 
-    private string _remoteCallQuery = "";
+    private string _remoteCallQuery = string.Empty;
     public string RemoteCallQuery
     {
         get => _remoteCallQuery;
@@ -263,10 +289,20 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
         }
     }
 
+    public ControlMessageFilter ControlMessageFilter { get; private set; }
+
     public LoadedCaptureViewModel(LoadedCapture model)
     {
         capture = model;
         RemoteCalls = new ObservableCollection<RemoteCallCategory>(capture.RemoteCallCategories);
+        ControlMessages = new ObservableCollection<ControlMessageEntry>(capture.ControlMessageEntries);
+
+        ControlMessageFilter = new ControlMessageFilter((filter, restore) =>
+        {
+            var filtered = capture.ControlMessageEntries.Where(e => filter.Apply(ref e));
+            ControlMessages = new ObservableCollection<ControlMessageEntry>(filtered);
+            OnPropertyChanged(nameof(ControlMessages));
+        });
     }
 
     #region IDisposable implementation.
@@ -292,4 +328,61 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
     }
 
     #endregion
+}
+
+
+public class ControlMessageFilter(Action<ControlMessageFilter, bool> callback) : ObservableObject
+{
+    string _paramQuery = string.Empty;
+    public string ParamQuery
+    {
+        get => _paramQuery;
+        set
+        {
+            _paramQuery = value;
+            OnPropertyChanged();
+            callback(this, false);
+        }
+    }
+
+    string? _remote = null;
+    public string? Remote
+    {
+        get => _remote;
+        set
+        {
+            _remote = value;
+            OnPropertyChanged();
+            callback(this, false);
+        }
+    }
+
+    ControlMessageType? _messageType = null;
+    public ControlMessageType? MessageType
+    {
+        get => _messageType;
+        set
+        {
+            _messageType = value;
+            OnPropertyChanged();
+            callback(this, false);
+        }
+    }
+
+    const StringComparison COMPARE_MODE = StringComparison.InvariantCultureIgnoreCase;
+    public bool Apply(ref ControlMessageEntry entry)
+    {
+        if (MessageType is not null)
+            if (MessageType != entry.MessageType)
+                return false;
+
+        if (Remote is not null)
+            if (Remote != entry.Remote)
+                return false;
+
+        if (!entry.Params.Contains(ParamQuery, COMPARE_MODE))
+            return false;
+
+        return true;
+    }
 }

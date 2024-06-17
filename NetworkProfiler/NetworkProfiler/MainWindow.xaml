@@ -6,6 +6,8 @@
         xmlns:b="http://schemas.microsoft.com/xaml/behaviors"
         xmlns:local="clr-namespace:NetworkProfiler"
         xmlns:conv="clr-namespace:NetworkProfiler.Converters"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        xmlns:npc="clr-namespace:NetworkProfiler.Core;assembly=NetworkProfiler.Core"
         mc:Ignorable="d"
         Title="Milan Network Profiler" Height="900" Width="1600"
         Closing="Window_Closing">
@@ -16,6 +18,15 @@
         <conv:InvertedNullVisibilityConverter x:Key="InvertedNullVisibilityConverter"/>
         <conv:VisibilityConverter x:Key="VisibilityConverter"/>
         <conv:InvertedVisibilityConverter x:Key="InvertedVisibilityConverter"/>
+        <conv:ControlMessageConverter x:Key="ControlMessageConverter"/>
+        <conv:ControlMessageTypeConverter x:Key="ControlMessageTypeConverter"/>
+        <conv:RemoteAddressConverter x:Key="RemoteAddressConverter"/>
+
+        <ObjectDataProvider x:Key="ControlTypeEnum" ObjectType="{x:Type sys:Enum}" MethodName="GetValues">
+            <ObjectDataProvider.MethodParameters>
+                <x:Type TypeName="npc:ControlMessageType"/>
+            </ObjectDataProvider.MethodParameters>
+        </ObjectDataProvider>
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
@@ -85,10 +96,17 @@
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <ListView Grid.Row="0" Grid.Column="0" SelectionMode="Single"
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition MinWidth="400" Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <ListView x:Name="ControlMessagesListView"
+                              Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" SelectionMode="Single"
                               ItemsSource="{Binding Path=ActiveCapture.ControlMessages}">
                         <ListView.View>
                             <GridView>
+                                <GridViewColumn Header="Frame" Width="40" DisplayMemberBinding="{Binding FrameIndex}"/>
+                                <GridViewColumn Header="(ms.)" Width="60" DisplayMemberBinding="{Binding FrameTime, StringFormat=N2}"/>
                                 <GridViewColumn Header="Remote" Width="100" DisplayMemberBinding="{Binding Remote}"/>
                                 <GridViewColumn Header="Recipient" Width="80" DisplayMemberBinding="{Binding Recipient}"/>
                                 <GridViewColumn Header="Type" Width="80" DisplayMemberBinding="{Binding MessageType}"/>
@@ -96,6 +114,98 @@
                             </GridView>
                         </ListView.View>
                     </ListView>
+                    <Grid Grid.Row="1" Grid.Column="0" Margin="0,5,5,0">
+                        <Grid.Resources>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <Trigger Property="Grid.Column" Value="0">
+                                        <Setter Property="VerticalAlignment" Value="Center" />
+                                        <Setter Property="Margin" Value="0,0,30,0" />
+                                        <!--<Setter Property="FontWeight" Value="SemiBold" />-->
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                            <Style TargetType="ComboBox">
+                                <Style.Triggers>
+                                    <Trigger Property="Grid.Column" Value="1">
+                                        <Setter Property="Margin" Value="0,2,0,2" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Resources>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Remote"/>
+                        <ComboBox Grid.Row="0" Grid.Column="1">
+                            <ComboBox.Resources>
+                                <CollectionViewSource x:Key="Addresses" Source="{Binding Path=ActiveCapture.RemoteAddresses}"/>
+                            </ComboBox.Resources>
+                            <ComboBox.SelectedItem>
+                                <MultiBinding Converter="{StaticResource RemoteAddressConverter}"
+                                              Mode="TwoWay" UpdateSourceTrigger="PropertyChanged">
+                                    <Binding Path="ActiveCapture.ControlMessageFilter.Remote"/>
+                                    <Binding RelativeSource="{RelativeSource Self}" Path="."/>
+                                </MultiBinding>
+                            </ComboBox.SelectedItem>
+                            <ComboBox.ItemsSource>
+                                <CompositeCollection>
+                                    <ComboBoxItem IsSelected="True">ANY</ComboBoxItem>
+                                    <CollectionContainer Collection="{Binding Source={StaticResource Addresses}}"/>
+                                </CompositeCollection>
+                            </ComboBox.ItemsSource>
+                        </ComboBox>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Message type"/>
+                        <ComboBox Grid.Row="1" Grid.Column="1">
+                            <ComboBox.SelectedItem>
+                                <MultiBinding Converter="{StaticResource ControlMessageTypeConverter}"
+                                              Mode="TwoWay" UpdateSourceTrigger="PropertyChanged">
+                                    <Binding Path="ActiveCapture.ControlMessageFilter.MessageType"/>
+                                    <Binding RelativeSource="{RelativeSource Self}" Path="."/>
+                                </MultiBinding>
+                            </ComboBox.SelectedItem>
+                            <ComboBox.ItemsSource>
+                                <CompositeCollection>
+                                    <ComboBoxItem IsSelected="True">ANY</ComboBoxItem>
+                                    <CollectionContainer Collection="{Binding Source={StaticResource ControlTypeEnum}}"/>
+                                </CompositeCollection>
+                            </ComboBox.ItemsSource>
+                        </ComboBox>
+
+                        <TextBox x:Name="ControlMessageTextBox"
+                                 Grid.Row="2" Grid.ColumnSpan="2" Margin="0,3,0,0" Padding="2"
+                                 HorizontalAlignment="Stretch"
+                                 Text="{Binding Path=ActiveCapture.ControlMessageFilter.ParamQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="5,3,0,0" IsHitTestVisible="False"
+                                   VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                   Text="Search by message params..." Opacity="0.6">
+                            <TextBlock.Style>
+                                <Style TargetType="{x:Type TextBlock}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=ControlMessageTextBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                    </Grid>
+                    <TextBox Grid.Row="1" Grid.Column="1" Height="78" Margin="0,5,0,0"
+                             IsReadOnly="True" IsReadOnlyCaretVisible="False"
+                             VerticalScrollBarVisibility="Auto"
+                             FontFamily="Consolas" FontSize="14"
+                             Text="{Binding ElementName=ControlMessagesListView, Path=SelectedValue,
+                                Converter={StaticResource ControlMessageConverter}}" />
                 </Grid>
             </TabItem>
             <TabItem Header="Actors / properties" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}">
@@ -109,9 +219,9 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="2*" MinWidth="400"/>
                     </Grid.ColumnDefinitions>
-                    <ListView Grid.Row="0" Grid.Column="0" SelectionMode="Single"
-                              ItemsSource="{Binding Path=ActiveCapture.ReplicatedActors}"
-                              SelectedValue="{Binding Path=SelectedActorCategory}">
+                    <ListView x:Name="ReplicatedActorsListView"
+                              Grid.Row="0" Grid.Column="0" SelectionMode="Single"
+                              ItemsSource="{Binding Path=ActiveCapture.ReplicatedActors}">
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Header="Total bytes" Width="80" DisplayMemberBinding="{Binding AccumBytes, StringFormat=N2}"/>
@@ -127,7 +237,7 @@
                                   VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
                                   Background="LightGray"/>
                     <ListView Grid.Row="0" Grid.Column="2" SelectionMode="Single"
-                              ItemsSource="{Binding Path=SelectedActorCategory.Properties}">
+                              ItemsSource="{Binding ElementName=ReplicatedActorsListView, Path=SelectedValue.Properties}">
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Header="Total bytes" Width="80" DisplayMemberBinding="{Binding AccumBytes, StringFormat=N2}"/>
@@ -163,9 +273,12 @@
                         </ListView.View>
                     </ListView>
 
-                    <TextBox x:Name="RpcSearchBox" Grid.Row="1" Margin="0,10,0,0" Padding="2" MinWidth="400" HorizontalAlignment="Left" 
+                    <TextBox x:Name="RpcSearchBox"
+                             Grid.Row="1" MinWidth="380" Margin="0,10,0,0" Padding="2"
+                             HorizontalAlignment="Left" 
                              Text="{Binding Path=ActiveCapture.RemoteCallQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                    <TextBlock Grid.Row="1" MinWidth="400" Margin="5,10,0,0" IsHitTestVisible="False" VerticalAlignment="Center" HorizontalAlignment="Left"
+                    <TextBlock Grid.Row="1" MinWidth="380" Margin="5,10,0,0" IsHitTestVisible="False"
+                               VerticalAlignment="Center" HorizontalAlignment="Left"
                                Text="Search RPCs by object or function names..." Opacity="0.6">
                         <TextBlock.Style>
                             <Style TargetType="{x:Type TextBlock}">
