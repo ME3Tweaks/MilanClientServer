@@ -143,31 +143,57 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     void LoadFile(string fullPath)
     {
+        var fileName = System.IO.Path.GetFileName(fullPath);
+
         Debug.WriteLine($"Loading file '{fullPath}'");
-        SetWindowStatus($"Loading {fullPath}.");
+        SetWindowStatus($"Loading {fullPath}...");
         MainTabs.IsEnabled = false;
 
         Task.Run(() =>
         {
-            using var sourceStream = File.OpenRead(fullPath);
-            using var networkCapture = new NetworkCapture(sourceStream);
-            using var loadedCapture = new LoadedCapture(networkCapture);
+            bool bValidLoad = false;
+            string loadError = string.Empty;
 
-            ActiveCapture = new LoadedCaptureViewModel(loadedCapture);
+            var stopWatch = Stopwatch.StartNew();
+
+            try
+            {
+                using var sourceStream = File.OpenRead(fullPath);
+                using var networkCapture = new NetworkCapture(sourceStream);
+                using var loadedCapture = new LoadedCapture(networkCapture);
+
+                ActiveCapture = new LoadedCaptureViewModel(loadedCapture);
+                stopWatch.Stop();
+                bValidLoad = true;
+            }
+            catch (BadCaptureFormatException FormatException)
+            {
+                loadError = FormatException.Message;
+            }
 
             // After loading is complete:
 
             Application.Current.Dispatcher.BeginInvoke(
                 DispatcherPriority.Normal,
                 () => {
-                    SetWindowTitle(fullPath);
-                    SetWindowStatus("Capture loaded.");
-                    MainTabs.SelectedIndex = 1;
                     MainTabs.IsEnabled = true;
 
-                    #if DEBUG
-                    MainTabs.SelectedIndex = 3;
-                    #endif
+                    if (bValidLoad)
+                    {
+                        var elapsed = stopWatch.Elapsed.TotalMilliseconds;
+                        SetWindowTitle(fullPath);
+                        SetWindowStatus($"Loaded capture {fileName} in {(int)elapsed} ms.");
+                        MainTabs.SelectedIndex = 1;
+                    }
+                    else
+                    {
+                        ResetWindowTitle();
+                        SetWindowStatus($"Failed to load capture {fileName} ({loadError}).");
+                        MainTabs.SelectedIndex = 0;
+
+                        MessageBox.Show($"Failed to load capture.\n{loadError}", "Load failure",
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
                 });
         });
     }

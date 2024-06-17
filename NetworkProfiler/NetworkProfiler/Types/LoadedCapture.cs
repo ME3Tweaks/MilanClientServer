@@ -72,7 +72,7 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
 {
     readonly NetworkCapture capture;
 
-    public readonly List<string> RemoteAddressMap = [];
+    public readonly List<string> RemoteAddresses = [];
     readonly HashSet<IPEndPoint> remoteAddressHashset = [];
 
     public readonly List<ActorReplicationCategory> ActorReplicationCategories = [];
@@ -104,7 +104,7 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
         RemoteCallCategories.Sort((a, b) => b.AccumBits.CompareTo(a.AccumBits));
 
         var sortedAddresses = remoteAddressHashset.ToList().Select(ip => ip.ToString()).Order().ToList();
-        RemoteAddressMap.AddRange(sortedAddresses);
+        RemoteAddresses.AddRange(sortedAddresses);
     }
 
 
@@ -245,11 +245,15 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
     #endregion
 }
 
+
+/// <summary>
+/// View model for <see cref="LoadedCapture"/>.
+/// </summary>
 public class LoadedCaptureViewModel : ObservableObject, IDisposable
 {
     private readonly LoadedCapture capture;
 
-    public IEnumerable<string> RemoteAddresses => capture.RemoteAddressMap;
+    public IEnumerable<string> RemoteAddresses => capture.RemoteAddresses;
     public ObservableCollection<ActorReplicationCategory> ReplicatedActors { get; private set; }
     public ObservableCollection<RemoteCallCategory> RemoteCalls { get; private set; }
     public ObservableCollection<ControlMessageEntry> ControlMessages { get; private set; }
