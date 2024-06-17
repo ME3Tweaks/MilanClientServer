@@ -250,10 +250,11 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
     private readonly LoadedCapture capture;
 
     public IEnumerable<string> RemoteAddresses => capture.RemoteAddressMap;
-    public IEnumerable<ActorReplicationCategory> ReplicatedActors => capture.ActorReplicationCategories;
+    public ObservableCollection<ActorReplicationCategory> ReplicatedActors { get; private set; }
     public ObservableCollection<RemoteCallCategory> RemoteCalls { get; private set; }
     public ObservableCollection<ControlMessageEntry> ControlMessages { get; private set; }
 
+    public ActorReplicationFilter ActorReplicationFilter { get; private set; }
     public RemoteCallFilter RemoteCallFilter { get; private set; }
     public ControlMessageFilter ControlMessageFilter { get; private set; }
 
@@ -261,9 +262,16 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
     {
         capture = model;
 
+        ReplicatedActors = new ObservableCollection<ActorReplicationCategory>(capture.ActorReplicationCategories);
         RemoteCalls = new ObservableCollection<RemoteCallCategory>(capture.RemoteCallCategories);
         ControlMessages = new ObservableCollection<ControlMessageEntry>(capture.ControlMessageEntries);
 
+        ActorReplicationFilter = new ActorReplicationFilter((filter, restore) =>
+        {
+            var filtered = capture.ActorReplicationCategories.Where(e => filter.Apply(ref e));
+            ReplicatedActors = new ObservableCollection<ActorReplicationCategory>(filtered);
+            OnPropertyChanged(nameof(ReplicatedActors));
+        });
         RemoteCallFilter = new RemoteCallFilter((filter, restore) =>
         {
             var filtered = capture.RemoteCallCategories.Where(e => filter.Apply(ref e));
@@ -301,92 +309,4 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
     }
 
     #endregion
-}
-
-
-public class RemoteCallFilter(Action<RemoteCallFilter, bool> callback) : ObservableObject
-{
-    string _remoteCallQuery = string.Empty;
-    public string RemoteCallQuery
-    {
-        get => _remoteCallQuery;
-        set
-        {
-            _remoteCallQuery = value;
-            OnPropertyChanged();
-            callback(this, false);
-        }
-    }
-
-    const StringComparison COMPARE_MODE = StringComparison.InvariantCultureIgnoreCase;
-    public bool Apply(ref RemoteCallCategory entry)
-    {
-        if (!string.IsNullOrWhiteSpace(RemoteCallQuery))
-        {
-            var objectName = entry.ObjectName;
-            var funcName = entry.FunctionName;
-
-            if (!objectName.Contains(RemoteCallQuery, COMPARE_MODE)
-                && !funcName.Contains(RemoteCallQuery, COMPARE_MODE))
-                return false;
-        }
-
-        return true;
-    }
-}
-
-public class ControlMessageFilter(Action<ControlMessageFilter, bool> callback) : ObservableObject
-{
-    string _paramQuery = string.Empty;
-    public string ParamQuery
-    {
-        get => _paramQuery;
-        set
-        {
-            _paramQuery = value;
-            OnPropertyChanged();
-            callback(this, false);
-        }
-    }
-
-    string? _remote = null;
-    public string? Remote
-    {
-        get => _remote;
-        set
-        {
-            _remote = value;
-            OnPropertyChanged();
-            callback(this, false);
-        }
-    }
-
-    ControlMessageType? _messageType = null;
-    public ControlMessageType? MessageType
-    {
-        get => _messageType;
-        set
-        {
-            _messageType = value;
-            OnPropertyChanged();
-            callback(this, false);
-        }
-    }
-
-    const StringComparison COMPARE_MODE = StringComparison.InvariantCultureIgnoreCase;
-    public bool Apply(ref ControlMessageEntry entry)
-    {
-        if (MessageType is not null)
-            if (MessageType != entry.MessageType)
-                return false;
-
-        if (Remote is not null)
-            if (Remote != entry.Remote)
-                return false;
-
-        if (!entry.Params.Contains(ParamQuery, COMPARE_MODE))
-            return false;
-
-        return true;
-    }
 }

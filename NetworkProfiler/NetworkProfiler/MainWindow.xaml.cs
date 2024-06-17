@@ -166,7 +166,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                     MainTabs.IsEnabled = true;
 
                     #if DEBUG
-                    MainTabs.SelectedIndex = 2;
+                    MainTabs.SelectedIndex = 3;
                     #endif
                 });
         });
