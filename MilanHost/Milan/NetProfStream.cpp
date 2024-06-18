@@ -15,7 +15,7 @@ std::mutex NetworkCapture::GlobalMutex;
 NetworkCapture::NetworkCapture()
     : StringTable{}, StringLookup{}, StringTierOffset{}
 {
-    MILAN_INFOW(L"netprof starting capture");
+    MILAN_INFOW(L"netprof: starting capture");
 
     SYSTEMTIME Time{};
     GetLocalTime(&Time);
@@ -27,7 +27,7 @@ NetworkCapture::NetworkCapture()
         Time.wYear, Time.wMonth, Time.wDay, Time.wHour, Time.wMinute, Time.wSecond, Instance);
     auto const* FileName = FileNameBuffer.data();
 
-    MILAN_TRACEW(L"netprof database path = %S", FileName);
+    MILAN_TRACEW(L"netprof: opening database, path = %S", FileName);
     Stream = new BufferedFileOutputStream(FileName);
 
     StringTable.reserve(500);

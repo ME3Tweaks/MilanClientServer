@@ -21,6 +21,7 @@ public class NetworkCapture : IDisposable, ICaptureReader
     readonly bool               skipping = false;
 
     public long FrameCount => frameTable.Count;
+    public long RecordCount { get; private set; } = 0;
 
     public const int HEADER_SIZE = 64;
     public const int SUPPORTED_VERSION = 1; 
@@ -44,6 +45,8 @@ public class NetworkCapture : IDisposable, ICaptureReader
 
         InitializingVisitor visitor = new();
         AcceptVisitor(visitor);
+        RecordCount = visitor.VisitedCount;
+
         stringTable = visitor.OutputStrings;
         frameTable = visitor.OutputFrames;
 
@@ -109,7 +112,7 @@ public class NetworkCapture : IDisposable, ICaptureReader
         long startOffset, int startFrame, float startTime,
         VisitorPredicate callPredicate, VisitorPredicate breakPredicate)
     {
-        int counter = -1;
+        int counter = 0;
         int frameIndex = startFrame - 1;
         float timerTotal = startTime;
 
@@ -199,6 +202,8 @@ public class NetworkCapture : IDisposable, ICaptureReader
             if (breakPredicate(type, frameIndex, timerTotal))
                 break;
         }
+
+        visitor.VisitedCount = counter;
     }
 
     private T ParseRecord<T>() where T : IRecord, new()
@@ -333,6 +338,8 @@ public class NetworkCapture : IDisposable, ICaptureReader
 
 public interface ICaptureVisitor
 {
+    int VisitedCount { get; set; }
+
     void OnTieredStringLookup(ref TieredStringLookupRecord record, int frame, float time);
     void OnFrameStart(ref FrameStartRecord record, int frame, float time, long recordPosition);
     void OnLevelStart(ref LevelStartRecord record, int frame, float time);
@@ -349,6 +356,8 @@ internal class InitializingVisitor : ICaptureVisitor
 {
     public List<string> OutputStrings = [];
     public List<FrameEntry> OutputFrames = [];
+
+    public int VisitedCount { get; set; } = 0;
 
     public void OnActorReplication(ref ActorReplicationRecord record, int frame, float time) { }
     public void OnControlMessage(ref ControlMessageRecord record, int frame, float time) { }

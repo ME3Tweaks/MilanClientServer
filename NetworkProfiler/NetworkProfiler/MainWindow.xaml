@@ -4,12 +4,16 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:b="http://schemas.microsoft.com/xaml/behaviors"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        xmlns:plot="clr-namespace:ScottPlot.WPF;assembly=ScottPlot.WPF"
         xmlns:local="clr-namespace:NetworkProfiler"
         xmlns:conv="clr-namespace:NetworkProfiler.Converters"
-        xmlns:sys="clr-namespace:System;assembly=mscorlib"
         xmlns:npc="clr-namespace:NetworkProfiler.Core;assembly=NetworkProfiler.Core"
         mc:Ignorable="d"
-        Title="Milan Network Profiler" Height="900" Width="1600"
+        d:DesignWidth="1300" d:DesignHeight="800"
+        Width="1600" Height="900"
+        MinWidth="800" MinHeight="500"
+        Title="Milan Network Profiler"
         Closing="Window_Closing">
     <Window.Resources>
         <conv:IsNullConverter x:Key="IsNullConverter"/>
@@ -47,11 +51,11 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" FontSize="20" Margin="0,0,0,10"
+                    <TextBlock Grid.Row="0" FontSize="20" Margin="0,0,0,5"
                                Text="Open a capture database" />
 
                     <DockPanel Grid.Row="1" Margin="0,0,0,20">
-                        <TextBlock  VerticalAlignment="Center" Text="Select an .mnpsdb file from your preferred game installation..." Opacity="0.7"/>
+                        <TextBlock  VerticalAlignment="Bottom" Text="Select an .mnpsdb file from your preferred game installation..." Opacity="0.7"/>
                         <Button HorizontalAlignment="Right" Padding="6,2" Command="{Binding OpenFreeCommand}">... or open a file directly</Button>
                     </DockPanel>
                     <ListView x:Name="LocalFilesView" Grid.Row="2" SelectionMode="Single"
@@ -89,7 +93,43 @@
                                Text="Set the MILAN_GAME_WIN64 environmental variable!"/>
                 </Grid>
             </TabItem>
-            <TabItem Header="Summary / chart" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}"/>
+            <TabItem Header="Summary / chart" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="2*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <plot:WpfPlot x:Name="MainPlot" Grid.Row="0" Grid.Column="0" Margin="10" />
+                    <ScrollViewer Grid.Row="0" Grid.Column="1" Margin="10" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Orientation="Vertical">
+                            <StackPanel.Resources>
+                                <Style TargetType="CheckBox">
+                                    <Setter Property="Margin" Value="0,0,20,5"/>
+                                </Style>
+                            </StackPanel.Resources>
+                            <CheckBox Content="Actor count" IsChecked="{Binding ChartActorCount}"/>
+                            <CheckBox Content="Property count" IsChecked="{Binding ChartPropertyCount}"/>
+                            <CheckBox Content="Property size (bytes)" IsChecked="{Binding ChartPropertySize}"/>
+                            <CheckBox Content="RPC count" IsChecked="{Binding ChartRemoteCallCount}"/>
+                            <CheckBox Content="RPC size (bytes)" IsChecked="{Binding ChartRemoteCallSize}"/>
+                            <CheckBox Content="SendBunch count"  IsChecked="{Binding ChartSendBunchCount}"/>
+                            <CheckBox Content="SendBunch size (bytes)" IsChecked="{Binding ChartSendBunchSize}"/>
+                            <CheckBox Content="Socket send count" IsChecked="{Binding ChartSocketSendCount}"/>
+                            <CheckBox Content="Socket send size (bytes)" IsChecked="{Binding ChartSocketSendSize}"/>
+                            <CheckBox Content="Socket recv count" IsChecked="{Binding ChartSocketRecvCount}"/>
+                            <CheckBox Content="Socket recv size (bytes)" IsChecked="{Binding ChartSocketRecvSize}"/>
+                            <CheckBox Content="Control message count" IsChecked="{Binding ChartControlMessageCount}"/>
+                            <Button Content="Sync vertical axes" Margin="1,10,0,0" Command="{Binding SyncAxesCommand}"/>
+                            <Button Content="Reset chart" Margin="1,5,0,0" Command="{Binding ResetChartCommand}"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
             <TabItem Header="Control messages" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -120,7 +160,7 @@
                                 <Style.Triggers>
                                     <Trigger Property="Grid.Column" Value="0">
                                         <Setter Property="VerticalAlignment" Value="Center" />
-                                        <Setter Property="Margin" Value="0,0,50,0" />
+                                        <Setter Property="Margin" Value="0,0,60,4" />
                                         <!--<Setter Property="FontWeight" Value="SemiBold" />-->
                                     </Trigger>
                                 </Style.Triggers>
@@ -128,7 +168,7 @@
                             <Style TargetType="ComboBox">
                                 <Style.Triggers>
                                     <Trigger Property="Grid.Column" Value="1">
-                                        <Setter Property="Margin" Value="0,2,0,2" />
+                                        <Setter Property="Margin" Value="0,0,0,4" />
                                     </Trigger>
                                 </Style.Triggers>
                             </Style>
@@ -181,10 +221,10 @@
                         </ComboBox>
 
                         <TextBox x:Name="ControlMessageTextBox"
-                                 Grid.Row="2" Grid.ColumnSpan="2" Margin="0,3,0,0" Padding="2"
+                                 Grid.Row="2" Grid.ColumnSpan="2" Margin="0,4,0,0" Padding="2"
                                  HorizontalAlignment="Stretch"
                                  Text="{Binding Path=ActiveCapture.ControlMessageFilter.ParamQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="5,3,0,0" IsHitTestVisible="False"
+                        <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="5,4,0,0" IsHitTestVisible="False"
                                    VerticalAlignment="Center" HorizontalAlignment="Stretch"
                                    Text="Search control messages by params text..." Opacity="0.6">
                             <TextBlock.Style>
@@ -268,7 +308,7 @@
                                 </TextBlock.Style>
                             </TextBlock>
                         </Grid>
-                        <TextBlock Foreground="Red" VerticalAlignment="Center" Margin="10,10,0,0">
+                        <TextBlock Foreground="Red" VerticalAlignment="Center" Margin="10,10,0,2">
                             Note that average size for actors is only calculated for non-empty actor sends.
                             Average property sizes are counted normally.
                         </TextBlock>

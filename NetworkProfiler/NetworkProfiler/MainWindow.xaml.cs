@@ -21,6 +21,9 @@ using Microsoft.Win32;
 using NetworkProfiler.Core;
 using NetworkProfiler.Models;
 using NetworkProfiler.Types;
+using ScottPlot;
+using ScottPlot.AxisPanels;
+using ScottPlot.Plottables;
 
 
 namespace NetworkProfiler;
@@ -54,10 +57,103 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     #endregion
 
+    #region Observable chart checkbox properties.
+
+    // All properties relevant to the main chart update
+    // must start with "Chart" and end with "Count" or "Size".
+
+    public bool _chartActorCount = false;
+    public bool ChartActorCount
+    {
+        get => _chartActorCount;
+        set { _chartActorCount = value; OnPropertyChanged(); }
+    }
+
+    public bool _chartPropertyCount = false;
+    public bool ChartPropertyCount
+    {
+        get => _chartPropertyCount;
+        set { _chartPropertyCount = value; OnPropertyChanged(); }
+    }
+
+    public bool _chartPropertySize = false;
+    public bool ChartPropertySize
+    {
+        get => _chartPropertySize;
+        set { _chartPropertySize = value; OnPropertyChanged(); }
+    }
+
+    public bool _chartRemoteCallCount = false;
+    public bool ChartRemoteCallCount
+    {
+        get => _chartRemoteCallCount;
+        set { _chartRemoteCallCount = value; OnPropertyChanged(); }
+    }
+
+    public bool _chartRemoteCallSize = false;
+    public bool ChartRemoteCallSize
+    {
+        get => _chartRemoteCallSize;
+        set { _chartRemoteCallSize = value; OnPropertyChanged(); }
+    }
+
+    public bool _chartSendBunchCount = false;
+    public bool ChartSendBunchCount
+    {
+        get => _chartSendBunchCount;
+        set { _chartSendBunchCount = value; OnPropertyChanged(); }
+    }
+
+    public bool _chartSendBunchSize = false;
+    public bool ChartSendBunchSize
+    {
+        get => _chartSendBunchSize;
+        set { _chartSendBunchSize = value; OnPropertyChanged(); }
+    }
+
+    public bool _chartSocketSendCount = false;
+    public bool ChartSocketSendCount
+    {
+        get => _chartSocketSendCount;
+        set { _chartSocketSendCount = value; OnPropertyChanged(); }
+    }
+
+    public bool _chartSocketSendSize = false;
+    public bool ChartSocketSendSize
+    {
+        get => _chartSocketSendSize;
+        set { _chartSocketSendSize = value; OnPropertyChanged(); }
+    }
+
+    public bool _chartSocketRecvCount = false;
+    public bool ChartSocketRecvCount
+    {
+        get => _chartSocketRecvCount;
+        set { _chartSocketRecvCount = value; OnPropertyChanged(); }
+    }
+
+    public bool _chartSocketRecvSize = false;
+    public bool ChartSocketRecvSize
+    {
+        get => _chartSocketRecvSize;
+        set { _chartSocketRecvSize = value; OnPropertyChanged(); }
+    }
+
+    public bool _chartControlMessageCount = false;
+    public bool ChartControlMessageCount
+    {
+        get => _chartControlMessageCount;
+        set { _chartControlMessageCount = value; OnPropertyChanged(); }
+    }
+
+    #endregion
+
     public ICommand OpenLocalCommand { get; }
     public ICommand OpenFreeCommand { get; }
     public ICommand RefreshLocalsCommand { get; }
     public ICommand CloseCommand { get; }
+    public ICommand SyncAxesCommand { get; }
+    public ICommand ResetChartCommand { get; }
 
     public MainWindow()
     {
@@ -65,8 +161,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         DataContext = this;
 
         originalWindowTitle = Title;
-        RebuildLocalFiles();
 
+        // Debug only.
+        ChartPropertySize = true;
+        ChartRemoteCallSize = true;
+        ChartSendBunchSize = true;
+
+        RebuildLocalFiles();
         #region Command initialization.
 
         OpenLocalCommand = new RelayCommand<LocalFileViewModel>((localFile) =>
@@ -96,12 +197,134 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         RefreshLocalsCommand = new RelayCommand(RebuildLocalFiles);
         CloseCommand = new RelayCommand(CloseFile);
 
+        SyncAxesCommand = new RelayCommand(SyncAxesChart);
+        ResetChartCommand = new RelayCommand(() =>
+        {
+            ResetMainChart();
+            UpdateMainChart();
+        });
+
         #endregion
     }
 
     private void Window_Closing(object sender, CancelEventArgs e)
     {
         CloseFile();
+    }
+
+    IYAxis? rightAxis = null;
+
+    void UpdateMainChart()
+    {
+        if (ActiveCapture is null)
+        {
+            // We can't really draw anything now.
+            return;
+        }
+
+        if (rightAxis is null)
+        {
+            rightAxis = MainPlot.Plot.Axes.AddRightAxis();
+            rightAxis.Min = MainPlot.Plot.Axes.Left.Min;
+            rightAxis.FrameLineStyle.Width = 0;
+
+            MainPlot.Plot.Axes.SetLimitsX(-ActiveCapture.FrameCount/100, ActiveCapture.FrameCount * 1.02);
+            MainPlot.Plot.Axes.SetLimitsY(-10, 500, MainPlot.Plot.Axes.Left);
+            MainPlot.Plot.Axes.SetLimitsY(-200, 10000, rightAxis);
+        }
+
+        Debug.WriteLine($"Updating chart...");
+        var frameStats = ActiveCapture.FrameStats;
+
+        MainPlot.Plot.Clear();
+        //MainPlot.Plot.ScaleFactor = 1.0f;
+
+        Signal? signal = null;
+
+        signal = MainPlot.Plot.Add.Signal(frameStats.ActorCount);
+        signal.IsVisible = ChartActorCount;
+        signal.LegendText = "Actor count";
+
+        signal = MainPlot.Plot.Add.Signal(frameStats.PropertyCount);
+        signal.IsVisible = ChartPropertyCount;
+        signal.LegendText = "Property count";
+
+        signal = MainPlot.Plot.Add.Signal(frameStats.PropertySize);
+        //signal.Axes.YAxis = rightAxis;
+        //signal.LinePattern = LinePattern.Dotted;
+        signal.IsVisible = ChartPropertySize;
+        signal.LegendText = "Property size (bytes)";
+
+        signal = MainPlot.Plot.Add.Signal(frameStats.RemoteCallCount);
+        signal.IsVisible = ChartRemoteCallCount;
+        signal.LegendText = "RPC count";
+
+        signal = MainPlot.Plot.Add.Signal(frameStats.RemoteCallSize);
+        //signal.Axes.YAxis = rightAxis;
+        //signal.LinePattern = LinePattern.Dotted;
+        signal.IsVisible = ChartRemoteCallSize;
+        signal.LegendText = "RPC size (bytes)";
+
+        signal = MainPlot.Plot.Add.Signal(frameStats.SendBunchCount);
+        signal.IsVisible = ChartSendBunchCount;
+        signal.LegendText = "SendBunch count";
+
+        signal = MainPlot.Plot.Add.Signal(frameStats.SendBunchSize);
+        signal.Axes.YAxis = rightAxis;
+        signal.LinePattern = LinePattern.Dotted;
+        signal.IsVisible = ChartSendBunchSize;
+        signal.LegendText = "SendBunch size (bytes)";
+
+        signal = MainPlot.Plot.Add.Signal(frameStats.SocketSendCount);
+        signal.IsVisible = ChartSocketSendCount;
+        signal.LegendText = "Socket send count";
+
+        signal = MainPlot.Plot.Add.Signal(frameStats.SocketSendSize);
+        signal.Axes.YAxis = rightAxis;
+        signal.LinePattern = LinePattern.Dotted;
+        signal.IsVisible = ChartSocketSendSize;
+        signal.LegendText = "Socket send size (bytes)";
+
+        signal = MainPlot.Plot.Add.Signal(frameStats.SocketRecvCount);
+        signal.IsVisible = ChartSocketRecvCount;
+        signal.LegendText = "Socket recv count";
+
+        signal = MainPlot.Plot.Add.Signal(frameStats.SocketRecvSize);
+        signal.Axes.YAxis = rightAxis;
+        signal.LinePattern = LinePattern.Dotted;
+        signal.IsVisible = ChartSocketRecvSize;
+        signal.LegendText = "Socket recv size (bytes)";
+
+        signal = MainPlot.Plot.Add.Signal(frameStats.ControlMessageCount);
+        signal.IsVisible = ChartControlMessageCount;
+        signal.LegendText = "Control message count";
+
+        MainPlot.Refresh();
+    }
+
+    void ResetMainChart()
+    {
+        rightAxis = null;
+        MainPlot.Reset();
+    }
+
+    void SyncAxesChart()
+    {
+        if (rightAxis != null)
+        {
+            var bottom = MainPlot.Plot.Axes.Bottom;
+            var left = MainPlot.Plot.Axes.Left;
+            var right = rightAxis;
+
+            var leftLimits = MainPlot.Plot.Axes.GetLimits(bottom, left);
+            var rightLimits = MainPlot.Plot.Axes.GetLimits(bottom, right);
+
+            //rightAxis.Min = MainPlot.Plot.Axes.Left.Min;
+            MainPlot.Plot.Axes.SetLimitsY(0, leftLimits.Top, left);
+            MainPlot.Plot.Axes.SetLimitsY(0, rightLimits.Top, right);
+
+            MainPlot.Refresh();
+        }
     }
 
     void RebuildLocalFiles()
@@ -145,14 +368,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     {
         var fileName = System.IO.Path.GetFileName(fullPath);
 
-        Debug.WriteLine($"Loading file '{fullPath}'");
-        SetWindowStatus($"Loading {fullPath}...");
+        SetWindowStatus($"Loading capture {fileName}...");
         MainTabs.IsEnabled = false;
+        ResetMainChart();
 
         Task.Run(() =>
         {
-            bool bValidLoad = false;
-            string loadError = string.Empty;
+            string? loadError = null;
 
             var stopWatch = Stopwatch.StartNew();
 
@@ -163,12 +385,24 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 using var loadedCapture = new LoadedCapture(networkCapture);
 
                 ActiveCapture = new LoadedCaptureViewModel(loadedCapture);
+
+                try { UpdateMainChart(); } finally { }
+
+                Debug.WriteLine($"Loaded capture with {ActiveCapture.RecordCount} record(s) and {ActiveCapture.FrameCount} frame(s).");
                 stopWatch.Stop();
-                bValidLoad = true;
             }
             catch (BadCaptureFormatException FormatException)
             {
+                // TODO: Consider some special formatting?
                 loadError = FormatException.Message;
+            }
+            catch (Exception Exception)
+            {
+                loadError = Exception.Message;
+
+            #if DEBUG
+                Debugger.Break();
+            #endif
             }
 
             // After loading is complete:
@@ -178,7 +412,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 () => {
                     MainTabs.IsEnabled = true;
 
-                    if (bValidLoad)
+                    if (loadError is null)
                     {
                         var elapsed = stopWatch.Elapsed.TotalMilliseconds;
                         SetWindowTitle(fullPath);
@@ -242,6 +476,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     protected void OnPropertyChanged([CallerMemberName] string? name = null)
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        // This is a bit of a dirty hack, but should work well enough for now.
+        if (name is not null && name.StartsWith("Chart") && (name.EndsWith("Count") || name.EndsWith("Size")))
+            UpdateMainChart();
     }
 
     #endregion

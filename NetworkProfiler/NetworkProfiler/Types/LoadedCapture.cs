@@ -3,6 +3,7 @@ using NetworkProfiler.Core;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Net;
+using System.Text.RegularExpressions;
 
 namespace NetworkProfiler.Types;
 
@@ -62,6 +63,31 @@ public class ControlMessageEntry
     public float FrameTime { get; set; }
 }
 
+/// <summary>
+/// A "struct-of-arrays" wrapper for per-frame statistics.
+/// </summary>
+public class FrameStatistics(long count)
+{
+    public short[] ActorCount { get; private set; } = new short[count];
+    public short[] PropertyCount { get; private set; } = new short[count];
+    public float[] PropertySize { get; private set; } = new float[count];
+
+    public short[] RemoteCallCount { get; private set; } = new short[count];
+    public float[] RemoteCallSize { get; private set; } = new float[count];
+
+    public short[] SendBunchCount {  get; private set; } = new short[count];
+    public float[] SendBunchSize { get; private set; } = new float[count];
+
+    public short[] SocketSendCount { get; private set; } = new short[count];
+    public float[] SocketSendSize { get; private set; } = new float[count];
+
+    public short[] SocketRecvCount { get; private set; } = new short[count];
+    public float[] SocketRecvSize { get; private set; } = new float[count];
+
+    public short[] ControlMessageCount { get; private set; } = new short[count];
+
+}
+
 #endregion
 
 
@@ -72,8 +98,13 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
 {
     readonly NetworkCapture capture;
 
+    public long FrameCount => capture.FrameCount;
+    public long RecordCount => capture.RecordCount;
+
     public readonly List<string> RemoteAddresses = [];
     readonly HashSet<IPEndPoint> remoteAddressHashset = [];
+
+    public FrameStatistics? FrameStats { get; private set; } = null;
 
     public readonly List<ActorReplicationCategory> ActorReplicationCategories = [];
     readonly Dictionary<string, int> actorReplicationLookup = [];
@@ -87,13 +118,18 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
 
     public LoadedCapture(NetworkCapture source)
     {
+        FrameStats = new(source.FrameCount);
+
         capture = source;
         capture.AcceptVisitor(this);
-        FinalizeCategories();
+
+        FinalizeCollection();
     }
 
-    private void FinalizeCategories()
+    private void FinalizeCollection()
     {
+        // Sort properties and actors by total size (descending),
+        // calculating the total actors' send size from their properties.
         foreach (var actorReplCategory in ActorReplicationCategories)
         {
             actorReplCategory.Properties.Sort((a, b) => b.AccumBits.CompareTo(a.AccumBits));
@@ -101,14 +137,37 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
         }
         ActorReplicationCategories.Sort((a, b) => b.AccumBits.CompareTo(a.AccumBits));
 
+        // Sort remote proc calls by total size.
         RemoteCallCategories.Sort((a, b) => b.AccumBits.CompareTo(a.AccumBits));
 
+        // Sort remote addresses.
         var sortedAddresses = remoteAddressHashset.ToList().Select(ip => ip.ToString()).Order().ToList();
         RemoteAddresses.AddRange(sortedAddresses);
+
+        // Transform statistics' size fields from bytes to bits.
+        if (FrameStats is not null)
+        {
+            for (int i = 0; i < FrameStats.PropertySize.Length; i++)
+                FrameStats.PropertySize[i] /= 8;
+
+            for (int i = 0; i < FrameStats.RemoteCallSize.Length; i++)
+                FrameStats.RemoteCallSize[i] /= 8;
+
+            for (int i = 0; i < FrameStats.SendBunchSize.Length; i++)
+                FrameStats.SendBunchSize[i] /= 8;
+
+            for (int i = 0; i < FrameStats.SocketSendSize.Length; i++)
+                FrameStats.SocketSendSize[i] /= 8;
+
+            for (int i = 0; i < FrameStats.SocketRecvSize.Length; i++)
+                FrameStats.SocketRecvSize[i] /= 8;
+        }
     }
 
 
     #region ICaptureVisitor implementation.
+
+    public int VisitedCount { get; set; } = 0;
 
     public void OnTieredStringLookup(ref TieredStringLookupRecord record, int frame, float time) { }
     public void OnFrameStart(ref FrameStartRecord record, int frame, float time, long recordPosition) { }
@@ -131,6 +190,12 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
         remoteCallCategory.AccumBits += record.Bits;
 
         remoteAddressHashset.Add(record.Remote);
+
+        if (FrameStats != null)
+        {
+            FrameStats.RemoteCallCount[frame] += 1;
+            FrameStats.RemoteCallSize[frame] += record.Bits;
+        }
     }
     public void OnActorReplication(ref ActorReplicationRecord record, int frame, float time)
     {
@@ -160,6 +225,11 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
         lastActorReplicationIndex = actorReplIndex;
 
         remoteAddressHashset.Add(record.Remote);
+
+        if (FrameStats != null)
+        {
+            FrameStats.ActorCount[frame] += 1;
+        }
     }
     public void OnPropertyReplication(ref PropertyReplicationRecord record, int frame, float time)
     {
@@ -188,6 +258,12 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
         propertyCategory.Count += 1;
 
         remoteAddressHashset.Add(record.Remote);
+
+        if (FrameStats != null)
+        {
+            FrameStats.PropertyCount[frame] += 1;
+            FrameStats.PropertySize[frame] += record.Bits;
+        }
     }
     public void OnControlMessage(ref ControlMessageRecord record, int frame, float time)
     {
@@ -205,6 +281,11 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
         });
 
         remoteAddressHashset.Add(record.Remote);
+
+        if (FrameStats != null)
+        {
+            FrameStats.ControlMessageCount[frame] += 1;
+        }
     }
     public void OnSessionEvent(ref SessionEventRecord record, int frame, float time)
     {
@@ -213,10 +294,36 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
     public void OnSocketCall(ref SocketCallRecord record, int frame, float time)
     {
         remoteAddressHashset.Add(record.Remote);
+
+        if (FrameStats != null)
+        {
+            if (record.Direction == SocketDirection.Sending)
+            {
+                FrameStats.SocketSendCount[frame] += 1;
+                FrameStats.SocketSendSize[frame] += record.Bits;
+            }
+            else if (record.Direction == SocketDirection.Receiving)
+            {
+                FrameStats.SocketRecvCount[frame] += 1;
+                FrameStats.SocketRecvSize[frame] += record.Bits;
+            }
+        }
     }
     public void OnSendBunch(ref SendBunchRecord record, int frame, float time)
     {
         remoteAddressHashset.Add(record.Remote);
+
+        if (frame >= 390 && frame <= 392)
+        {
+            Debug.WriteLine($"SendBunch at frame {frame} has {record.Bits} bit(s)");
+            //Debugger.Break();
+        }
+
+        if (FrameStats != null)
+        {
+            FrameStats.SendBunchCount[frame] += 1;
+            FrameStats.SendBunchSize[frame] += record.Bits;
+        }
     }
 
     #endregion
@@ -252,6 +359,11 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
 public class LoadedCaptureViewModel : ObservableObject, IDisposable
 {
     private readonly LoadedCapture capture;
+
+    public long FrameCount => capture.FrameCount;
+    public long RecordCount => capture.RecordCount;
+
+    public FrameStatistics FrameStats => capture.FrameStats!;
 
     public IEnumerable<string> RemoteAddresses => capture.RemoteAddresses;
     public ObservableCollection<ActorReplicationCategory> ReplicatedActors { get; private set; }
