@@ -97,7 +97,7 @@ public class NetworkCapture : IDisposable, ICaptureReader
 
     public void AcceptVisitorSingleFrame(ICaptureVisitor visitor, int frameIndex)
     {
-        if (frameIndex >= frameTable.Count)
+        if (frameIndex < 0 || frameIndex >= frameTable.Count)
             throw new ArgumentException("index out of bounds", nameof(frameIndex));
 
         var (offset, time) = frameTable[frameIndex];

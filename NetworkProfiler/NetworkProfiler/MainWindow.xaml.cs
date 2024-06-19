@@ -55,6 +55,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         set { _activeCapture = value;  OnPropertyChanged(); }
     }
 
+    private bool _frameFreezeEnabled = false;
+    public bool FrameFreezeEnabled
+    {
+        get => _frameFreezeEnabled;
+        set { _frameFreezeEnabled = value; OnPropertyChanged(); }
+    }
+
     #endregion
 
     #region Observable chart checkbox properties.
@@ -154,6 +161,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     public ICommand CloseCommand { get; }
     public ICommand SyncAxesCommand { get; }
     public ICommand ResetChartCommand { get; }
+    public ICommand ToggleFreezeFrameCommand { get; }
+
+    public RelayCommand FirstFrameCommand { get; }
+    public RelayCommand PreviousFrameCommand { get; }
+    public RelayCommand NextFrameCommand { get; }
 
     public MainWindow()
     {
@@ -162,12 +174,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         originalWindowTitle = Title;
 
-        // Debug only.
+        // Default plot set.
         ChartPropertySize = true;
         ChartRemoteCallSize = true;
         ChartSendBunchSize = true;
 
         RebuildLocalFiles();
+
         #region Command initialization.
 
         OpenLocalCommand = new RelayCommand<LocalFileViewModel>((localFile) =>
@@ -202,7 +215,35 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         {
             ResetMainChart();
             UpdateMainChart();
+            UpdateFrameSelection(ActiveCapture?.CurrentFrame?.Index ?? 0);
         });
+
+        ToggleFreezeFrameCommand = new RelayCommand(() =>
+        {
+            FrameFreezeEnabled = !FrameFreezeEnabled;
+        });
+
+        FirstFrameCommand = new RelayCommand(
+            () =>
+            {
+                ActiveCapture?.FirstFrame();
+                UpdateFrameSelection(ActiveCapture!.CurrentFrame!.Index);
+            },
+            () => ActiveCapture?.IsFirstFrameAvailable() ?? false);
+        PreviousFrameCommand = new RelayCommand(
+            () =>
+            {
+                ActiveCapture?.PreviousFrame();
+                UpdateFrameSelection(ActiveCapture!.CurrentFrame!.Index);
+            },
+            () => ActiveCapture?.IsPreviousFrameAvailable() ?? false);
+        NextFrameCommand = new RelayCommand(
+            () =>
+            {
+                ActiveCapture?.NextFrame();
+                UpdateFrameSelection(ActiveCapture!.CurrentFrame!.Index);
+            },
+            () => ActiveCapture?.IsNextFrameAvailable() ?? false);
 
         #endregion
     }
@@ -212,7 +253,64 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         CloseFile();
     }
 
+
+    void UpdateFrameSelection(int index)
+    {
+        if (frameLine is not null)
+            MainPlot.Plot.Remove(frameLine);
+
+        frameLine = MainPlot.Plot.Add.VerticalLine(index, 1, ScottPlot.Color.Gray(125));
+        ActiveCapture?.SelectFrame(index);
+        MainPlot.Refresh();
+
+        FirstFrameCommand?.NotifyCanExecuteChanged();
+        PreviousFrameCommand?.NotifyCanExecuteChanged();
+        NextFrameCommand?.NotifyCanExecuteChanged();
+    }
+
+
+    #region Main chart logic.
+
+    const double CHART_HORIZONTAL_LIMIT = 1000;
+    const double CHART_LEFT_LIMIT = 400;
+    const double CHART_RIGHT_LIMIT = 1200;
+    const double CHART_DIVISOR = 50.0;
+
     IYAxis? rightAxis = null;
+    VerticalLine? frameLine = null;
+
+    void MainPlot_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (FrameFreezeEnabled)
+            return;
+
+        var bottomAxis = MainPlot.Plot.Axes.Bottom;
+        var leftAxis = MainPlot.Plot.Axes.Left;
+
+        var mousePosition = e.GetPosition(MainPlot);
+        var mousePixel = new Pixel(mousePosition.X + 1, mousePosition.Y);
+
+        var leftCoord = MainPlot.Plot.GetCoordinates(mousePixel, bottomAxis, leftAxis);
+        var rightCoord = MainPlot.Plot.GetCoordinates(mousePixel, bottomAxis, rightAxis);
+
+        Debug.Assert(leftCoord.X == rightCoord.X);
+        Debug.WriteLine($"Left={leftCoord} Right={rightCoord}");
+
+        int nearestFrameIndex = -1;
+        foreach (var plottable in MainPlot.Plot.GetPlottables())
+        {
+            if (plottable is Signal signal)
+            {
+                nearestFrameIndex = signal.Data.GetIndex(leftCoord.X, clamp: true);
+                break;
+            }
+        }
+
+        if (nearestFrameIndex < 0)
+            return;
+
+        UpdateFrameSelection(nearestFrameIndex);
+    }
 
     void UpdateMainChart()
     {
@@ -222,23 +320,34 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             return;
         }
 
+        // This is effectively plot initialization.
         if (rightAxis is null)
         {
+            MainPlot.Plot.Axes.FrameWidth(0);
+
+            MainPlot.Plot.Axes.Left.FrameLineStyle.Width = 1;
+            MainPlot.Plot.Axes.Bottom.FrameLineStyle.Width = 1;
+
             rightAxis = MainPlot.Plot.Axes.AddRightAxis();
             rightAxis.Min = MainPlot.Plot.Axes.Left.Min;
             rightAxis.FrameLineStyle.Width = 0;
 
-            MainPlot.Plot.Axes.SetLimitsX(-ActiveCapture.FrameCount/100, ActiveCapture.FrameCount * 1.02);
-            MainPlot.Plot.Axes.SetLimitsY(-10, 500, MainPlot.Plot.Axes.Left);
-            MainPlot.Plot.Axes.SetLimitsY(-200, 10000, rightAxis);
+            var bottomLimitX = ActiveCapture.FrameCount <= CHART_HORIZONTAL_LIMIT ? ActiveCapture.FrameCount : CHART_HORIZONTAL_LIMIT;
+            MainPlot.Plot.Axes.SetLimitsX(-ActiveCapture.FrameCount / (2*CHART_DIVISOR), bottomLimitX * (1 + 1/CHART_DIVISOR));
+            MainPlot.Plot.Axes.SetLimitsY(-(CHART_LEFT_LIMIT / CHART_DIVISOR), CHART_LEFT_LIMIT, MainPlot.Plot.Axes.Left);
+            MainPlot.Plot.Axes.SetLimitsY(-(CHART_RIGHT_LIMIT / CHART_DIVISOR), CHART_RIGHT_LIMIT, rightAxis);
         }
+
+        MainPlot.MouseDown -= MainPlot_MouseDown;
+        MainPlot.MouseDown += MainPlot_MouseDown;
 
         Debug.WriteLine($"Updating chart...");
         var frameStats = ActiveCapture.FrameStats;
 
         MainPlot.Plot.Clear();
-        //MainPlot.Plot.ScaleFactor = 1.0f;
 
+        // Reuse this variable to always add all the plottable items.
+        // Disabling visibility on a persistent set of items ensures that the palette stays consistent.
         Signal? signal = null;
 
         signal = MainPlot.Plot.Add.Signal(frameStats.ActorCount);
@@ -302,12 +411,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         MainPlot.Refresh();
     }
 
-    void ResetMainChart()
-    {
-        rightAxis = null;
-        MainPlot.Reset();
-    }
-
     void SyncAxesChart()
     {
         if (rightAxis != null)
@@ -319,13 +422,22 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             var leftLimits = MainPlot.Plot.Axes.GetLimits(bottom, left);
             var rightLimits = MainPlot.Plot.Axes.GetLimits(bottom, right);
 
-            //rightAxis.Min = MainPlot.Plot.Axes.Left.Min;
-            MainPlot.Plot.Axes.SetLimitsY(0, leftLimits.Top, left);
-            MainPlot.Plot.Axes.SetLimitsY(0, rightLimits.Top, right);
+            MainPlot.Plot.Axes.SetLimitsY(-(leftLimits.Top / CHART_DIVISOR), leftLimits.Top, left);
+            MainPlot.Plot.Axes.SetLimitsY(-(rightLimits.Top / CHART_DIVISOR), rightLimits.Top, right);
 
             MainPlot.Refresh();
+            UpdateFrameSelection(ActiveCapture?.CurrentFrame?.Index ?? 0);
         }
     }
+
+    void ResetMainChart()
+    {
+        rightAxis = null;
+        MainPlot.Reset();
+    }
+
+    #endregion
+
 
     void RebuildLocalFiles()
     {
@@ -370,6 +482,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         SetWindowStatus($"Loading capture {fileName}...");
         MainTabs.IsEnabled = false;
+        FrameFreezeEnabled = true;
         ResetMainChart();
 
         Task.Run(() =>
@@ -380,9 +493,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
             try
             {
-                using var sourceStream = File.OpenRead(fullPath);
-                using var networkCapture = new NetworkCapture(sourceStream);
-                using var loadedCapture = new LoadedCapture(networkCapture);
+                var sourceBytes = File.ReadAllBytes(fullPath);
+                var sourceStream = new MemoryStream(sourceBytes);
+                var networkCapture = new NetworkCapture(sourceStream);
+                var loadedCapture = new LoadedCapture(networkCapture);
 
                 ActiveCapture = new LoadedCaptureViewModel(loadedCapture);
 
@@ -396,14 +510,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                 // TODO: Consider some special formatting?
                 loadError = FormatException.Message;
             }
+#if !DEBUG
             catch (Exception Exception)
             {
                 loadError = Exception.Message;
-
-            #if DEBUG
-                Debugger.Break();
-            #endif
             }
+#endif
 
             // After loading is complete:
 
@@ -418,6 +530,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
                         SetWindowTitle(fullPath);
                         SetWindowStatus($"Loaded capture {fileName} in {(int)elapsed} ms.");
                         MainTabs.SelectedIndex = 1;
+
+                        UpdateFrameSelection(0);
                     }
                     else
                     {
@@ -479,7 +593,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         // This is a bit of a dirty hack, but should work well enough for now.
         if (name is not null && name.StartsWith("Chart") && (name.EndsWith("Count") || name.EndsWith("Size")))
+        {
             UpdateMainChart();
+            UpdateFrameSelection(ActiveCapture?.CurrentFrame?.Index ?? 0);
+        }
     }
 
     #endregion

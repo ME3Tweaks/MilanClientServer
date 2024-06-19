@@ -1,102 +1,26 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using NetworkProfiler.Core;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Net;
-using System.Text.RegularExpressions;
+using System.Text;
+using System.Windows.Input;
 
 namespace NetworkProfiler.Types;
 
 
-#region Small data classes shared between model and viewmodel.
-
-public class ActorReplicationCategory
-{
-    public string ActorName { get; init; } = string.Empty;
-    public List<PropertyReplicationCategory> Properties { get; init; } = [];
-    public int Count { get; set; } = 0;
-
-    internal bool bNonEmpty = false;
-    public int NonEmptyCount { get; set; } = 0;
-
-    public int AccumBits { get; set; } = 0;
-    public float AccumBytes => (float)AccumBits / 8;
-
-    public float AvgBits => NonEmptyCount > 0 ? (float)AccumBits / NonEmptyCount : 0;
-    public float AvgBytes => AvgBits / 8;
-}
-
-public class PropertyReplicationCategory
-{
-    public string PropertyName { get; init; } = string.Empty;
-    public int Count { get; set; } = 0;
-
-    public int AccumBits { get; set; } = 0;
-    public float AccumBytes => (float)AccumBits / 8;
-
-    public float AvgBits => (float)AccumBits / Count;
-    public float AvgBytes => AvgBits / 8;
-}
-
-public class RemoteCallCategory
-{
-    public string ObjectName { get; init; } = string.Empty;
-    public string FunctionName { get; init; } = string.Empty;
-    public int Count { get; set; } = 0;
-
-    public string JointName => $"{ObjectName}.{FunctionName}";
-
-    public int AccumBits { get; set; } = 0;
-    public float AccumBytes => (float)AccumBits / 8;
-
-    public float AvgBits => (float)AccumBits / Count;
-    public float AvgBytes => AvgBits / 8;
-}
-
-public class ControlMessageEntry
-{
-    public ControlMessageType MessageType { get; set; }
-    public ControlMessageHandler Recipient { get; set; }
-    public string Params { get; set; } = string.Empty;
-    public string Remote { get; set; } = string.Empty;
-    public int FrameIndex { get; set; }
-    public float FrameTime { get; set; }
-}
-
-/// <summary>
-/// A "struct-of-arrays" wrapper for per-frame statistics.
-/// </summary>
-public class FrameStatistics(long count)
-{
-    public short[] ActorCount { get; private set; } = new short[count];
-    public short[] PropertyCount { get; private set; } = new short[count];
-    public float[] PropertySize { get; private set; } = new float[count];
-
-    public short[] RemoteCallCount { get; private set; } = new short[count];
-    public float[] RemoteCallSize { get; private set; } = new float[count];
-
-    public short[] SendBunchCount {  get; private set; } = new short[count];
-    public float[] SendBunchSize { get; private set; } = new float[count];
-
-    public short[] SocketSendCount { get; private set; } = new short[count];
-    public float[] SocketSendSize { get; private set; } = new float[count];
-
-    public short[] SocketRecvCount { get; private set; } = new short[count];
-    public float[] SocketRecvSize { get; private set; } = new float[count];
-
-    public short[] ControlMessageCount { get; private set; } = new short[count];
-
-}
-
-#endregion
-
-
 /// <summary>
 /// Parsed network capture ready for providing general overview.
+/// <para/>
+/// Note that this type implements <see cref="ICaptureVisitor"/> and uses that interface to do
+/// a one-time load of everything it wants to extract from the provided <see cref="NetworkCapture"/>.
+/// This extraction is strictly one-time only. All secondary analysis actions must run in dedicated
+/// fields to avoid contaminating this type's state with arbitrary results.
 /// </summary>
 public class LoadedCapture : IDisposable, ICaptureVisitor
 {
-    readonly NetworkCapture capture;
+    internal readonly NetworkCapture capture;
 
     public long FrameCount => capture.FrameCount;
     public long RecordCount => capture.RecordCount;
@@ -365,6 +289,62 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
 
     public FrameStatistics FrameStats => capture.FrameStats!;
 
+    public string TotalSummary
+    {
+        get
+        {
+            StringBuilder summary = new();
+
+            summary.AppendLine($"Frame count: {capture.FrameCount}");
+            summary.AppendLine($"Record count: {capture.RecordCount}");
+            summary.AppendLine();
+
+            summary.AppendLine($"Remote addresses: {capture.RemoteAddresses.Count}");
+            foreach (var address in capture.RemoteAddresses)
+            {
+                summary.AppendLine($"    - {address}");
+            }
+            summary.AppendLine();
+
+            if (capture.FrameStats is not null)
+                AppendFrameStatsSummary(summary, capture.FrameStats);
+
+            return summary.ToString();
+        }
+    }
+
+    public string FrameSummary
+    {
+        get
+        {
+            StringBuilder summary = new();
+
+            if (CurrentFrame is not null)
+            {
+                summary.AppendLine($"Frame index: {CurrentFrame.Index}");
+                summary.AppendLine();
+                AppendFrameStatsSummary(summary, CurrentFrame.Stats);
+            }
+
+            return summary.ToString();
+        }
+    }
+
+    void AppendFrameStatsSummary(StringBuilder builder, FrameStatistics stats)
+    {
+        builder.AppendLine($"Actor count: {stats.ActorCount.Sum()}");
+        builder.AppendLine($"Property count: {stats.PropertyCount.Sum()}");
+        builder.AppendLine($"Property size: {stats.PropertySize.Sum()}");
+        builder.AppendLine($"RPC count: {stats.RemoteCallCount.Sum()}");
+        builder.AppendLine($"RPC size: {stats.RemoteCallSize.Sum()}");
+        builder.AppendLine($"SendBunch count: {stats.SendBunchCount.Sum()}");
+        builder.AppendLine($"SendBunch size: {stats.SendBunchSize.Sum()}");
+        builder.AppendLine($"Control message count: {stats.ControlMessageCount.Sum()}");
+        builder.AppendLine();
+    }
+
+    public LoadedFrame? CurrentFrame { get; private set; } = null;
+
     public IEnumerable<string> RemoteAddresses => capture.RemoteAddresses;
     public ObservableCollection<ActorReplicationCategory> ReplicatedActors { get; private set; }
     public ObservableCollection<RemoteCallCategory> RemoteCalls { get; private set; }
@@ -400,6 +380,48 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
             ControlMessages = new ObservableCollection<ControlMessageEntry>(filtered);
             OnPropertyChanged(nameof(ControlMessages));
         });
+
+        SelectFrame(0);
+    }
+
+    public void FirstFrame()
+    {
+        SelectFrame(0);
+    }
+
+    public bool IsFirstFrameAvailable()
+        => true;
+
+    public void PreviousFrame()
+    {
+        var currentIndex = CurrentFrame?.Index ?? -1;
+        var prevIndex = Math.Clamp(currentIndex - 1, 0, (int)FrameCount - 1);
+        if (prevIndex != currentIndex)
+            SelectFrame(prevIndex);
+    }
+
+    public bool IsPreviousFrameAvailable()
+        => CurrentFrame?.Index > 0;
+
+    public void NextFrame()
+    {
+        var currentIndex = CurrentFrame?.Index ?? -1;
+        var nextIndex = Math.Clamp(currentIndex + 1, 0, (int)FrameCount - 1);
+        if (nextIndex != currentIndex)
+            SelectFrame(nextIndex);
+    }
+
+    public bool IsNextFrameAvailable()
+        => CurrentFrame?.Index < FrameCount - 1;
+
+    public void SelectFrame(int index)
+    {
+        if (index < 0 || index >= FrameCount)
+            return;
+
+        CurrentFrame = new(capture, index);
+        OnPropertyChanged(nameof(CurrentFrame));
+        OnPropertyChanged(nameof(FrameSummary));
     }
 
     #region IDisposable implementation.

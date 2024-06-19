@@ -4,6 +4,7 @@ namespace NetworkProfiler.Dumper;
 internal class LoggingVisitor(NetworkCapture owner) : ICaptureVisitor
 {
     public NetworkCapture Owner { get; init; } = owner;
+    public int VisitedCount { get; set; } = 0;
 
     public void OnControlMessage(ref ControlMessageRecord record, int frame, float time)
     {
