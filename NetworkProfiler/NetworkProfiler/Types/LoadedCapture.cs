@@ -38,6 +38,8 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
     readonly Dictionary<(string, string), int> remoteCallLookup = [];
 
     public readonly List<ControlMessageEntry> ControlMessageEntries = [];
+    public readonly List<LevelStartEntry> LevelStartEntries = [];
+    public readonly List<SessionEventEntry> SessionEventEntries = [];
 
 
     public LoadedCapture(NetworkCapture source)
@@ -95,7 +97,16 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
 
     public void OnTieredStringLookup(ref TieredStringLookupRecord record, int frame, float time) { }
     public void OnFrameStart(ref FrameStartRecord record, int frame, float time, long recordPosition) { }
-    public void OnLevelStart(ref LevelStartRecord record, int frame, float time) { }
+
+    public void OnLevelStart(ref LevelStartRecord record, int frame, float time)
+    {
+        LevelStartEntries.Add(new LevelStartEntry()
+        {
+            FrameIndex = frame,
+            FrameTime = time,
+        });
+    }
+
     public void OnRemoteFunction(ref RemoteFunctionRecord record, int frame, float time)
     {
         var objectName = capture.ResolveString(record.Actor);
@@ -211,10 +222,21 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
             FrameStats.ControlMessageCount[frame] += 1;
         }
     }
+
     public void OnSessionEvent(ref SessionEventRecord record, int frame, float time)
     {
         remoteAddressHashset.Add(record.Remote);
+
+        SessionEventEntries.Add(new SessionEventEntry()
+        {
+            Event = capture.ResolveString(record.Event),
+            Description = capture.ResolveString(record.Description),
+            Remote = record.Remote?.ToString() ?? "n/a",
+            FrameIndex = frame,
+            FrameTime = time,
+        });
     }
+
     public void OnSocketCall(ref SocketCallRecord record, int frame, float time)
     {
         remoteAddressHashset.Add(record.Remote);
@@ -349,6 +371,9 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
     public ObservableCollection<ActorReplicationCategory> ReplicatedActors { get; private set; }
     public ObservableCollection<RemoteCallCategory> RemoteCalls { get; private set; }
     public ObservableCollection<ControlMessageEntry> ControlMessages { get; private set; }
+
+    public IEnumerable<SessionEventEntry> SessionEvents => capture.SessionEventEntries;
+    public IEnumerable<LevelStartEntry> LevelStarts => capture.LevelStartEntries;
 
     public ActorReplicationFilter ActorReplicationFilter { get; private set; }
     public RemoteCallFilter RemoteCallFilter { get; private set; }

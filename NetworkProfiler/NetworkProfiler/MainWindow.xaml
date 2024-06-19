@@ -129,6 +129,8 @@
                             <CheckBox Content="Socket recv count" IsChecked="{Binding ChartSocketRecvCount}"/>
                             <CheckBox Content="Socket recv size (bytes)" IsChecked="{Binding ChartSocketRecvSize}" FontStyle="Italic"/>
                             <CheckBox Content="Control message count" IsChecked="{Binding ChartControlMessageCount}"/>
+                            <CheckBox Content="Session events" IsChecked="{Binding ChartSessionEventMarker}"/>
+                            <CheckBox Content="Level starts" IsChecked="{Binding ChartLevelStartMarker}"/>
                         </StackPanel>
                     </ScrollViewer>
                     <GridSplitter Grid.Row="1" Grid.ColumnSpan="2" Height="3"
@@ -155,6 +157,11 @@
                                          Text="{Binding Path=ActiveCapture.FrameSummary, Mode=OneWay}"/>
                             </TabItem>
                         </TabControl>
+                        <TextBox Grid.Column="1" VerticalAlignment="Stretch"
+                                 IsReadOnly="True" IsReadOnlyCaretVisible="False"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                 FontFamily="Consolas" FontSize="14"
+                                 Text="{Binding Path=ActiveCapture.CurrentFrame.Log, Mode=OneWay}"/>
                     </Grid>
                     <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0,0,0">
                         <StackPanel.Resources>

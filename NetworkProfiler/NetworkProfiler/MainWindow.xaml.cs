@@ -153,6 +153,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         set { _chartControlMessageCount = value; OnPropertyChanged(); }
     }
 
+    public bool _chartSessionEventMarker = false;
+    public bool ChartSessionEventMarker
+    {
+        get => _chartSessionEventMarker;
+        set { _chartSessionEventMarker = value; OnPropertyChanged(); }
+    }
+
+    public bool _chartLevelStartMarker = false;
+    public bool ChartLevelStartMarker
+    {
+        get => _chartLevelStartMarker;
+        set { _chartLevelStartMarker = value; OnPropertyChanged(); }
+    }
+
     #endregion
 
     public ICommand OpenLocalCommand { get; }
@@ -178,6 +192,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ChartPropertySize = true;
         ChartRemoteCallSize = true;
         ChartSendBunchSize = true;
+        ChartSessionEventMarker = true;
+        ChartLevelStartMarker = true;
 
         RebuildLocalFiles();
 
@@ -408,6 +424,49 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         signal.IsVisible = ChartControlMessageCount;
         signal.LegendText = "Control message count";
 
+        // Add markers.
+
+        Markers? markers = null;
+
+        List<int> sessionEventFrames = []; 
+        HashSet<int> sessionEventFrameHash = [];
+        foreach (var sessionEvent in ActiveCapture.SessionEvents)
+        {
+            int frameIndex = sessionEvent.FrameIndex;
+            if (sessionEventFrameHash.Contains(frameIndex))
+                continue;
+
+            // Remember to avoid adding a lot of markers for one frame.
+            sessionEventFrameHash.Add(frameIndex);
+
+            // Only store the frame index, which serves as x coordinate on the chart.
+            sessionEventFrames.Add(frameIndex);
+        }
+
+        markers = MainPlot.Plot.Add.Markers(sessionEventFrames,
+            ys: Enumerable.Repeat(0, sessionEventFrames.Count).ToList(),
+            shape: MarkerShape.FilledSquare, size: 7.5f);
+        markers.IsVisible = ChartSessionEventMarker;
+        markers.LegendText = "Session events";
+
+        List<int> levelStartFrames = [];
+        HashSet<int> levelStartFrameHash = [];
+        foreach (var levelStart in ActiveCapture.LevelStarts)
+        {
+            int frameIndex = levelStart.FrameIndex;
+            if (levelStartFrameHash.Contains(frameIndex))
+                continue;
+
+            levelStartFrameHash.Add(frameIndex);
+            levelStartFrames.Add(frameIndex);
+        }
+
+        markers = MainPlot.Plot.Add.Markers(levelStartFrames,
+            ys: Enumerable.Repeat(0, levelStartFrames.Count).ToList(),
+            shape: MarkerShape.FilledCircle, size: 7.5f);
+        markers.IsVisible = ChartLevelStartMarker;
+        markers.LegendText = "Level starts";
+
         MainPlot.Refresh();
     }
 
@@ -592,7 +651,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
         // This is a bit of a dirty hack, but should work well enough for now.
-        if (name is not null && name.StartsWith("Chart") && (name.EndsWith("Count") || name.EndsWith("Size")))
+        if (name is not null && name.StartsWith("Chart")
+            && (name.EndsWith("Count") || name.EndsWith("Size") || name.EndsWith("Marker")))
         {
             UpdateMainChart();
             UpdateFrameSelection(ActiveCapture?.CurrentFrame?.Index ?? 0);

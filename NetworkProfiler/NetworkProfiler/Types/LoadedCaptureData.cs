@@ -55,6 +55,22 @@ public class ControlMessageEntry
     public float FrameTime { get; set; }
 }
 
+public class LevelStartEntry
+{
+    public int FrameIndex { get; set; }
+    public float FrameTime { get; set; }
+}
+
+public class SessionEventEntry
+{
+    public string Event { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Remote { get; set; } = string.Empty;
+    public int FrameIndex { get; set; }
+    public float FrameTime { get; set; }
+}
+
+
 /// <summary>
 /// A "struct-of-arrays" wrapper for per-frame statistics.
 /// </summary>
