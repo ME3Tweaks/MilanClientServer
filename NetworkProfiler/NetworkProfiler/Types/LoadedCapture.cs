@@ -375,6 +375,12 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
     public IEnumerable<SessionEventEntry> SessionEvents => capture.SessionEventEntries;
     public IEnumerable<LevelStartEntry> LevelStarts => capture.LevelStartEntries;
 
+    public List<int> SessionEventMarkersX { get; } = [];
+    public List<int> SessionEventMarkersY { get; private set; } = [];
+
+    public List<int> LevelStartMarkersX { get; } = [];
+    public List<int> LevelStartMarkersY { get; private set; } = [];
+
     public ActorReplicationFilter ActorReplicationFilter { get; private set; }
     public RemoteCallFilter RemoteCallFilter { get; private set; }
     public ControlMessageFilter ControlMessageFilter { get; private set; }
@@ -382,6 +388,7 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
     public LoadedCaptureViewModel(LoadedCapture model)
     {
         capture = model;
+        BuildMarkerCoordinates();
 
         ReplicatedActors = new ObservableCollection<ActorReplicationCategory>(capture.ActorReplicationCategories);
         RemoteCalls = new ObservableCollection<RemoteCallCategory>(capture.RemoteCallCategories);
@@ -408,6 +415,35 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
 
         SelectFrame(0);
     }
+
+    void BuildMarkerCoordinates()
+    {
+        HashSet<int> sessionEventFrameHash = [];
+        foreach (var sessionEvent in SessionEvents)
+        {
+            int frameIndex = sessionEvent.FrameIndex;
+            if (sessionEventFrameHash.Contains(frameIndex))
+                continue;
+
+            sessionEventFrameHash.Add(frameIndex);
+            SessionEventMarkersX.Add(frameIndex);
+        }
+        SessionEventMarkersY = Enumerable.Repeat(0, SessionEventMarkersX.Count).ToList();
+
+        HashSet<int> levelStartFrameHash = [];
+        foreach (var levelStart in LevelStarts)
+        {
+            int frameIndex = levelStart.FrameIndex;
+            if (levelStartFrameHash.Contains(frameIndex))
+                continue;
+
+            levelStartFrameHash.Add(frameIndex);
+            LevelStartMarkersX.Add(frameIndex);
+        }
+        LevelStartMarkersY = Enumerable.Repeat(0, LevelStartMarkersX.Count).ToList();
+    }
+
+    #region Frame ops.
 
     public void FirstFrame()
     {
@@ -448,6 +484,8 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CurrentFrame));
         OnPropertyChanged(nameof(FrameSummary));
     }
+
+    #endregion
 
     #region IDisposable implementation.
 

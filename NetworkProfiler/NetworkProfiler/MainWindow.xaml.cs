@@ -362,6 +362,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         MainPlot.Plot.Clear();
 
+        // Add signals.
+
         // Reuse this variable to always add all the plottable items.
         // Disabling visibility on a persistent set of items ensures that the palette stays consistent.
         Signal? signal = null;
@@ -428,41 +430,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
         Markers? markers = null;
 
-        List<int> sessionEventFrames = []; 
-        HashSet<int> sessionEventFrameHash = [];
-        foreach (var sessionEvent in ActiveCapture.SessionEvents)
-        {
-            int frameIndex = sessionEvent.FrameIndex;
-            if (sessionEventFrameHash.Contains(frameIndex))
-                continue;
-
-            // Remember to avoid adding a lot of markers for one frame.
-            sessionEventFrameHash.Add(frameIndex);
-
-            // Only store the frame index, which serves as x coordinate on the chart.
-            sessionEventFrames.Add(frameIndex);
-        }
-
-        markers = MainPlot.Plot.Add.Markers(sessionEventFrames,
-            ys: Enumerable.Repeat(0, sessionEventFrames.Count).ToList(),
+        markers = MainPlot.Plot.Add.Markers(ActiveCapture.SessionEventMarkersX, ActiveCapture.SessionEventMarkersY,
             shape: MarkerShape.FilledSquare, size: 7.5f);
         markers.IsVisible = ChartSessionEventMarker;
         markers.LegendText = "Session events";
 
-        List<int> levelStartFrames = [];
-        HashSet<int> levelStartFrameHash = [];
-        foreach (var levelStart in ActiveCapture.LevelStarts)
-        {
-            int frameIndex = levelStart.FrameIndex;
-            if (levelStartFrameHash.Contains(frameIndex))
-                continue;
-
-            levelStartFrameHash.Add(frameIndex);
-            levelStartFrames.Add(frameIndex);
-        }
-
-        markers = MainPlot.Plot.Add.Markers(levelStartFrames,
-            ys: Enumerable.Repeat(0, levelStartFrames.Count).ToList(),
+        markers = MainPlot.Plot.Add.Markers(ActiveCapture.LevelStartMarkersX, ActiveCapture.LevelStartMarkersY,
             shape: MarkerShape.FilledCircle, size: 7.5f);
         markers.IsVisible = ChartLevelStartMarker;
         markers.LegendText = "Level starts";
