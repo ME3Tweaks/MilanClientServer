@@ -9,4 +9,5 @@
 extern void SingleDetachImpl();
 
 void RegisterNonshipCommands();
+void RegisterVectoredExceptions();
 void SpawnLocalClients();

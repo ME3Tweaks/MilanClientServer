@@ -7,6 +7,7 @@
 #include "Milan/Hooks.hpp"
 #include "Milan/Intercept.hpp"
 #include "Milan/Misc.hpp"
+#include "Milan/NetProfStream.hpp"
 #include "Systems/Console.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/Profilers.hpp"
@@ -94,6 +95,32 @@ namespace Milan::Profilers
                 return true;
             });
 
+        Console::RegisterCommand(L"repl", L"capture",
+            [](wchar_t const*)
+            {
+                if (NetworkCapture::Global() != nullptr)
+                {
+                    MILAN_WARNW(L"netprof: global instance already started");
+                    return true;
+                }
+ 
+                NetworkCapture::GlobalInitialize();
+                return true;
+            });
+
+        Console::RegisterCommand(L"repl", L"endcapture",
+            [](wchar_t const*)
+            {
+                if (NetworkCapture::Global() == nullptr)
+                {
+                    MILAN_WARNW(L"netprof: global instance not started");
+                    return true;
+                }
+
+                NetworkCapture::GlobalClose();
+                return true;
+            });
+
         MILAN_INFOW(L"profilers system initialized");
     }
 
@@ -101,6 +128,19 @@ namespace Milan::Profilers
     {
         MILAN_INFOW(L"profilers system terminating");
         g_canvas.~MilanCanvasDrawer();
+
+        if (NetworkCapture::Global() != nullptr)
+            NetworkCapture::GlobalClose();
+    }
+
+    void On_VectoredException(void* const Address, DWORD const Code, _EXCEPTION_POINTERS* const Exceptions)
+    {
+        MILAN_WARNW(L"profilers: handling vectored exception, address = %p, code = 0x%08X", Address, Code);
+
+        if (NetworkCapture::Global() != nullptr)
+            NetworkCapture::Global()->FlushRecords();
+
+        MILAN_UNUSED_3(Address, Code, Exceptions);
     }
 
     void On_UObject_ProcessEvent(UObject* const Context, UFunction* const Function, void* const Parms, void* const Result)

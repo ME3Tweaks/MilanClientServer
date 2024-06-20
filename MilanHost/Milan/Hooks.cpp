@@ -3,6 +3,7 @@
 #include "Milan/Hooks.hpp"
 #include "Milan/Intercept.hpp"
 #include "Milan/Logger.hpp"
+#include "Milan/NetProfStream.hpp"
 #include "Systems/Console.hpp"
 #include "Systems/Globals.hpp"
 #include "Systems/Imgui.hpp"
@@ -108,16 +109,20 @@ UBOOL UGameEngine_Exec_hook(UGameEngine* const Context, WCHAR const* const Comma
 t_UGameEngine_LoadMap* UGameEngine_LoadMap_orig = nullptr;
 UBOOL UGameEngine_LoadMap_hook(UGameEngine* const Context, FURL* const Url, UPendingLevel* const Level, FString* const Error)
 {
-    MILAN_TRACEW(L"NETPROF (UGameEngine::LoadMap): Url = %s...", *Url->Map);
+    MILAN_TRACEW(L"UGameEngine::LoadMap: Url = %s...", *Url->Map);
+    NETPROF(CaptureLevelStart(Url));
+
     auto const Result = (*UGameEngine_LoadMap_orig)(Context, Url, Level, Error);
     if (!Result) MILAN_ERRORW(L"UGameEngine::LoadMap failed: %s", *(*Error));
+
     return Result;
 }
 
 t_UGameEngine_Tick* UGameEngine_Tick_orig = nullptr;
 void UGameEngine_Tick_hook(UGameEngine* const Context, float const Delta)
 {
-    //MILAN_TRACEW(L"NETPROF (UGameEngine::Tick): Delta=%f", Delta);
+    //MILAN_TRACEW(L"(UGameEngine::Tick): Delta=%f", Delta);
+    NETPROF(CaptureFrameStart(Delta));
     (*UGameEngine_Tick_orig)(Context, Delta);
 }
 
@@ -429,6 +434,7 @@ void UNetConnection_Close_hook(UNetConnection* const Context)
         }
 
         MILAN_TRACEW(L"UNetConnection::Close, remote = %s", *RemoteAddress);
+        NETPROF(CaptureSessionEvent(Context, L"CLOSE", L""));
     }
 
     (*UNetConnection_Close_orig)(Context);
@@ -630,6 +636,7 @@ UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, 
     {
         //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Destination->sin_addr), ntohs(Destination->sin_port));
         //MILAN_TRACEW(L"FSocketWin::SendTo: type=%d, desc=%s, count=%d, sent=%d, dest=%s", Context->Type, *Context->Description, Count, *Sent, *Remote);
+        NETPROF(CaptureSocketCall(Destination, true, *Sent * 8));
     }
     return Ret;
 }
@@ -654,6 +661,7 @@ UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read
     {
         //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Source->sin_addr), ntohs(Source->sin_port));
         //MILAN_TRACEW(L"FSocketWin::RecvFrom: type=%d, desc=%s, read=%d, source=%s", Context->Type, *Context->Description, *Read, *Remote);
+        NETPROF(CaptureSocketCall(Source, false, *Read * 8));
     }
     return Ret;
 }

@@ -44,6 +44,25 @@ enum ESocketType
     SOCKTYPE_Streaming              = 2,
 };
 
+enum ENetMsg : unsigned char
+{
+    NM_Hello                        = 0u,
+    NM_Welcome                      = 1u,
+    NM_Upgrade                      = 2u,
+    NM_Challenge                    = 3u,
+    NM_Netspeed                     = 4u,
+    NM_Login                        = 5u,
+    NM_Failure                      = 6u,
+    NM_Uses                         = 7u,
+    NM_Have                         = 8u,
+    NM_Join                         = 9u,
+    NM_DlMngr                       = 11u,
+    NM_Abort                        = 13u,
+    NM_Unload                       = 14u,
+    NM_Unk19_DLM                    = 19u,
+    NM_Unk21_VIS                    = 21u,
+};
+
 
 class FSocket
 {

@@ -28,6 +28,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Milan/NetProfDecls.hpp
   ${PROJ_FOLDER}/Milan/NetProfExtractors.asm
   ${PROJ_FOLDER}/Milan/NetProfHandlers.cpp
+  ${PROJ_FOLDER}/Milan/NetProfStream.cpp
+  ${PROJ_FOLDER}/Milan/NetProfStream.hpp
   ${PROJ_FOLDER}/Milan/Streams.cpp
   ${PROJ_FOLDER}/Milan/Streams.hpp
   ${PROJ_FOLDER}/Proxies/Core.hpp

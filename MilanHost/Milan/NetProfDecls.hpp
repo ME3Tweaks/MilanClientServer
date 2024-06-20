@@ -22,15 +22,15 @@
 
 
 MILAN_DECLARE_EXTRACTOR(MlnUChannelSendBunch1, FOutBunch* Bunch);
-MILAN_DECLARE_EXTRACTOR(MlnUChannelSendBunch2, FOutBunch* Bunch);
-MILAN_DECLARE_EXTRACTOR(MlnUActorChannelReplicateActor1, AActor* Actor);
+MILAN_DECLARE_EXTRACTOR(MlnUChannelSendBunch2, UChannel* Channel, FOutBunch* Bunch);
+MILAN_DECLARE_EXTRACTOR(MlnUActorChannelReplicateActor1, UActorChannel* Channel, AActor* Actor);
 MILAN_DECLARE_EXTRACTOR(MlnUActorChannelReplicateActor2, FOutBunch* Bunch);
-MILAN_DECLARE_EXTRACTOR(MlnUActorChannelReplicateActor3, UProperty* Property, FOutBunch* Bunch);
+MILAN_DECLARE_EXTRACTOR(MlnUActorChannelReplicateActor3, UActorChannel* Channel, UProperty* Property, FOutBunch* Bunch);
 MILAN_DECLARE_EXTRACTOR(MlnInternalReplicateFunction1, UActorChannel* Channel, FOutBunch* Bunch, UFunction* Function);
 MILAN_DECLARE_EXTRACTOR(MlnSeamlessTravelTick1, FURL* PendingUrl);
 MILAN_DECLARE_EXTRACTOR(MlnUTcpNetDriverTickDispatch, UTcpipConnection* Connection);
 
-MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHello, UNetConnection* Connection, BYTE Platform, INT RemoteMinVersion, INT RemoteVersion);
+MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageHello, UNetConnection* Connection, BYTE Platform, INT StaticVersion, INT DynamicVersion);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageNetspeed, UNetConnection* Connection, INT Speed, INT ClampedSpeed);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageLogin, UNetConnection* Connection, FString* LoginError);
 MILAN_DECLARE_EXTRACTOR(MlnUWorldNotifyControlMessageFailure, UNetConnection* Connection, FString* Error);

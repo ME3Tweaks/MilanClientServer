@@ -20,5 +20,6 @@ namespace Milan::Profilers
     // ! Public interface.
     // ========================================
 
+    void On_VectoredException(void* Address, DWORD Code, _EXCEPTION_POINTERS* Exceptions);
     void On_UObject_ProcessEvent(UObject* Context, UFunction* Function, void* Parms, void* Result);
 }

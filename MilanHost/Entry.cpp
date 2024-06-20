@@ -47,6 +47,7 @@ SPI_IMPLEMENT_ATTACH
     // ----------------------------------------
 
     RegisterNonshipCommands();
+    RegisterVectoredExceptions();
     SpawnLocalClients();
 
     MILAN_INFOW(L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
@@ -216,6 +217,35 @@ void RegisterNonshipCommands()
         });
 
 #endif
+}
+
+void RegisterVectoredExceptions()
+{
+    // Ignore these exception codes.
+    static const std::array<DWORD, 2> CommonCodes{ 0xE06D7363, 0x406D1388 };
+
+    [[maybe_unused]]
+    auto const Handle = AddVectoredExceptionHandler(1,
+        [](PEXCEPTION_POINTERS const Exceptions) -> LONG
+        {
+            auto const Address = Exceptions->ExceptionRecord->ExceptionAddress;
+            auto const Code = Exceptions->ExceptionRecord->ExceptionCode;
+
+            bool bDispatchHandler = true;
+
+            if (std::find(CommonCodes.begin(), CommonCodes.end(), Code) != CommonCodes.end())
+                bDispatchHandler = false;
+            else if (Code >= DBG_REPLY_LATER && Code <= DBG_PRINTEXCEPTION_WIDE_C)
+                bDispatchHandler = false;
+
+            if (bDispatchHandler)
+            {
+                // Actual handlers must be filtered, so call them within this branch.
+                ::Milan::Profilers::On_VectoredException(Address, Code, Exceptions);
+            }
+
+            return EXCEPTION_CONTINUE_SEARCH;
+        });
 }
 
 void SpawnLocalClients()

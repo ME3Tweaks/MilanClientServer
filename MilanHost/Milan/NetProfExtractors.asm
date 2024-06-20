@@ -48,9 +48,12 @@ endm
 .data
 
 UChannelSendBunch1_bunch                                DQ ?
+UChannelSendBunch2_chan                                 DQ ?
 UChannelSendBunch2_bunch                                DQ ?
+UActorChannelReplicateActor1_chan                       DQ ?
 UActorChannelReplicateActor1_actor                      DQ ?
 UActorChannelReplicateActor2_bunch                      DQ ?
+UActorChannelReplicateActor3_chan                       DQ ?
 UActorChannelReplicateActor3_bunch                      DQ ?
 UActorChannelReplicateActor3_prop                       DQ ?
 InternalReplicateFunction1_chan                         DQ ?
@@ -128,13 +131,15 @@ MlnUChannelSendBunch1 endp
 
 externdef MlnUChannelSendBunch2_Handler:proc
 MlnUChannelSendBunch2 proc
+    mov UChannelSendBunch2_chan, rdi   ; pointer to the context channel
     mov UChannelSendBunch2_bunch, rbx  ; pointer to the local serializing bunch
 
     storeall
     mov rbp, rsp
     initstack 20h
 
-    mov rcx, UChannelSendBunch2_bunch
+    mov rcx, UChannelSendBunch2_chan
+    mov rdx, UChannelSendBunch2_bunch
     call MlnUChannelSendBunch2_Handler
 
     mov rsp, rbp
@@ -144,13 +149,15 @@ MlnUChannelSendBunch2 endp
 
 externdef MlnUActorChannelReplicateActor1_Handler:proc
 MlnUActorChannelReplicateActor1 proc
+    mov UActorChannelReplicateActor1_chan, r15   ; context channel
     mov UActorChannelReplicateActor1_actor, rdx  ; context channel's AActor pointer
 
     storeall
     mov rbp, rsp
     initstack 20h
 
-    mov rcx, UActorChannelReplicateActor1_actor
+    mov rcx, UActorChannelReplicateActor1_chan
+    mov rdx, UActorChannelReplicateActor1_actor
     call MlnUActorChannelReplicateActor1_Handler
 
     mov rsp, rbp
@@ -177,16 +184,18 @@ MlnUActorChannelReplicateActor2 endp
 
 externdef MlnUActorChannelReplicateActor3_Handler:proc
 MlnUActorChannelReplicateActor3 proc
-    mov UActorChannelReplicateActor3_prop, rbx  ; currently iterated UProperty pointer
-    lea rax, [rbp + 10h]  ; currently serializing local FOutBunch
-    mov UActorChannelReplicateActor3_bunch, rax
+    lea rax, [rbp + 10h]
+    mov UActorChannelReplicateActor3_bunch, rax     ; currently serializing local FOutBunch
+    mov UActorChannelReplicateActor3_prop, rbx      ; currently iterated UProperty pointer
+    mov UActorChannelReplicateActor3_chan, r15      ; context channel
 
     storeall
     mov rbp, rsp
     initstack 20h
 
-    mov rdx, UActorChannelReplicateActor3_bunch
-    mov rcx, UActorChannelReplicateActor3_prop
+    mov rcx, UActorChannelReplicateActor3_chan
+    mov rdx, UActorChannelReplicateActor3_prop
+    mov r8, UActorChannelReplicateActor3_bunch
     call MlnUActorChannelReplicateActor3_Handler
 
     mov rsp, rbp
