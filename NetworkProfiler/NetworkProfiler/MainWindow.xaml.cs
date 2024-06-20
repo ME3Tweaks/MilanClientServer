@@ -306,6 +306,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         var mousePosition = e.GetPosition(MainPlot);
         var mousePixel = new Pixel(mousePosition.X + 1, mousePosition.Y);
 
+        mousePixel.X *= MainPlot.DisplayScale;
+        mousePixel.Y *= MainPlot.DisplayScale;
+
         var leftCoord = MainPlot.Plot.GetCoordinates(mousePixel, bottomAxis, leftAxis);
         var rightCoord = MainPlot.Plot.GetCoordinates(mousePixel, bottomAxis, rightAxis);
 
@@ -328,6 +331,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         UpdateFrameSelection(nearestFrameIndex);
     }
 
+    float _currentDisplayScale = 1.0f;
+
     void UpdateMainChart()
     {
         if (ActiveCapture is null)
@@ -339,7 +344,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         // This is effectively plot initialization.
         if (rightAxis is null)
         {
-            MainPlot.Plot.Axes.FrameWidth(0);
+            _currentDisplayScale = MainPlot.DetectDisplayScale();
 
             MainPlot.Plot.Axes.Left.FrameLineStyle.Width = 1;
             MainPlot.Plot.Axes.Bottom.FrameLineStyle.Width = 1;
@@ -439,6 +444,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
             shape: MarkerShape.FilledCircle, size: 7.5f);
         markers.IsVisible = ChartLevelStartMarker;
         markers.LegendText = "Level starts";
+
+        Debug.Assert(MainPlot.DisplayScale == _currentDisplayScale);
+        MainPlot.Plot.ScaleFactor = MainPlot.DisplayScale;
 
         MainPlot.Refresh();
     }
