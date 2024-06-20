@@ -367,6 +367,18 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
 
     public LoadedFrame? CurrentFrame { get; private set; } = null;
 
+    public string LogQuery
+    {
+        get => _logQuery;
+        set
+        {
+            _logQuery = value;
+            OnPropertyChanged();
+            SelectFrame(CurrentFrame!.Index);
+        }
+    }
+    string _logQuery = string.Empty;
+
     public IEnumerable<string> RemoteAddresses => capture.RemoteAddresses;
     public ObservableCollection<ActorReplicationCategory> ReplicatedActors { get; private set; }
     public ObservableCollection<RemoteCallCategory> RemoteCalls { get; private set; }
@@ -480,7 +492,7 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
         if (index < 0 || index >= FrameCount)
             return;
 
-        CurrentFrame = new(capture, index);
+        CurrentFrame = new(capture, index, LogQuery);
         OnPropertyChanged(nameof(CurrentFrame));
         OnPropertyChanged(nameof(FrameSummary));
     }

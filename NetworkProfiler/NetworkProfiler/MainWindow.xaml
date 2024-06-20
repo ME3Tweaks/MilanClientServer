@@ -137,11 +137,20 @@
                                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                   Margin="0,5" Foreground="LightGray" />
                     <Grid Grid.Row="2" Grid.Column="0" Margin="0,0,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" MinWidth="300"/>
                             <ColumnDefinition Width="3*"/>
                         </Grid.ColumnDefinitions>
-                        <TabControl Grid.Column="0" Margin="0,0,10,0" TabStripPlacement="Bottom">
+                        <TabControl Grid.Column="0" Grid.RowSpan="2"  Margin="0,0,10,0" TabStripPlacement="Bottom">
+                            <TabControl.Resources>
+                                <Style TargetType="TabItem">
+                                    <Setter Property="Padding" Value="6, 4"/>
+                                </Style>
+                            </TabControl.Resources>
                             <TabItem Header="Global summary">
                                 <TextBox VerticalAlignment="Stretch"
                                          IsReadOnly="True" IsReadOnlyCaretVisible="False"
@@ -157,11 +166,29 @@
                                          Text="{Binding Path=ActiveCapture.FrameSummary, Mode=OneWay}"/>
                             </TabItem>
                         </TabControl>
-                        <TextBox Grid.Column="1" VerticalAlignment="Stretch"
+                        <TextBox Grid.Row="0" Grid.Column="1" VerticalAlignment="Stretch"
                                  IsReadOnly="True" IsReadOnlyCaretVisible="False"
                                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                                  FontFamily="Consolas" FontSize="14"
                                  Text="{Binding Path=ActiveCapture.CurrentFrame.Log, Mode=OneWay}"/>
+                        <Grid Grid.Row="1" Grid.Column="1" Margin="0,4,0,0">
+                            <TextBox x:Name="LogSearchTextBox" Padding="2"
+                                     Text="{Binding Path=ActiveCapture.LogQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="5,0,0,0" IsHitTestVisible="False"
+                                   VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                   Text="Search frame log by record type or parameter values (excluding low-level calls)..." Opacity="0.6">
+                                <TextBlock.Style>
+                                    <Style TargetType="{x:Type TextBlock}">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=LogSearchTextBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
                     </Grid>
                     <StackPanel Grid.Row="2" Grid.Column="1" Margin="10,0,0,0">
                         <StackPanel.Resources>

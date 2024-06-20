@@ -58,7 +58,7 @@ public class NetworkCapture : IDisposable, ICaptureReader
         if (reference.Index < 0 || reference.Index >= stringTable.Count)
             throw new ArgumentException("string reference out of bounds", nameof(reference));
 
-        return stringTable[reference.Index];
+        return stringTable[reference.Index] ?? string.Empty;
     }
 
     public string ResolveString(NameReference reference)
