@@ -21,7 +21,7 @@ public class LoadedFrame : ICaptureVisitor
 
     public LoadedFrame(LoadedCapture source, int frameIndex, string searchQuery)
     {
-        Debug.WriteLine($"searchQuery = {searchQuery}, isnows = {string.IsNullOrWhiteSpace(searchQuery)}");
+        //Debug.WriteLine($"searchQuery = {searchQuery}, isnows = {string.IsNullOrWhiteSpace(searchQuery)}");
 
         capture = source.capture;
         _query = string.IsNullOrWhiteSpace(searchQuery) ? null : searchQuery;

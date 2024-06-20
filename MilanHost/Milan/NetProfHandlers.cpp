@@ -113,11 +113,9 @@ void MlnInternalReplicateFunction1_Handler(UActorChannel* const Channel, FOutBun
 void MlnSeamlessTravelTick1_Handler(FURL* const PendingUrl)
 {
     FURL* const WorldUrl = &reinterpret_cast<UWorld_Proxy*>(*GWorld)->URL;
-
-    //TraceUrl(L"SeamlessTravelTick / world", WorldUrl);
-    //TraceUrl(L"SeamlessTravelTick / pending", PendingUrl);
-    NETPROF(CaptureLevelStart(WorldUrl));
-
+    TraceUrl(L"SeamlessTravelTick / world", WorldUrl);
+    TraceUrl(L"SeamlessTravelTick / pending", PendingUrl);
+    NETPROF(CaptureLevelStart(PendingUrl));
     MILAN_UNUSED_2(WorldUrl, PendingUrl);
 }
 
