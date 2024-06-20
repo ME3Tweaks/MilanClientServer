@@ -131,7 +131,7 @@ INT64 BufferedFileOutputStream::Write(BYTE const* const Input, INT64 const Lengt
 
 void BufferedFileOutputStream::Flush()
 {
-    MILAN_TRACEW(L"BufferedFileOutputStream - flushing with offset = %llu", m_buffer.Offset);
+    //MILAN_TRACEW(L"BufferedFileOutputStream - flushing with offset = %llu", m_buffer.Offset);
 
     if (m_buffer.Offset > 0)
     {

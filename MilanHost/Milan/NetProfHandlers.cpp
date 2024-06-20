@@ -175,7 +175,7 @@ void MlnUWorldNotifyControlMessageUses_Handler(UNetConnection* const Connection,
     //    *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *FormatGuid(Package->Guid), *LookupPackageName(TcpConn, &Package->Guid), Package->RemoteGeneration);
 
     auto const Resolved = LookupPackageName(TcpConn, &Package->Guid);
-    NETPROF(CaptureControlMessage(Connection, false, NM_Uses, FString::Printf(L"Package=%s, Guid=%s, Gen=%s, Resolved=%s",
+    NETPROF(CaptureControlMessage(Connection, false, NM_Uses, FString::Printf(L"Package=%s, Guid=%s, Gen=%d, Resolved=%s",
             *Package->PackageName.ToString(), *FormatGuid(Package->Guid), Package->RemoteGeneration, *Resolved)));
 
     MILAN_UNUSED_4(TcpConn, Resolved, Connection, Package);
@@ -304,7 +304,7 @@ void MlnUNetPendingLevelNotifyControlMessageUses_Handler(UNetConnection* const C
     //    *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *FormatGuid(Package->Guid), *LookupPackageName(TcpConn, &Package->Guid), Package->RemoteGeneration);
 
     auto const Resolved = LookupPackageName(TcpConn, &Package->Guid);
-    NETPROF(CaptureControlMessage(Connection, true, NM_Uses, FString::Printf(L"Package=%s, Guid=%s, Gen=%s, Resolved=%s",
+    NETPROF(CaptureControlMessage(Connection, true, NM_Uses, FString::Printf(L"Package=%s, Guid=%s, Gen=%d, Resolved=%s",
         *Package->PackageName.ToString(), *FormatGuid(Package->Guid), Package->RemoteGeneration, *Resolved)));
 
     MILAN_UNUSED_4(TcpConn, Resolved, Connection, Package);

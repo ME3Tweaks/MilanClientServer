@@ -210,17 +210,16 @@ public class LoadedCapture : IDisposable, ICaptureVisitor
             MessageType = record.MsgType,
             Recipient = record.Recipient,
             Params = paramString,
-            Remote = record.Remote!.ToString(),
+            Remote = record.Remote?.ToString() ?? "n/a",
             FrameIndex = frame,
             FrameTime = time,
         });
 
-        remoteAddressHashset.Add(record.Remote);
+        if (record.Remote is not null)
+            remoteAddressHashset.Add(record.Remote);
 
         if (FrameStats != null)
-        {
             FrameStats.ControlMessageCount[frame] += 1;
-        }
     }
 
     public void OnSessionEvent(ref SessionEventRecord record, int frame, float time)
