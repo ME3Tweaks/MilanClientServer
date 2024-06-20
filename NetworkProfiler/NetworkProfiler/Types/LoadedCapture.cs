@@ -489,8 +489,10 @@ public class LoadedCaptureViewModel : ObservableObject, IDisposable
 
     public void SelectFrame(int index)
     {
-        if (index < 0 || index >= FrameCount)
-            return;
+        //if (index < 0 || index >= FrameCount)
+        //    return;
+
+        index = Math.Clamp(index, 0, (int)FrameCount - 1);
 
         CurrentFrame = new(capture, index, LogQuery);
         OnPropertyChanged(nameof(CurrentFrame));

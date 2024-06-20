@@ -169,6 +169,13 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
     #endregion
 
+    public static RoutedCommand PreviousFrameKeybind = new();
+    public static RoutedCommand NextFrameKeybind = new();
+    public static RoutedCommand FocusLogSearchKeybind = new();
+    public static RoutedCommand ControlMessageSearchKeybind = new();
+    public static RoutedCommand ReplicatedActorSearchKeybind = new();
+    public static RoutedCommand RemoteCallSearchKeybind = new();
+
     public ICommand OpenLocalCommand { get; }
     public ICommand OpenFreeCommand { get; }
     public ICommand RefreshLocalsCommand { get; }
@@ -196,6 +203,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         ChartLevelStartMarker = true;
 
         RebuildLocalFiles();
+
+        #region Keybind initialization.
+
+        PreviousFrameKeybind.InputGestures.Add(new KeyGesture(Key.Left));
+        NextFrameKeybind.InputGestures.Add(new KeyGesture(Key.Right));
+        FocusLogSearchKeybind.InputGestures.Add(new KeyGesture(Key.F, ModifierKeys.Control));
+        ControlMessageSearchKeybind.InputGestures.Add(new KeyGesture(Key.F, ModifierKeys.Control));
+        ReplicatedActorSearchKeybind.InputGestures.Add(new KeyGesture(Key.F, ModifierKeys.Control));
+        RemoteCallSearchKeybind.InputGestures.Add(new KeyGesture(Key.F, ModifierKeys.Control));
+
+        #endregion
 
         #region Command initialization.
 
@@ -267,6 +285,36 @@ public partial class MainWindow : Window, INotifyPropertyChanged
     private void Window_Closing(object sender, CancelEventArgs e)
     {
         CloseFile();
+    }
+
+    private void PreviousFrameKeybind_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        PreviousFrameCommand.Execute(null);
+    }
+
+    private void NextFrameKeybind_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        NextFrameCommand.Execute(null);
+    }
+
+    private void FocusLogSearchKeybind_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        LogSearchTextBox.Focus();
+    }
+
+    private void ControlMessageSearchKeybind_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        ControlMessageSearchTextBox.Focus();
+    }
+
+    private void ReplicatedActorSearchKeybind_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        ReplicatedActorSearchTextBox.Focus();
+    }
+
+    private void RemoteCallSearchKeybind_Executed(object sender, ExecutedRoutedEventArgs e)
+    {
+        RemoteCallSearchTextBox.Focus();
     }
 
 

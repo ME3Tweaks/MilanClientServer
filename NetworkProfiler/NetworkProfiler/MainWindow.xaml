@@ -95,6 +95,11 @@
                 </Grid>
             </TabItem>
             <TabItem Header="Summary / chart" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}">
+                <TabItem.CommandBindings>
+                    <CommandBinding Command="{x:Static local:MainWindow.FocusLogSearchKeybind}" Executed="FocusLogSearchKeybind_Executed"/>
+                    <CommandBinding Command="{x:Static local:MainWindow.PreviousFrameKeybind}" Executed="PreviousFrameKeybind_Executed"/>
+                    <CommandBinding Command="{x:Static local:MainWindow.NextFrameKeybind}" Executed="NextFrameKeybind_Executed"/>
+                </TabItem.CommandBindings>
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="3*"/>
@@ -212,6 +217,9 @@
                 </Grid>
             </TabItem>
             <TabItem Header="Control messages" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}">
+                <TabItem.CommandBindings>
+                    <CommandBinding Command="{x:Static local:MainWindow.ControlMessageSearchKeybind}" Executed="ControlMessageSearchKeybind_Executed"/>
+                </TabItem.CommandBindings>
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>
@@ -301,7 +309,7 @@
                             </ComboBox.ItemsSource>
                         </ComboBox>
 
-                        <TextBox x:Name="ControlMessageTextBox"
+                        <TextBox x:Name="ControlMessageSearchTextBox"
                                  Grid.Row="2" Grid.ColumnSpan="2" Margin="0,4,0,0" Padding="2"
                                  HorizontalAlignment="Stretch"
                                  Text="{Binding Path=ActiveCapture.ControlMessageFilter.ParamQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
@@ -312,7 +320,7 @@
                                 <Style TargetType="{x:Type TextBlock}">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Text, ElementName=ControlMessageTextBox}" Value="">
+                                        <DataTrigger Binding="{Binding Text, ElementName=ControlMessageSearchTextBox}" Value="">
                                             <Setter Property="Visibility" Value="Visible"/>
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -330,6 +338,9 @@
                 </Grid>
             </TabItem>
             <TabItem Header="Actors / properties" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}">
+                <TabItem.CommandBindings>
+                    <CommandBinding Command="{x:Static local:MainWindow.ReplicatedActorSearchKeybind}" Executed="ReplicatedActorSearchKeybind_Executed"/>
+                </TabItem.CommandBindings>
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>
@@ -371,7 +382,7 @@
                     </ListView>
                     <StackPanel Grid.Row="1" Grid.ColumnSpan="3" Orientation="Horizontal">
                         <Grid>
-                            <TextBox x:Name="ActorReplTextBox"
+                            <TextBox x:Name="ReplicatedActorSearchTextBox"
                                      MinWidth="395" Margin="0,10,0,0" Padding="2" HorizontalAlignment="Left" 
                                      Text="{Binding Path=ActiveCapture.ActorReplicationFilter.ClassQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                             <TextBlock MinWidth="395" Margin="5,10,0,0" IsHitTestVisible="False"
@@ -381,7 +392,7 @@
                                     <Style TargetType="{x:Type TextBlock}">
                                         <Setter Property="Visibility" Value="Collapsed"/>
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Text, ElementName=ActorReplTextBox}" Value="">
+                                            <DataTrigger Binding="{Binding Text, ElementName=ReplicatedActorSearchTextBox}" Value="">
                                                 <Setter Property="Visibility" Value="Visible"/>
                                             </DataTrigger>
                                         </Style.Triggers>
@@ -397,6 +408,9 @@
                 </Grid>
             </TabItem>
             <TabItem Header="Remote calls" IsEnabled="{Binding Path=ActiveCapture, Converter={StaticResource IsNotNullConverter}}">
+                <TabItem.CommandBindings>
+                    <CommandBinding Command="{x:Static local:MainWindow.RemoteCallSearchKeybind}" Executed="RemoteCallSearchKeybind_Executed"/>
+                </TabItem.CommandBindings>
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>
@@ -415,7 +429,7 @@
                         </ListView.View>
                     </ListView>
 
-                    <TextBox x:Name="RpcSearchBox"
+                    <TextBox x:Name="RemoteCallSearchTextBox"
                              Grid.Row="1" MinWidth="395" Margin="0,10,0,0" Padding="2" HorizontalAlignment="Left" 
                              Text="{Binding Path=ActiveCapture.RemoteCallFilter.RemoteCallQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
                     <TextBlock Grid.Row="1" MinWidth="395" Margin="5,10,0,0" IsHitTestVisible="False"
@@ -425,7 +439,7 @@
                             <Style TargetType="{x:Type TextBlock}">
                                 <Setter Property="Visibility" Value="Collapsed"/>
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Text, ElementName=RpcSearchBox}" Value="">
+                                    <DataTrigger Binding="{Binding Text, ElementName=RemoteCallSearchTextBox}" Value="">
                                         <Setter Property="Visibility" Value="Visible"/>
                                     </DataTrigger>
                                 </Style.Triggers>
