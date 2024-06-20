@@ -258,29 +258,20 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         });
 
         FirstFrameCommand = new RelayCommand(
-            () =>
-            {
-                ActiveCapture?.FirstFrame();
-                UpdateFrameSelection(ActiveCapture!.CurrentFrame!.Index);
-            },
+            () => UpdateFrameSelection(0),
             () => ActiveCapture?.IsFirstFrameAvailable() ?? false);
         PreviousFrameCommand = new RelayCommand(
-            () =>
-            {
-                ActiveCapture?.PreviousFrame();
-                UpdateFrameSelection(ActiveCapture!.CurrentFrame!.Index);
-            },
+            () => UpdateFrameSelection(ActiveCapture!.CurrentFrame!.Index - 1),
             () => ActiveCapture?.IsPreviousFrameAvailable() ?? false);
         NextFrameCommand = new RelayCommand(
-            () =>
-            {
-                ActiveCapture?.NextFrame();
-                UpdateFrameSelection(ActiveCapture!.CurrentFrame!.Index);
-            },
+            () => UpdateFrameSelection(ActiveCapture!.CurrentFrame!.Index + 1),
             () => ActiveCapture?.IsNextFrameAvailable() ?? false);
 
         #endregion
     }
+
+
+    #region Event handlers.
 
     private void Window_Closing(object sender, CancelEventArgs e)
     {
@@ -317,14 +308,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged
         RemoteCallSearchTextBox.Focus();
     }
 
+    #endregion
+
 
     void UpdateFrameSelection(int index)
     {
+        if (ActiveCapture is null)
+            return;
+
         if (frameLine is not null)
             MainPlot.Plot.Remove(frameLine);
 
-        frameLine = MainPlot.Plot.Add.VerticalLine(index, 1, ScottPlot.Color.Gray(125));
-        ActiveCapture?.SelectFrame(index);
+        ActiveCapture.SelectFrame(index);
+
+        var realIndex = ActiveCapture.CurrentFrame?.Index ?? 0;
+        frameLine = MainPlot.Plot.Add.VerticalLine(realIndex, 1, ScottPlot.Color.Gray(125));
         MainPlot.Refresh();
 
         FirstFrameCommand?.NotifyCanExecuteChanged();
