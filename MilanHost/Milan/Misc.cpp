@@ -1,5 +1,6 @@
 #include <Windows.h>
 
+#include <array>
 #include <atomic>
 #include <fstream>
 
@@ -86,4 +87,22 @@ void WriteFileFull(std::wstring_view const InPath, std::span<byte const> const I
     MILAN_CHECKW(Stream.is_open(), L"failed to open or create file at %s", InPath.data());
 
     Stream.write(reinterpret_cast<char const*>(InBuffer.data()), static_cast<std::streamsize>(InBuffer.size()));
+}
+
+void WriteCallstackLog(CodePlaceW&& Place, ESeverity const Severity, int const Skip)
+{
+    MILAN_VERIFYW(Skip >= 0, L"");
+
+    std::array<void*, 128> StackTrace{ nullptr };
+    auto const Count = ::CaptureStackBackTrace(1 + Skip, (DWORD)StackTrace.size(), StackTrace.data(), nullptr);
+    auto const BaseAddress = (unsigned char*)::LESDK::GetMainModuleBase();
+
+    ILogger& Logger = ::Milan::Output::GetMainLogger();
+
+    MILAN_CHECKW(Count <= StackTrace.size(), L"");
+    for (unsigned short i = 0; i < Count; ++i)
+    {
+        auto const RelativeVirtualAddress = (unsigned char*)StackTrace[i] - BaseAddress;
+        Logger.WriteFormatUnicode(Place, Severity, L"%02d. %p", i + 1, (void*)RelativeVirtualAddress);
+    }
 }

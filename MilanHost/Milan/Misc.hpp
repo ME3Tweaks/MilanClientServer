@@ -82,6 +82,8 @@ void PrintHex(FILE* const OutStream, BYTE* const InBuffer, SIZE_T const InSize, 
     }
 }
 
+__declspec(noinline) void WriteCallstackLog(CodePlaceW&& Place, ESeverity Severity, int Skip = 0);
+
 
 // ! UObject & AActor utilities.
 // ========================================

@@ -433,7 +433,9 @@ void UNetConnection_Close_hook(UNetConnection* const Context)
             RemoteAddress = FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
         }
 
-        MILAN_TRACEW(L"UNetConnection::Close, remote = %s", *RemoteAddress);
+        MILAN_TRACEW(L"UNetConnection::Close, remote = %s, callstack:", *RemoteAddress);
+        ::WriteCallstackLog(MILAN_HEREW, k_logTrace, 1);
+
         NETPROF(CaptureSessionEvent(Context, L"CLOSE", L""));
     }
 
