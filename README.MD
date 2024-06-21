@@ -26,13 +26,13 @@ Note that the client `MilanHost` ASI will invoke `cargo` as a part of its
 build process, but will only build the little subset of Rust code it requires.
 These commands **must** be run in Developer PowerShell / Command Prompt for VS 2022.
 
-> **Important**
->
+> [!IMPORTANT]
 > Updating C++ project configuration, which includes changing / adding source files,
 > must be done through the CMakeLists.txt file for the project, and not Visual Studio
 > itself. Additionally, it is not recommended to *create* new files via Visual Studio
 > because it defaults to build root instead of source root. That makes it very easy
 > to leave your new file(s) in a temporary, git-ignored build directory.
+>
 
 
 ### Are you building server code?
@@ -43,34 +43,58 @@ These commands **must** be run in Developer PowerShell / Command Prompt for VS 2
 
 ### Are you building Network Profiler?
 
-All code emitting debug information relevant to network profiling is built normally
-as a part of `MilanHost` in debug configurations. The Network Profiler application to
-view captured information is built in a standalone Visual Studio solution that is
-separate from the rest of the build system.
-
 Open and build `./NetworkProfiler/NetworkProfiler.sln`.
+
+> [!NOTE]
+> All code emitting debug information relevant to network profiling is built normally
+> as a part of `MilanHost` in debug configurations. The Network Profiler application for
+> viewing captured information is built in a standalone Visual Studio solution that is
+> separate from the rest of this project's build system.
+>
 
 
 ## Repository structure:
 
-This listing assumes you use the standard CMake preset (`VisualStudio`).
+This listing assumes the standard CMake preset (`VisualStudio`).
 
-   - `.cargo/` - Cargo configuration (**required**).
-   - `Build/` - Output directory.
-     - `Cargo/` - Output for Rust code.
-     - `VisualStudio/` - Output for C++ code.
-       - `Projects/` - Generated Visual Studio solution and projects.
-       - `{DEBUG|RELESE|FINAL}/` - Built artifacts.
-   - `Crates/` - Local Rust libraries for client core and/or server.
-   - `MilanCore/` - Rust library and CMake target for linking it into C++ code.
-     - `client_core/` - ECSM implementation as a non-system library.
-     - `client_ffi/` - System library wrapping ECSM interface for FFI.
-     - `milan_ecsm_ffi.h` - The FFI bindings **auto-generated** at build time.
-   - `MilanHost/` - The main Milan Client ASI, written in C++.
-   - `MilanServer/` - Server executable(s).
-   - `NetworkProfiler/` - Network Profiler application.
-   - `ThirdParty/` - Dependencies provided via **submodules** (except for ImGui).
-   - `Utilities/` - Smaller ASIs and/or tools.
-   - `Cargo.toml` - Workspace for all Rust code in this project.
-   - `CMakeLists.txt` - Workspace for all C++ code in this project.
-   - `CMakePresets.json` - CMake configuration / build presets.
+```
+.cargo/                     - cargo configuration (required!)
+Build/                      - output directory
+  Cargo/                    - output for rust code
+  VisualStudio/             - output for c++ code
+    Projects/               - generated visual studio solution and projects
+    {DEBUG|RELESE|FINAL}/   - directories for built artifacts
+    MilanBuildConfig.cmake  - workspace-wide build configuration
+  Crates/                   - local rust libraries
+MilanCore/                  - the rust library and a cmake target for linking it into c++ code
+  client_core/              - ecsm implementation as a non-system library
+  client_ffi/               - system library wrapping the ecsm interface for ffi
+  milan_ecsm_ffi.h          - auto-generated ffi bindings (git-ignored!)
+MilanHost/                  - the main milan client asi, written in c++
+MilanServer/                - server executable(s)
+NetworkProfiler/            - gui network profiler application
+ThirdParty/                 - dependencies provided via submodules
+Utilities/                  - smaller asi plugins and/or tools
+Cargo.toml                  - workspace for all rust code in this project
+CMakeLists.txt              - workspace for all c++ code in this project
+CMakePresets.json           - cmake configuration / build presets
+```
+
+
+## Third-party dependencies:
+
+This is a non-authoritative list of external software dependencies required to build
+all or parts of this project, in no particular order.
+
+```
+General:
+  - Corrosion - v0.4.7 - MIT - Andrew Gaspar
+  - ImGui - v1.90.5 - MIT - Omar Cornut
+  - ImPlot - #f156599 - MIT - Evan Pezent
+  - Zydis - v4.1.0 - MIT - Florian Bernd & Joel Höner
+
+Network Profiler:
+  - CommunityToolkit.Mvvm - v8.2.2 - MIT - .NET Foundation and contributors
+  - Microsoft.Xaml.Behaviors.Wpf - v1.1.122 - MIT - Microsoft
+  - ScottPlot.WPF - v5.0.35 - MIT - Scott Harden / Harden Technologies, LLC
+```
