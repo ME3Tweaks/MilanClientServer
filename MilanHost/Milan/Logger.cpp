@@ -320,12 +320,12 @@ void MilanLogger::WriteAnsi(CodePlaceA const& Place,
 
     if (bWritePlace)
     {
-        Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%.3f] [%s] %s  [%s:%d]",
+        Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%07.3f] [%s] %s  [%s:%d]",
             MessageTimer.GetSeconds(), FormatSeverityAnsi(Severity), Message.data(), Place.File, Place.Line);
     }
     else
     {
-        Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%.3f] [%s] %s",
+        Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%07.3f] [%s] %s",
             MessageTimer.GetSeconds(), FormatSeverityAnsi(Severity), Message.data());
         MILAN_UNUSED(Place);
     }
@@ -354,12 +354,12 @@ void MilanLogger::WriteUnicode(CodePlaceW const& Place,
 
     if (bWritePlace)
     {
-        Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%.3f] [%s] %s  [%s:%d]",
+        Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%07.3f] [%s] %s  [%s:%d]",
             MessageTimer.GetSeconds(), FormatSeverityUnicode(Severity), Message.data(), Place.File, Place.Line);
     }
     else
     {
-        Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%.3f] [%s] %s",
+        Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%07.3f] [%s] %s",
             MessageTimer.GetSeconds(), FormatSeverityUnicode(Severity), Message.data());
         MILAN_UNUSED(Place);
     }

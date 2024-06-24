@@ -48,7 +48,7 @@ NetworkCapture::NetworkCapture()
 
 NetworkCapture::~NetworkCapture()
 {
-    MILAN_INFOW(L"netprof terminating capture");
+    MILAN_INFOW(L"netprof: terminating capture");
     FlushRecords();
     delete Stream;
 }

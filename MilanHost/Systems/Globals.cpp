@@ -39,7 +39,7 @@ namespace Milan::Allocator
 #define _INSTALL_HOOK_ADDR(Address, String, Function) \
     auto* const MILAN_VARCAT(Function, _target) = (MILAN_VARCAT(t_, Function)*)Address; \
     MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHook(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook))); \
-    MILAN_DEBUGW(L"" String L" hooked: %p -> %p", (void*)MILAN_VARCAT(Function, _target), (void*)MILAN_VARCAT(Function, _orig))
+    MILAN_DEBUGW(L"" String L" hooked: 0x%p -> 0x%p", (void*)MILAN_VARCAT(Function, _target), (void*)MILAN_VARCAT(Function, _orig))
 
 #define _INSTALL_HOOK_INIT(Pattern, String, Function) \
     _INSTALL_HOOK_ADDR(Context.ResolveTyped<MILAN_VARCAT(t_, Function)>(Pattern), String, Function)
@@ -54,7 +54,7 @@ namespace Milan::Allocator
 
 #define _FIND_VAR_ADDR(Address, String, Variable) \
     Variable = (MILAN_VARCAT(t_, Variable)*)Address; \
-    MILAN_DEBUGW(L"" String L" found: %p", (void*)Variable)
+    MILAN_DEBUGW(L"" String L" found: 0x%p", (void*)Variable)
 
 #define _FIND_VAR_INIT(Pattern, String, Variable) \
     _FIND_VAR_ADDR(Context.ResolveTyped<MILAN_VARCAT(t_, Variable)>(Pattern), String, Variable)
@@ -71,31 +71,31 @@ namespace Milan::Globals
 {
     void Initialize(::LESDK::Initializer& Context)
     {
-        MILAN_INFOW(L"base address = %p", (void*)::LESDK::GetMainModuleBase());
+        MILAN_INFOW(L"base address = 0x%p", (void*)::LESDK::GetMainModuleBase());
 
         // Some of the addresses initialized here might be unused completely or in non-debug flows.
         // TODO: Before public release, go through all of globals here and comment everything unneeded.
 
         GEngine = Context.ResolveTyped<UEngine*>(BUILTIN_GENGINE_RIP);
-        MILAN_DEBUGW(L"GEngine found: %p (%p)", (void*)GEngine, (void*)*GEngine);
+        MILAN_DEBUGW(L"GEngine found: 0x%p (0x%p)", (void*)GEngine, (void*)*GEngine);
         GNatives = Context.ResolveTyped<tNative*>(BUILTIN_GNATIVES_RIP);
-        MILAN_DEBUGW(L"GNatives found: %p (%p)", (void*)GNatives, (void*)*GNatives);
+        MILAN_DEBUGW(L"GNatives found: 0x%p (0x%p)", (void*)GNatives, (void*)*GNatives);
         GSys = Context.ResolveTyped<USystem*>(BUILTIN_GSYS_RIP);
-        MILAN_DEBUGW(L"GSys found: %p (%p)", (void*)GSys, (void*)*GSys);
+        MILAN_DEBUGW(L"GSys found: 0x%p (0x%p)", (void*)GSys, (void*)*GSys);
         GWorld = Context.ResolveTyped<UWorld*>(BUILTIN_GWORLD_RIP);
-        MILAN_DEBUGW(L"GWorld found: %p (%p)", (void*)GWorld, (void*)*GWorld);
+        MILAN_DEBUGW(L"GWorld found: 0x%p (0x%p)", (void*)GWorld, (void*)*GWorld);
 
         UObject::GObjObjects = Context.ResolveTyped<TArray<UObject*>>(BUILTIN_GOBOBJECTS_RIP);
-        MILAN_DEBUGW(L"UObject::GObjObjects found: %p", (void*)UObject::GObjObjects);
+        MILAN_DEBUGW(L"UObject::GObjObjects found: 0x%p", (void*)UObject::GObjObjects);
         SFXName::GBioNamePools = Context.ResolveTyped<SFXNameEntry const*>(BUILTIN_SFXNAMEPOOLS_RIP);
-        MILAN_DEBUGW(L"SFXName::GBioNamePools found: %p", (void*)SFXName::GBioNamePools);
+        MILAN_DEBUGW(L"SFXName::GBioNamePools found: 0x%p", (void*)SFXName::GBioNamePools);
         SFXName::GInitMethod = Context.ResolveTyped<SFXName::tInitMethod>(BUILTIN_SFXNAMEINIT_PHOOK);
-        MILAN_DEBUGW(L"SFXName::Init found: %p", (void*)SFXName::GInitMethod);
+        MILAN_DEBUGW(L"SFXName::Init found: 0x%p", (void*)SFXName::GInitMethod);
 
         // WndProc is not hooked but replaced using Win32 mechanism, see ::Milan::Imgui::OnSwapChainPresent for more.
 
         WndProc_orig = Context.ResolveTyped<t_WndProc>(GLOBAL_WNDPROC_RVA);
-        MILAN_DEBUGW(L"WndProc found: %p", (void*)WndProc_orig);
+        MILAN_DEBUGW(L"WndProc found: 0x%p", (void*)WndProc_orig);
 
         // From this point on, use the macro system to simplify search and installation.
 
