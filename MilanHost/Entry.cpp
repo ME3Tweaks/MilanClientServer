@@ -103,6 +103,24 @@ void RegisterNonshipCommands()
             return true;
         });
 
+    ::Milan::Console::RegisterCommand(L"dump", L"guidcaches",
+        [](wchar_t const*)
+        {
+            MILAN_INFOW(L"dumping guid caches (to log !!!)");
+            int Index = 0;
+            for (TypedObjectIterator<UGuidCache, true, false> Iter{}; Iter; ++Iter)
+            {
+                auto* const Cache = reinterpret_cast<UGuidCache_Proxy*>(*Iter);
+                MILAN_INFOW(L"UGuidCache n. %d: filename = %s", Index, *Cache->Filename);
+                for (auto const& [Name, Guid] : Cache->PackageGuids)
+                {
+                    MILAN_INFOW(L"  %s => %s", *Name.ToString(), *FormatGuid(Guid));
+                }
+                Index++;
+            }
+            return true;
+        });
+
     ::Milan::Console::RegisterCommand(L"dump", L"natives",
         [](wchar_t const*)
         {

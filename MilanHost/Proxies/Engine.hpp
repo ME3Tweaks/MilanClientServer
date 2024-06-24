@@ -163,6 +163,19 @@ static_assert(offsetof(UControlChannel_Proxy, Unknown_A8) == 0xA8);
 static_assert(sizeof(UControlChannel_Proxy) == sizeof(UControlChannel));
 
 
+class UGuidCache_Proxy : public UObject
+{
+public:
+
+    TMap<SFXName, FGuid>            PackageGuids;               // 0x60
+    FString                         Filename;                   // 0xA8
+};
+
+static_assert(offsetof(UGuidCache_Proxy, PackageGuids) == 0x60);
+static_assert(offsetof(UGuidCache_Proxy, Filename) == 0xA8);
+static_assert(sizeof(UGuidCache_Proxy) == sizeof(UGuidCache));
+
+
 class ULevelBase_Proxy : public UObject
 {
 public:
@@ -192,6 +205,29 @@ static_assert(offsetof(ULevel_Proxy, UnknownData_D0) == 0xD0);
 static_assert(offsetof(ULevel_Proxy, FirstDynamicActor) == 0x18C);
 static_assert(offsetof(ULevel_Proxy, UnknownData_198) == 0x198);
 static_assert(sizeof(ULevel_Proxy) == sizeof(ULevel));
+
+
+class UPendingLevel_Proxy : public ULevelBase_Proxy
+{
+public:
+
+    void*                           NotifyVftable;              // 0xD0
+    UNetDriver*                     NetDriver;                  // 0xD8
+    void*                           Unknown_E0;                 // 0xE0
+    void*                           Unknown_E8;                 // 0xE8
+    int                             FilesNeeded;                // 0xF0
+    FString                         ConnError;                  // 0xF4
+    TArray<UGuidCache*>             GuidCaches;                 // 0x104
+
+    // Maybe something more...
+};
+
+static_assert(offsetof(UPendingLevel_Proxy, FilesNeeded) == 0xF0);
+static_assert(offsetof(UPendingLevel_Proxy, ConnError) == 0xF4);
+static_assert(offsetof(UPendingLevel_Proxy, GuidCaches) == 0x104);
+static_assert(offsetof(UPendingLevel_Proxy, FilesNeeded) - offsetof(UPendingLevel_Proxy, NotifyVftable) == 0x20);
+static_assert(offsetof(UPendingLevel_Proxy, ConnError) - offsetof(UPendingLevel_Proxy, NotifyVftable) == 0x24);
+static_assert(offsetof(UPendingLevel_Proxy, GuidCaches) - offsetof(UPendingLevel_Proxy, NotifyVftable) == 0x34);
 
 
 class UWorld_Proxy : public UObject
