@@ -12,6 +12,9 @@
 #include "Proxies/Engine.hpp"
 
 
+// ! Hook patterns.
+// ========================================
+
 #define GLOBAL_BIOREQUESTEXIT_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 89 5C 24 ?? */ "48 89 6C 24 ?? 48 89 74 24 ?? 57 48 81 EC 50 03 00 00")
 
@@ -49,6 +52,9 @@
 #define GLOBAL_UACTORCHANNEL_REPLICATEACTOR_PHOOK \
     ::LESDK::Address::FromPostHook(/* 40 55 53 56 57 */ "41 54 41 55 41 56 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC 08 02 00 00 48 C7 85 ?? ?? ?? ?? FE FF FF FF")
 
+#define GLOBAL_UGUIDCACHE_LOOKUPPACKAGEGUID_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 40 53 48 83 EC */ "20 48 83 C1 60 49 8B D8 E8 ?? ?? ?? ?? 48 8B C8 48 85 C0 74 06")
+
 #define GLOBAL_UNETCONNECTION_CLIENTSUPPORTSLEVEL_PATTERN \
     ::LESDK::Address::FromPattern("48 89 5C 24 ?? 57 48 83 EC 20 48 8B DA 48 8B F9 48 85 D2 74 ?? 48 8B 15 ?? ?? ?? ?? 0F 1F 40 00")
 
@@ -77,6 +83,16 @@
 #define GLOBAL_FSOCKETWIN_SEND_OFFSET       ::LESDK::Address::FromOffset(0x9091D0)
 #define GLOBAL_FSOCKETWIN_RECVFROM_OFFSET   ::LESDK::Address::FromOffset(0x908520)
 #define GLOBAL_FSOCKETWIN_RECV_OFFSET       ::LESDK::Address::FromOffset(0x9084F0)
+
+
+// ! Logging toggles.
+// ========================================
+
+extern bool gb_logCallFunction;
+extern bool gb_logProcessDelegate;
+extern bool gb_logProcessEvent;
+extern bool gb_logProcessInternal;
+extern bool gb_logLookupPackageGuid;
 
 
 // ! Miscellaneous functions / methods.
@@ -155,11 +171,6 @@ void UGameEngine_Tick_hook(UGameEngine* Context, float Delta);
 // ! UObject methods.
 // ========================================
 
-extern bool gb_logCallFunction;
-extern bool gb_logProcessDelegate;
-extern bool gb_logProcessEvent;
-extern bool gb_logProcessInternal;
-
 using t_UObject_CallFunction = tCallFunction;
 extern t_UObject_CallFunction* UObject_CallFunction_orig;
 
@@ -204,6 +215,11 @@ using t_UActorChannel_ReplicateActor = void(UActorChannel* Context);
 extern t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_orig;
 
 void UActorChannel_ReplicateActor_hook(UActorChannel* Context);
+
+using t_UGuidCache_LookupPackageGuid = int(UGuidCache* Context, SFXName Package, FGuid* OutGuid);
+extern t_UGuidCache_LookupPackageGuid* UGuidCache_LookupPackageGuid_orig;
+
+int UGuidCache_LookupPackageGuid_hook(UGuidCache* Context, SFXName Package, FGuid* OutGuid);
 
 using t_UNetConnection_ClientSupportsLevel = int(UNetConnection* Context, UObject* Object);
 extern t_UNetConnection_ClientSupportsLevel* UNetConnection_ClientSupportsLevel_orig;

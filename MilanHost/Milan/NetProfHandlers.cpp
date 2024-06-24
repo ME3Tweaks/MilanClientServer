@@ -299,14 +299,56 @@ void MlnUNetPendingLevelNotifyControlMessageFailure_Handler(UNetConnection* cons
 
 void MlnUNetPendingLevelNotifyControlMessageUses_Handler(UNetConnection* const Connection, FPackageInfo* const Package)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
-    //MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage (Uses): Remote = %s, Package = %s, Guid = %s (%s), Gen = %d",
-    //    *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *FormatGuid(Package->Guid), *LookupPackageName(TcpConn, &Package->Guid), Package->RemoteGeneration);
+    auto const  TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const  Resolved = LookupPackageName(TcpConn, &Package->Guid);
+    FGuid       FoundGuid{};
 
-    auto const Resolved = LookupPackageName(TcpConn, &Package->Guid);
+    // Me: can we get a proper package lookup from guidcaches?
+    // Mom: we have package lookup from guidcaches at home!
+    // At home:
+    bool bFoundPackage = false;
+    bool bMatchedPackage = false;
+    for (TypedObjectIterator<UGuidCache, true, false> Iter{}; Iter; ++Iter)
+    {
+        // Let's assume that our context netpendinglevel caches all the guidcaches.
+        auto* const Cache = reinterpret_cast<UGuidCache_Proxy*>(*Iter);
+        auto* const Guid = Cache->PackageGuids.Find(SFXName(Package->PackageName));
+
+        if (Guid != nullptr)
+        {
+            FoundGuid = *Guid;
+            bFoundPackage = true;
+            auto* const Pckg = &Package->Guid;
+            if (Guid->A == Pckg->A && Guid->B == Pckg->B
+                && Guid->C == Pckg->C && Guid->D == Pckg->D)
+            {
+                bMatchedPackage = true;
+            }
+        }
+    }
+
+    if (bMatchedPackage)
+    {
+        //MILAN_TRACEW(L"UNetPendingLevel::NotifyControlMessage (Uses): Remote = %s, Package = %s, Guid = %s (%s), Gen = %d",
+        //    *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *FormatGuid(Package->Guid),
+        //    *Resolved, Package->RemoteGeneration);
+    }
+    else
+    {
+        wchar_t const* const ErrorReason = bFoundPackage ? L"mismatched guid" : L"missing package";
+
+        MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage (Uses): Remote = %s, Package = %s, Guid = %s (%s), Gen = %d, Failure = %s",
+            *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *FormatGuid(Package->Guid),
+            *Resolved, Package->RemoteGeneration, ErrorReason);
+
+        if (bFoundPackage)
+        {
+            MILAN_WARNW(L"  expected guid = %s, found guid = %s", *FormatGuid(Package->Guid), *FormatGuid(FoundGuid));
+        }
+    }
+
     NETPROF(CaptureControlMessage(Connection, true, NM_Uses, FString::Printf(L"Package=%s, Guid=%s, Gen=%d, Resolved=%s",
         *Package->PackageName.ToString(), *FormatGuid(Package->Guid), Package->RemoteGeneration, *Resolved)));
-
     MILAN_UNUSED_4(TcpConn, Resolved, Connection, Package);
 }
 

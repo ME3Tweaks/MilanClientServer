@@ -16,6 +16,7 @@ bool gb_logCallFunction = false;
 bool gb_logProcessDelegate = false;
 bool gb_logProcessEvent = false;
 bool gb_logProcessInternal = false;
+bool gb_logLookupPackageGuid = false;
 
 
 t_WndProc* WndProc_orig = nullptr;
@@ -391,6 +392,22 @@ void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
     }
 
     (*UActorChannel_ReplicateActor_orig)(Context);
+}
+
+t_UGuidCache_LookupPackageGuid* UGuidCache_LookupPackageGuid_orig = nullptr;
+int UGuidCache_LookupPackageGuid_hook(UGuidCache* const Context, SFXName const Package, FGuid* const OutGuid)
+{
+    auto const Cache = reinterpret_cast<UGuidCache_Proxy*>(Context);
+    bool const bFound = (*UGuidCache_LookupPackageGuid_orig)(Context, Package, OutGuid);
+
+    if (!bFound && gb_logLookupPackageGuid)
+    {
+        MILAN_WARNW(L"UGuidCache::LookupPackageGuid failed for cache = '%s', package = '%s'",
+            *Cache->Filename, *Package.ToString());
+    }
+
+    MILAN_UNUSED(Cache);
+    return bFound;
 }
 
 t_UNetConnection_ClientSupportsLevel* UNetConnection_ClientSupportsLevel_orig = nullptr;

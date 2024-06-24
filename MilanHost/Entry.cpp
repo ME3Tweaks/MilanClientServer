@@ -231,6 +231,17 @@ void RegisterNonshipCommands()
         [](wchar_t const*)
         {
             gb_logProcessInternal = !gb_logProcessInternal;
+            MILAN_INFOW(L"logging of uobject::processinternal: %s",
+                gb_logProcessInternal ? L"enabled" : L"disabled");
+            return true;
+        });
+
+    ::Milan::Console::RegisterCommand(L"log", L"lookuppackageguids",
+        [](wchar_t const*)
+        {
+            gb_logLookupPackageGuid = !gb_logLookupPackageGuid;
+            MILAN_INFOW(L"logging of guid cache package lookups: %s",
+                gb_logLookupPackageGuid ? L"enabled" : L"disabled");
             return true;
         });
 
