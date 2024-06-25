@@ -285,6 +285,15 @@ void RegisterNonshipCommands()
             return true;
         });
 
+    ::Milan::Console::RegisterCommand(L"log", L"pendingpackages",
+        [](wchar_t const*)
+        {
+            gb_logPendingPackages = !gb_logPendingPackages;
+            MILAN_INFOW(L"logging of net pending packages: %s",
+                gb_logPendingPackages ? L"enabled" : L"disabled");
+            return true;
+        });
+
 #endif
 }
 

@@ -28,6 +28,14 @@ namespace Milan::Profilers
             .Function = nullptr
         },
 
+        /* CPM_PendingPackages */
+        CanvasProfilerRecord
+        {
+            .Subtitle = L"Pending packages",
+            .Description = L"Displays pending packages in the active server connection",
+            .Function = ::ProfilePendingPackages,
+        },
+
         /* CPM_PlayerControllers */
         CanvasProfilerRecord
         {
@@ -83,6 +91,8 @@ namespace Milan::Profilers
 
                 if (!::_wcsicmp(Params, L"none"))
                     g_mode = CPM_None;
+                else if (!::_wcsicmp(Params, L"pending") || !::_wcsicmp(Params, L"pend"))
+                    g_mode = CPM_PendingPackages;
                 else if (!::_wcsicmp(Params, L"playercontrollers") || !::_wcsicmp(Params, L"pcs"))
                     g_mode = CPM_PlayerControllers;
                 else if (!::_wcsicmp(Params, L"network") || !::_wcsicmp(Params, L"net"))

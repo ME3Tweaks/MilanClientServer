@@ -17,6 +17,8 @@ bool gb_logProcessDelegate = false;
 bool gb_logProcessEvent = false;
 bool gb_logProcessInternal = false;
 bool gb_logLookupPackageGuid = false;
+bool gb_logPendingPackages = false;
+
 
 UObject**           pGPropObject = nullptr;
 unsigned char**     pGPropAddr = nullptr;
@@ -357,6 +359,33 @@ void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delt
 {
     (*UWorld_Tick_orig)(Context, Unknown, Delta);
     ::Milan::State::On_UWorld_Tick(Context, Unknown, Delta);
+
+#ifndef _FINAL_RELEASE
+    if (gb_logPendingPackages)
+    {
+        do
+        {
+            auto const World = reinterpret_cast<UWorld_Proxy*>(*GWorld);
+            auto const NetDriver = reinterpret_cast<UNetDriver_Proxy*>(World->NetDriver);
+            if (NetDriver == nullptr)
+                break;
+
+            auto const ServerConnection = reinterpret_cast<UNetConnection_Proxy*>(NetDriver->ServerConnection);
+            if (ServerConnection == nullptr)
+                break;
+
+            if (ServerConnection->PendingPackageInfos.Any())
+                MILAN_DEBUGW(L"pending packages on active netdriver (one tick):");
+            
+            for (FPackageInfo const& Pending : ServerConnection->PendingPackageInfos)
+            {
+                MILAN_TRACEW(L"- %s, Guid = %s, Parent = %s",
+                    *Pending.PackageName.ToString(), *FormatGuid(Pending.Guid),
+                    Pending.Parent ? *Pending.Parent->GetFullName() : L"n/a");
+            }
+        } while (false);
+    }
+#endif
 }
 
 

@@ -29,9 +29,10 @@ inline bool IsValidAlign(ETextAlign const Value) noexcept
 enum ECanvasProfilerMode : int
 {
     CPM_None = 0,
-    CPM_PlayerControllers = 1,
-    CPM_Network = 2,
-    CPM_WorldInfo = 3,
+    CPM_PendingPackages = 1,
+    CPM_PlayerControllers = 2,
+    CPM_Network = 3,
+    CPM_WorldInfo = 4,
 
     CPM_Max
 };
@@ -141,6 +142,7 @@ struct CanvasProfilerRecord
 // ! Implementation of canvas profilers.
 // ========================================
 
+void ProfilePendingPackages(MilanCanvasDrawer& Drawer, UObject* Target);
 void ProfilePlayerControllers(MilanCanvasDrawer& Drawer, UObject* Target);
 void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* Target);
 void ProfileWorldInfo(MilanCanvasDrawer& Drawer, UObject* Target);

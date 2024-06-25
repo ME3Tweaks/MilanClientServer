@@ -325,7 +325,7 @@ public:
     TMap<AActor*, UActorChannel*>   ActorChannels;              //   checks out: 0x5FB0
     UDownload*                      Download;                   // 0x5FF8
     TArray<void*>                   DownloadInfo;               // 0x6000
-    TArray<FPackageInfo*>           PendingPackageInfos;        //   checks out: 0x6010
+    TArray<FPackageInfo>            PendingPackageInfos;        //   checks out: 0x6010
     SFXName                         ClientWorldPackageName;     //   checks out: 0x6020
     TArray<SFXName>                 ClientVisibleLevelNames;    //   checks out: 0x6028
     TArray<FGuid>                   PendingRemovePackageGuids;  //   checks out: 0x6038

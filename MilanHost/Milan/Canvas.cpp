@@ -315,6 +315,25 @@ wchar_t const* NetRoleString(unsigned char const Role)
     return L"???";
 }
 
+void ProfilePendingPackages(MilanCanvasDrawer& Drawer, UObject* Target)
+{
+    MILAN_UNUSED_2(Drawer, Target);
+
+    auto const World = reinterpret_cast<UWorld_Proxy*>(*GWorld);
+    auto const NetDriver = reinterpret_cast<UNetDriver_Proxy*>(World->NetDriver);
+    auto const ServerConnection = reinterpret_cast<UNetConnection_Proxy*>(NetDriver->ServerConnection);
+
+    for (FPackageInfo const& Pending : ServerConnection->PendingPackageInfos)
+    {
+        Drawer.DrawString(Pending.PackageName.ToString());
+        Drawer.PushIndent();
+        Drawer.DrawProperty(L"Guid", *FormatGuid(Pending.Guid));
+        Drawer.DrawProperty(L"Parent", Pending.Parent ? Pending.Parent->GetFullName() : L"n/a");
+        Drawer.DrawProperty(L"ForcedBase", Pending.ForcedExportBasePackageName.ToString());
+        Drawer.PopIndent();
+    }
+}
+
 void ProfilePlayerControllers(MilanCanvasDrawer& Drawer, UObject* Target)
 {
     MILAN_UNUSED_2(Drawer, Target);
@@ -434,10 +453,10 @@ void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* const Target)
             {
                 Drawer.PushIndent();
                 Drawer.DrawProperty(FString::Printf(L"%d", PendingIndex++),
-                    FString::Printf(L"Name=%s, Parent=%s, Guid=%08X%08X%08X%08X",
-                        *PendingPackage->PackageName.ToString(),
-                        PendingPackage->Parent ? *PendingPackage->Parent->StaticName() : L"n/a",
-                        PendingPackage->Guid.A, PendingPackage->Guid.B, PendingPackage->Guid.C, PendingPackage->Guid.D));
+                    FString::Printf(L"Name=%s, Parent=%s, Guid=%s",
+                        *PendingPackage.PackageName.ToString(),
+                        PendingPackage.Parent ? *PendingPackage.Parent->StaticName() : L"n/a",
+                        *FormatGuid(PendingPackage.Guid)));
                 Drawer.PopIndent();
             }
             Drawer.PopIndent();

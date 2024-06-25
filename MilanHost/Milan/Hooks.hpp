@@ -104,6 +104,7 @@ extern bool gb_logProcessDelegate;
 extern bool gb_logProcessEvent;
 extern bool gb_logProcessInternal;
 extern bool gb_logLookupPackageGuid;
+extern bool gb_logPendingPackages;
 
 
 // ! Global variables.

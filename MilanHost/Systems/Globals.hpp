@@ -30,7 +30,7 @@ namespace Milan::Globals
 
     constexpr bool IsFinalBuild() noexcept
     {
-#ifdef _FINAL
+#ifdef _FINAL_RELEASE
         return true;
 #else
         return false;
