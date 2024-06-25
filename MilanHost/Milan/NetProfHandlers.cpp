@@ -310,20 +310,17 @@ void MlnUNetPendingLevelNotifyControlMessageUses_Handler(UNetConnection* const C
     bool bMatchedPackage = false;
     for (TypedObjectIterator<UGuidCache, true, false> Iter{}; Iter; ++Iter)
     {
-        // Let's assume that our context netpendinglevel caches all the guidcaches.
+        // Let's assume our context netpendinglevel caches all the guidcaches.
         auto* const Cache = reinterpret_cast<UGuidCache_Proxy*>(*Iter);
         auto* const Guid = Cache->PackageGuids.Find(SFXName(Package->PackageName));
 
         if (Guid != nullptr)
         {
-            FoundGuid = *Guid;
             bFoundPackage = true;
-            auto* const Pckg = &Package->Guid;
-            if (Guid->A == Pckg->A && Guid->B == Pckg->B
-                && Guid->C == Pckg->C && Guid->D == Pckg->D)
-            {
-                bMatchedPackage = true;
-            }
+            bMatchedPackage = *Guid == Package->Guid;
+
+            FoundGuid = *Guid;
+            break;
         }
     }
 

@@ -124,3 +124,30 @@ private:
     static size_t GetPageSize() noexcept;
     static std::intptr_t GetMainBase() noexcept;
 };
+
+
+// ! UScript VM macros to write custom native functions.
+// ========================================
+
+#define NATIVE_GET_NAME(NAME) \
+    SFXName NAME{}; \
+    Stack->Step(Stack->Object, &NAME);
+
+#define NATIVE_GET_NAME_OPTIONAL(NAME, DEFAULT) \
+    SFXName NAME = DEFAULT; \
+    (*pGRuntimeUCFlags) &= ~2; \
+    Stack->Step(Stack->Object, &NAME);
+
+#define NATIVE_GET_STRING(NAME) \
+    FString NAME{}; \
+    Stack->Step(Stack->Object, &NAME);
+
+#define NATIVE_GET_STRING_OPTIONAL(NAME, DEFAULT) \
+    FString NAME{ DEFAULT }; \
+    (*pGRuntimeUCFlags) &= ~2; \
+    Stack->Step(Stack->Object, &NAME);
+
+#define NATIVE_FINISH() \
+    Stack->Code++; \
+    if (*Stack->Code == 0x41) \
+        Stack->Step(Stack->Object, NULL);

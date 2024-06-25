@@ -45,6 +45,13 @@ inline FString FormatGuid(FGuid const& In)
     return FString::Printf(L"%08X%08X%08X%08X", In.A, In.B, In.C, In.D);
 }
 
+inline bool operator==(FGuid& A, FGuid& B) { return A.A == B.A && A.B == B.B && A.C == B.C && A.D == B.D; }
+inline bool operator!=(FGuid& A, FGuid& B) { return !(A == B); }
+
+inline bool operator==(FGuid const& A, FGuid const& B) { return A.A == B.A && A.B == B.B && A.C == B.C && A.D == B.D; }
+inline bool operator!=(FGuid const& A, FGuid const& B) { return !(A == B); }
+
+
 template<SIZE_T HEXDUMP_LINE_LEN = 16u>
     requires (HEXDUMP_LINE_LEN >= 4 && HEXDUMP_LINE_LEN <= 32)
 void PrintHex(FILE* const OutStream, BYTE* const InBuffer, SIZE_T const InSize, char const* const InPrefix)

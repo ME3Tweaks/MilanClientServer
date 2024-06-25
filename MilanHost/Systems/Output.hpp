@@ -14,6 +14,7 @@ namespace Milan::Output
     // ========================================
 
     void Initialize(::LESDK::Initializer& Context);
+    void DeferredInitialize(::LESDK::Initializer& Context);
     void Terminate();
 
 
@@ -24,4 +25,7 @@ namespace Milan::Output
 
     ILogger& GetMainLogger();
     void FlushEverything();
+
+    bool ToggleLogInternal() noexcept;
+    bool ToggleWarnInternal() noexcept;
 }

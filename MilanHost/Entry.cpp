@@ -42,6 +42,9 @@ SPI_IMPLEMENT_ATTACH
     ::Milan::Imgui::Initialize(Context);
     ::Milan::State::Initialize(Context);
 
+    // This needs to run after globals.
+    ::Milan::Output::DeferredInitialize(Context);
+
 
     // Run additional startup logic.
     // ----------------------------------------
@@ -121,13 +124,34 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"dump", L"natives",
+    ::Milan::Console::RegisterCommand(L"dump", L"nativeops",
+        [](wchar_t const*)
+        {
+            MILAN_INFOW(L"dumping native ops");
+            ::RelativeTimer Timer{};
+
+            std::wofstream Stream{ L"MilanHost-nativeops.csv" };
+            Stream << L"Index;RVA;Address\n";
+
+            auto const Base = reinterpret_cast<std::ptrdiff_t>(::LESDK::GetMainModuleBase());
+
+            for (int Index = 0; Index < 0x400; ++Index)
+            {
+                auto const Address = reinterpret_cast<std::ptrdiff_t>(GNatives[Index]);
+                Stream << std::dec << Index << std::hex << L";0x" << Address - Base << L";0x" << Address << L"\n";
+            }
+
+            MILAN_INFOW(L"dumping native ops - done in %.3f ms.", Timer.GetMilliseconds());
+            return true;
+        });
+
+    ::Milan::Console::RegisterCommand(L"dump", L"nativefuncs",
         [](wchar_t const*)
         {
             MILAN_INFOW(L"dumping native ufuncs");
             ::RelativeTimer Timer{};
 
-            std::wofstream Stream{ L"MilanHost-natives.csv" };
+            std::wofstream Stream{ L"MilanHost-nativefuncs.csv" };
             Stream << L"FullName;RVA;Address\n" << std::hex;
 
             auto const Base = reinterpret_cast<std::ptrdiff_t>(::LESDK::GetMainModuleBase());
@@ -224,6 +248,22 @@ void RegisterNonshipCommands()
                 MILAN_INFOW(L"%s.GetBioStaticBuildVersion() => 0x%08x", *Name, (unsigned)Subsystem->GetBioStaticBuildVersion());
                 MILAN_INFOW(L"%s.GetBioDynamicBuildVersion() => 0x%08x", *Name, (unsigned)Subsystem->GetBioDynamicBuildVersion());
             }
+            return true;
+        });
+
+    ::Milan::Console::RegisterCommand(L"log", L"loginternal",
+        [](wchar_t const*)
+        {
+            bool const Enabled = ::Milan::Output::ToggleLogInternal();
+            MILAN_INFOW(L"loginternal: %s", Enabled ? L"enabled" : L"disabled");
+            return true;
+        });
+
+    ::Milan::Console::RegisterCommand(L"log", L"warninternal",
+        [](wchar_t const*)
+        {
+            bool const Enabled = ::Milan::Output::ToggleWarnInternal();
+            MILAN_INFOW(L"warninternal: %s", Enabled ? L"enabled" : L"disabled");
             return true;
         });
 

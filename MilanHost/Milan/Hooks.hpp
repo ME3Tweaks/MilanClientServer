@@ -12,8 +12,19 @@
 #include "Proxies/Engine.hpp"
 
 
-// ! Hook patterns.
+// ! Globals and hook patterns.
 // ========================================
+
+#define GLOBAL_GPROPADDR_POSTRIP \
+    ::LESDK::Address::FromInstrRelative("48 8B 35 ?? ?? ?? ?? 44 89 75 ?? 48 8B 43 28 0F B6 10")
+
+#define GLOBAL_GPROPOBJECT_POSTRIP \
+    ::LESDK::Address::FromInstrRelative("48 89 0D ?? ?? ?? ?? 45 33 F6 4C 89 35 ?? ?? ?? ?? 48 8B 42 28")
+
+#define GLOBAL_GRUNTIMEUCFLAGS_OFFSET \
+    ::LESDK::Address::FromOffset(0x17CD620)
+    // TODO: Use post-logical lookup once sdk implements that.
+    // ::LESDK::Address::FromInstrLogical("83 0D ?? ?? ?? ?? 02 48 8B 45 28 0F B6 08 48 FF C0")
 
 #define GLOBAL_BIOREQUESTEXIT_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 89 5C 24 ?? */ "48 89 6C 24 ?? 48 89 74 24 ?? 57 48 81 EC 50 03 00 00")
@@ -93,6 +104,14 @@ extern bool gb_logProcessDelegate;
 extern bool gb_logProcessEvent;
 extern bool gb_logProcessInternal;
 extern bool gb_logLookupPackageGuid;
+
+
+// ! Global variables.
+// ========================================
+
+extern UObject**            pGPropObject;
+extern unsigned char**      pGPropAddr;
+extern unsigned int*        pGRuntimeUCFlags;
 
 
 // ! Miscellaneous functions / methods.

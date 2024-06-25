@@ -27,4 +27,13 @@ namespace Milan::Globals
 
     wchar_t const* GetCmdString();
     wchar_t const* GetCmdArgs();
+
+    constexpr bool IsFinalBuild() noexcept
+    {
+#ifdef _FINAL
+        return true;
+#else
+        return false;
+#endif
+    }
 }

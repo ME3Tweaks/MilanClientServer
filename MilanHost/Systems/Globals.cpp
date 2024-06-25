@@ -97,6 +97,16 @@ namespace Milan::Globals
         WndProc_orig = Context.ResolveTyped<t_WndProc>(GLOBAL_WNDPROC_RVA);
         MILAN_DEBUGW(L"WndProc found: 0x%p", (void*)WndProc_orig);
 
+        // More global variables.
+
+        pGPropAddr = Context.ResolveTyped<unsigned char*>(GLOBAL_GPROPADDR_POSTRIP);
+        MILAN_DEBUGW(L"GPropAddr found: 0x%p (0x%p)", (void*)pGPropAddr, (void*)*pGPropAddr);
+        pGPropObject = Context.ResolveTyped<UObject*>(GLOBAL_GPROPOBJECT_POSTRIP);
+        MILAN_DEBUGW(L"GPropObject found: 0x%p (0x%p)", (void*)pGPropObject, (void*)*pGPropObject);
+        pGRuntimeUCFlags = Context.ResolveTyped<unsigned int>(GLOBAL_GRUNTIMEUCFLAGS_OFFSET);
+        MILAN_DEBUGW(L"GRuntimeUCFlags found: 0x%p (%u)", (void*)pGRuntimeUCFlags, *pGRuntimeUCFlags);
+
+
         // From this point on, use the macro system to simplify search and installation.
 
         INSTALL_HOOK_ONE(BioRequestExit, GLOBAL_BIOREQUESTEXIT_PHOOK);

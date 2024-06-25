@@ -1,8 +1,18 @@
 #include <LESDK/Headers.hpp>
 
 #include "Milan/Hooks.hpp"
+#include "Milan/Intercept.hpp"
 #include "Milan/Logger.hpp"
+#include "Milan/Misc.hpp"
 #include "Systems/Output.hpp"
+#include "Systems/Globals.hpp"
+
+
+namespace
+{
+    bool gb_enableLogInternal = false;
+    bool gb_enableWarnInternal = false;
+}
 
 
 #ifndef _FINAL_RELEASE
@@ -15,6 +25,61 @@ BOOL WINAPI MilanConsoleHandler(DWORD const dwCtrlType)
 }
 #endif
 
+UFunction* FindRequiredFunction(short const iNative)
+{
+    for (TypedObjectIterator<UFunction, false, false> Iter; Iter; ++Iter)
+    {
+        if ((*Iter)->iNative == iNative)
+        {
+            return *Iter;
+        }
+    }
+
+    MILAN_FATALW(L"failed to find required function with iNative = %d", iNative);
+    //return nullptr;
+}
+
+void UObject_LogInternal(UObject* const Context, FFrame* const Stack, [[maybe_unused]] void* const Result)
+{
+    NATIVE_GET_STRING(Str);
+    NATIVE_GET_NAME_OPTIONAL(Tag, SFXName{});
+    NATIVE_FINISH();
+
+    thread_local FString ObjectName{};
+    thread_local FString FunctionName{};
+
+    if (!gb_enableLogInternal)
+        return;
+
+    ObjectName.Clear();
+    Context->AppendName(ObjectName, SFXName::k_formatInstanced);
+
+    FunctionName.Clear();
+    Stack->Node->AppendName(FunctionName, SFXName::k_formatInstanced);
+
+    MILAN_DEBUGW(L"LogInternal (%s.%s) {%s}: %s", *ObjectName, *FunctionName, *Tag.ToString(), *Str);
+}
+
+void UObject_WarnInternal(UObject* const Context, FFrame* const Stack, [[maybe_unused]] void* const Result)
+{
+    NATIVE_GET_STRING(Str);
+    NATIVE_FINISH();
+
+    thread_local FString ObjectName{};
+    thread_local FString FunctionName{};
+
+    if (!gb_enableWarnInternal)
+        return;
+
+    ObjectName.Clear();
+    Context->AppendName(ObjectName, SFXName::k_formatInstanced);
+
+    FunctionName.Clear();
+    Stack->Node->AppendName(FunctionName, SFXName::k_formatInstanced);
+
+    MILAN_WARNW(L"WarnInternal (%s.%s): %s", *ObjectName, *FunctionName, *Str);
+}
+
 
 namespace Milan::Output
 {
@@ -23,6 +88,9 @@ namespace Milan::Output
 
     bool                gb_initialized = false;
 
+
+    // ! Global subsystem functions.
+    // ========================================
 
     void Initialize(::LESDK::Initializer& Context)
     {
@@ -65,6 +133,27 @@ namespace Milan::Output
         MILAN_INFOW(L"output system initialized");
     }
 
+    void DeferredInitialize(::LESDK::Initializer& Context)
+    {
+        (void)Context;
+
+        FString const CmdArgs{ Globals::GetCmdArgs() };
+
+        gb_enableLogInternal = CmdArgs.Contains(L"-startloginternal", true);
+        gb_enableWarnInternal = CmdArgs.Contains(L"-startwarninternal", true);
+
+        // Replace LogInternal() and WarnInternal() to output to our logger.
+        // TODO: Disable this behavior when DebugLogger is installed.
+
+        GNatives[0xE7] = UObject_LogInternal;
+        FindRequiredFunction(0xE7)->Func = UObject_LogInternal;
+        MILAN_INFOW(L"replaced LogInternal through iNative");
+
+        GNatives[0xE8] = UObject_WarnInternal;
+        FindRequiredFunction(0xE8)->Func = UObject_WarnInternal;
+        MILAN_INFOW(L"replaced WarnInternal through iNative");
+    }
+
     void Terminate()
     {
         MILAN_INFOW(L"output system terminating");
@@ -91,6 +180,9 @@ namespace Milan::Output
     }
 
 
+    // ! Public interface.
+    // ========================================
+
     ILogger& GetMainLogger()
     {
         assert(gp_activeLogger != nullptr);
@@ -102,4 +194,17 @@ namespace Milan::Output
         assert(gp_mainLogger != nullptr);
         gp_mainLogger->ForceFlush();
     }
+
+    bool ToggleLogInternal() noexcept
+    {
+        gb_enableLogInternal = !gb_enableLogInternal;
+        return gb_enableLogInternal;
+    }
+
+    bool ToggleWarnInternal() noexcept
+    {
+        gb_enableWarnInternal = !gb_enableWarnInternal;
+        return gb_enableWarnInternal;
+    }
+
 }
