@@ -71,8 +71,9 @@ namespace Milan::Profilers
         Console::RegisterCommand(L"dbg", L"nextprofile",
             [](wchar_t const*)
             {
-                g_mode = (ECanvasProfilerMode)((int)g_mode + 1);
-                if (g_mode >= CPM_Max) g_mode = CPM_None;
+                auto NextMode = (ECanvasProfilerMode)((int)g_mode + 1);
+                if (NextMode >= CPM_Max) NextMode = CPM_None;
+                g_mode = NextMode;
                 return true;
             });
 
@@ -101,6 +102,25 @@ namespace Milan::Profilers
                     g_mode = CPM_WorldInfo;
                 else
                     MILAN_WARNW(L"unknown dbg.profile parameter: %s", Params);
+
+                return true;
+            });
+
+        Console::RegisterCommand(L"dump", L"pckgmap",
+            [](wchar_t const*)
+            {
+                MILAN_DEBUGW(L"dumping package maps for active connections");
+                for (TypedObjectIterator<UPackageMap, true, false> Iter; Iter; ++Iter)
+                {
+                    MILAN_DEBUGW(L"  %s", *(*Iter)->StaticFullName());
+                    auto const Packages = reinterpret_cast<UPackageMap_Proxy*>(*Iter);
+                    for (FPackageInfo const& Package : Packages->List)
+                    {
+                        MILAN_DEBUGW(L"    %s, guid = %s, gen = %d / %d",
+                            *Package.PackageName.ToString(), *FormatGuid(Package.Guid),
+                            Package.LocalGeneration, Package.RemoteGeneration);
+                    }
+                }
 
                 return true;
             });

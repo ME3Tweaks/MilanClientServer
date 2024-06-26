@@ -56,6 +56,9 @@
 #define GLOBAL_UOBJECT_SKIPFUNCTION_PHOOK \
     ::LESDK::Address::FromPostHook(/* 40 55 41 54 41 */ "55 41 56 41 57 48 83 EC 30 48 8D 6C 24 ?? 48 89 5D ?? 48 89 75 ?? 48 89 7D ?? 48 8B 05 ?? ?? ?? ?? 48 33 C5 48 89 45 00 48 8B DA")
 
+#define GLOBAL_USFXENGINE_UPDATEDYNAMICLOADMAPPINGFINDHASH_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 89 5C 24 08 */ "48 89 6C 24 ?? 48 89 74 24 ?? 48 89 7C 24 ?? 41 56 48 83 EC 20 33 FF 44 8B F2")
+
 #define GLOBAL_UWORLD_TICK_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 F3 0F */ "11 50 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D 68 A1")
 
@@ -213,6 +216,15 @@ void UObject_ProcessInternal_hook(UObject* Context, FFrame* Stack, void* Result)
 
 using t_UObject_SkipFunction = void(UObject* Context, void* Result, UFunction* Function);
 extern t_UObject_SkipFunction* UObject_SkipFunction;
+
+
+// ! USFXEngine methods.
+// ========================================
+
+using t_USFXEngine_UpdateDynamicLoadMappingFindHash = int(USFXEngine* Context, int ObjectNetID);
+extern t_USFXEngine_UpdateDynamicLoadMappingFindHash* USFXEngine_UpdateDynamicLoadMappingFindHash_orig;
+
+int USFXEngine_UpdateDynamicLoadMappingFindHash_hook(USFXEngine* Context, int ObjectNetID);
 
 
 // ! UWorld methods.

@@ -252,10 +252,22 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
 t_UObject_ProcessInternal* UObject_ProcessInternal_orig = nullptr;
 void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, void* const Result)
 {
-    bool bCallOriginal = true;
+    [[maybe_unused]] bool bLogAnyway = false;
+    [[maybe_unused]] bool bCallOriginal = true;
+
+    //if (Context->IsA<USFXWave>() || Context->IsA<ASFXWaveCoordinator>())
+    //    bLogAnyway = true;
+
+    if (Context->IsA<ASFXWaveCoordinator>() &&
+        Stack->Node->GetName().Equals(L"BeginWaveLoading"))
+    {
+        [[maybe_unused]]
+        auto const Coordinator = Context->Cast<ASFXWaveCoordinator>();
+        __noop();
+    }
 
 #ifndef _FINAL_RELEASE
-    if (gb_logProcessInternal)
+    if (gb_logProcessInternal || bLogAnyway)
     {
         static FString ObjectName{}, FunctionName{};
 
@@ -349,6 +361,28 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
 }
 
 t_UObject_SkipFunction* UObject_SkipFunction = nullptr;
+
+
+// ! USFXEngine methods.
+// ========================================
+
+t_USFXEngine_UpdateDynamicLoadMappingFindHash* USFXEngine_UpdateDynamicLoadMappingFindHash_orig = nullptr;
+int USFXEngine_UpdateDynamicLoadMappingFindHash_hook(USFXEngine* const Context, int const ObjectNetID)
+{
+    int const Result = (*USFXEngine_UpdateDynamicLoadMappingFindHash_orig)(Context, ObjectNetID);
+#ifndef _FINAL_RELEASE
+    if (Result >= 0)
+    {
+        auto const& Resolved = Context->DynamicLoadMapping(Result);
+        MILAN_DEBUGW(L"USFXEngine::UpdateDynamicLoadMappingFindHash: %u => %s", (UINT)ObjectNetID, *Resolved.ObjectName);
+    }
+    else
+    {
+        MILAN_WARNW(L"USFXEngine::UpdateDynamicLoadMappingFindHash: %u => failed", (UINT)ObjectNetID);
+    }
+#endif
+    return Result;
+}
 
 
 // ! UWorld methods.
