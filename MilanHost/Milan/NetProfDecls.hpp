@@ -21,6 +21,8 @@
     extern "C" void MILAN_VARCAT(name, _Handler)(__VA_ARGS__)
 
 
+MILAN_DECLARE_EXTRACTOR(MlnUNetConnectionReceivedPacket1, UNetConnection* Connection, FInBunch* Bunch);
+
 MILAN_DECLARE_EXTRACTOR(MlnUChannelSendBunch1, FOutBunch* Bunch);
 MILAN_DECLARE_EXTRACTOR(MlnUChannelSendBunch2, UChannel* Channel, FOutBunch* Bunch);
 MILAN_DECLARE_EXTRACTOR(MlnUActorChannelReplicateActor1, UActorChannel* Channel, AActor* Actor);

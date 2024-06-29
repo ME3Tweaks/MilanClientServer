@@ -73,6 +73,9 @@
 #define GLOBAL_UACTORCHANNEL_REPLICATEACTOR_PHOOK \
     ::LESDK::Address::FromPostHook(/* 40 55 53 56 57 */ "41 54 41 55 41 56 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC 08 02 00 00 48 C7 85 ?? ?? ?? ?? FE FF FF FF")
 
+#define GLOBAL_UACTORCHANNEL_SETCHANNELACTOR_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 8B C4 57 41 */ "56 41 57 48 81 EC 40 01 00 00 48 C7 44 24 50 FE FF FF FF 48 89 58 10 48 89 68 18 48 89 70 20 48 8B FA")
+
 #define GLOBAL_UGUIDCACHE_LOOKUPPACKAGEGUID_PHOOK \
     ::LESDK::Address::FromPostHook(/* 40 53 48 83 EC */ "20 48 83 C1 60 49 8B D8 E8 ?? ?? ?? ?? 48 8B C8 48 85 C0 74 06")
 
@@ -81,6 +84,9 @@
 
 #define GLOBAL_UNETCONNECTION_CLOSE_PATTERN \
     ::LESDK::Address::FromPattern("40 53 48 83 EC 20 48 83 B9 ?? ?? ?? ?? 00 48 8B D9 74 ?? 48 8B 89 ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 01")
+
+#define GLOBAL_UNETCONNECTION_CREATECHANNEL_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 89 5C 24 10 */ "48 89 6C 24 ?? 56 57 41 56 48 83 EC 40 48 8B 01 41 8B D9 41 8B E8 48 63 FA 48 8B F1")
 
 #define GLOBAL_UPACKAGEMAP_SUPPORTSOBJECT_PATTERN \
     ::LESDK::Address::FromPattern("48 83 EC 28 48 8B 01 FF 90 ?? ?? ?? ?? 33 C9 83 F8 FF")
@@ -255,6 +261,11 @@ extern t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_orig;
 
 void UActorChannel_ReplicateActor_hook(UActorChannel* Context);
 
+using t_UActorChannel_SetChannelActor = void(UActorChannel* Context, AActor* Actor);
+extern t_UActorChannel_SetChannelActor* UActorChannel_SetChannelActor_orig;
+
+void UActorChannel_SetChannelActor_hook(UActorChannel* Context, AActor* Actor);
+
 using t_UGuidCache_LookupPackageGuid = int(UGuidCache* Context, SFXName Package, FGuid* OutGuid);
 extern t_UGuidCache_LookupPackageGuid* UGuidCache_LookupPackageGuid_orig;
 
@@ -269,6 +280,11 @@ using t_UNetConnection_Close = void(UNetConnection* Context);
 extern t_UNetConnection_Close* UNetConnection_Close_orig;
 
 void UNetConnection_Close_hook(UNetConnection* Context);
+
+using t_UNetConnection_CreateChannel = UChannel* (UNetConnection* Context, EChannelType Type, INT bLocal, INT Index);
+extern t_UNetConnection_CreateChannel* UNetConnection_CreateChannel_orig;
+
+UChannel* UNetConnection_CreateChannel_hook(UNetConnection* Context, EChannelType Type, INT bLocal, INT Index);
 
 using t_UPackageMap_SupportsObject = int(UPackageMap* Context, UObject* Object);
 extern t_UPackageMap_SupportsObject* UPackageMap_SupportsObject_orig;

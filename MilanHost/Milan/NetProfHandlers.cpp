@@ -53,6 +53,34 @@ namespace
 // ! Internal handlers called by asm code.
 // ========================================
 
+void MlnUNetConnectionReceivedPacket1_Handler(UNetConnection* const Connection, FInBunch* const Bunch)
+{
+    auto const NetConn = reinterpret_cast<UNetConnection_Proxy*>(Connection);
+    auto const Channel = reinterpret_cast<UChannel_Proxy*>(NetConn->Channels[Bunch->ChannelIndex]);
+
+
+#if !defined(_FINAL_RELEASE) && false
+    if (Channel && Channel->IsA<UActorChannel>())
+    {
+        auto const ActorChannel = reinterpret_cast<UActorChannel_Proxy*>(Channel);
+        MILAN_TRACEW(L"UNetConnection::ReceivedPacket: channel = %s, actor = %s",
+            *Channel->GetName(), ActorChannel->Actor ? *ActorChannel->Actor->GetName() : L"n/a");
+    }
+#endif
+
+    if (!Bunch->bReliable && (!Bunch->bOpen || !Bunch->bClose) && (!Channel || Channel->OpenPacketId == -1))
+    {
+        auto const ChannelDesc = Channel ? Channel->GetName() : L"n/a";
+        MILAN_WARNW(L"UNetConnection::ReceivedPacket: unreliable bunch before open (channel = %s)", *ChannelDesc);
+    }
+
+    if (Bunch->bReliable && Bunch->ChannelSequence <= NetConn->InReliable[Bunch->ChannelIndex])
+    {
+        auto const ChannelDesc = Channel ? Channel->GetName() : L"n/a";
+        MILAN_WARNW(L"UNetConnection::ReceivedPacket: reliable bunch outdated (channel = %s)", *ChannelDesc);
+    }
+}
+
 // Used by UChannel::SendBunch handlers: stored by 1st, loaded and cleared by 2nd.
 static thread_local INT SendBunch1_BitsWrittenBefore = 0;
 

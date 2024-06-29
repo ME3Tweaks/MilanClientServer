@@ -118,6 +118,14 @@ public:
 };
 
 static_assert(offsetof(FInBunch, PacketId) == 0xA4);
+static_assert(offsetof(FInBunch, Next) == 0xA8);
+static_assert(offsetof(FInBunch, Connection) == 0xB0);
+static_assert(offsetof(FInBunch, ChannelIndex) == 0xB8);
+static_assert(offsetof(FInBunch, ChannelType) == 0xBC);
+static_assert(offsetof(FInBunch, ChannelSequence) == 0xC0);
+static_assert(offsetof(FInBunch, bOpen) == 0xC4);
+static_assert(offsetof(FInBunch, bClose) == 0xC5);
+static_assert(offsetof(FInBunch, bReliable) == 0xC6);
 
 
 // Outgoing bunch of information

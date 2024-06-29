@@ -230,10 +230,10 @@ void MilanCanvasDrawer::DrawHeader(std::wstring_view const Subtitle,
     PopColor();
 }
 
-void MilanCanvasDrawer::DrawString(std::wstring_view const String)
+void MilanCanvasDrawer::DrawString(std::wstring_view const String, float const Scale)
 {
     SetPosX(k_canvasPadding + Indent);
-    DrawText(String, true);
+    DrawText(String, true, ETA_Left, Scale);
 }
 
 void MilanCanvasDrawer::DrawProperty(std::wstring_view const Name, std::wstring_view const String)
@@ -390,20 +390,20 @@ void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* const Target)
 
     Drawer.PushIndent();
     Drawer.DrawProperty(L"URL", WorldInfo->GetLocalURL());
-    Drawer.DrawProperty(L"World", (*GWorld)->StaticFullName());
+    //Drawer.DrawProperty(L"World", (*GWorld)->StaticFullName());
     Drawer.DrawProperty(L"GameInfo", WorldInfo->Game ? WorldInfo->Game->StaticName() : L"n/a");
     Drawer.DrawProperty(L"ReplicationInfo", WorldInfo->GRI ? WorldInfo->GRI->StaticName() : L"n/a");
     Drawer.DrawProperty(L"NetMode", FString::Printf(L"%d (%s)", WorldInfo->NetMode, NetModeString(WorldInfo->NetMode)));
     Drawer.PopIndent();
 
-    Drawer.DrawSeparator();
+    //Drawer.DrawSeparator();
 
     // NetDriver
 
     auto* const World = reinterpret_cast<UWorld_Proxy*>(*GWorld);
     auto* const NetDriver = reinterpret_cast<UNetDriver_Proxy*>(World->NetDriver);
 
-    Drawer.DrawString(FString::Printf(L"World: %s", *World->StaticName()));
+    //Drawer.DrawString(FString::Printf(L"World: %s", *World->StaticName()));
     Drawer.DrawString(FString::Printf(L"NetDriver: %s", NetDriver ? *NetDriver->StaticName() : L"n/a"));
 
     if (NetDriver && WorldInfo->NetMode == NM_ListenServer)
@@ -421,7 +421,7 @@ void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* const Target)
 
             Drawer.PushIndent();
             Drawer.DrawProperty(L"Viewer", ChildConn->Viewer ? ChildConn->Viewer->StaticFullName() : L"n/a");
-            Drawer.DrawProperty(L"ClientWorldPackageName", ChildConn->ClientWorldPackageName.ToString());
+            //Drawer.DrawProperty(L"ClientWorldPackageName", ChildConn->ClientWorldPackageName.ToString());
             Drawer.DrawString(L"Actor channels");
             unsigned int ChannelIndex = 0;
             for (auto const& [Actor, Channel] : ChildConn->ActorChannels)
@@ -444,7 +444,7 @@ void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* const Target)
             for (auto const VisibleLevelName : ChildConn->ClientVisibleLevelNames)
             {
                 Drawer.PushIndent();
-                Drawer.DrawProperty(FString::Printf(L"%d", VisibleIndex++), VisibleLevelName.ToString());
+                Drawer.DrawString(*FString::Printf(L"%d. %s", VisibleIndex++, *VisibleLevelName.ToString()));
                 Drawer.PopIndent();
             }
             Drawer.DrawString(L"Pending packages");
@@ -511,7 +511,7 @@ void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel_Proxy* const Chan
     //// I'd very much like to know what's supposed to be in here...
     //MILAN_CHECKW(Channel->Unknown_114.Count() == 0, L"");
 
-    Drawer.DrawString(FString::Printf(L"Channel %d: %s", Index, Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a"));
+    Drawer.DrawString(FString::Printf(L"Channel %d: %s", Index, Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a"), 0.8f);
     Drawer.PushIndent();
 
     // > Replicated properties.

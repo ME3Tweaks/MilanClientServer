@@ -472,6 +472,13 @@ void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
     (*UActorChannel_ReplicateActor_orig)(Context);
 }
 
+t_UActorChannel_SetChannelActor* UActorChannel_SetChannelActor_orig = nullptr;
+void UActorChannel_SetChannelActor_hook(UActorChannel* const Context, AActor* const Actor)
+{
+    //MILAN_TRACEW(L"UActorChannel::SetChannelActor: %s <- %s", *Context->GetName(), *Actor->GetName());
+    (*UActorChannel_SetChannelActor_orig)(Context, Actor);
+}
+
 t_UGuidCache_LookupPackageGuid* UGuidCache_LookupPackageGuid_orig = nullptr;
 int UGuidCache_LookupPackageGuid_hook(UGuidCache* const Context, SFXName const Package, FGuid* const OutGuid)
 {
@@ -551,6 +558,28 @@ void UNetConnection_Close_hook(UNetConnection* const Context)
     }
 
     (*UNetConnection_Close_orig)(Context);
+}
+
+t_UNetConnection_CreateChannel* UNetConnection_CreateChannel_orig = nullptr;
+UChannel* UNetConnection_CreateChannel_hook(UNetConnection* const Context, EChannelType const Type, INT const bLocal, INT const Index)
+{
+    //auto const DescType = [](EChannelType const T) -> FString
+    //    {
+    //        switch (T)
+    //        {
+    //        case CHTYPE_None: return L"None";
+    //        case CHTYPE_Control: return L"Control";
+    //        case CHTYPE_Actor: return L"Actor";
+    //        case CHTYPE_File: return L"File";
+    //        case CHTYPE_Voice: return L"Voice";
+    //        }
+    //        return FString::Printf(L"%d", (int)T);
+    //    };
+
+    //MILAN_TRACEW(L"UNetConnection::CreateChannel: type = %s, local = %s, index = %d", *DescType(Type), bLocal ? L"true" : L"false", Index);
+    UChannel* const Return = (*UNetConnection_CreateChannel_orig)(Context, Type, bLocal, Index);
+    //if (Return == nullptr) MILAN_WARNW(L"UNetConnection::CreateChannel:   failed, returning nullptr");
+    return Return;
 }
 
 t_UPackageMap_SupportsObject* UPackageMap_SupportsObject_orig = nullptr;

@@ -47,6 +47,8 @@ endm
 
 .data
 
+UNetConnectionReceivedPacket1_conn                      DQ ?
+UNetConnectionReceivedPacket1_bunch                     DQ ?
 UChannelSendBunch1_bunch                                DQ ?
 UChannelSendBunch2_chan                                 DQ ?
 UChannelSendBunch2_bunch                                DQ ?
@@ -112,6 +114,25 @@ UNetPendingLevelNotifyControlMessageUnload_guid         DQ ?
 ;; FUNCTIONS
 
 .code
+
+externdef MlnUNetConnectionReceivedPacket1_Handler:proc
+MlnUNetConnectionReceivedPacket1 proc
+    lea rax, [rbp - 0E0h]
+    mov UNetConnectionReceivedPacket1_bunch, rax
+    mov UNetConnectionReceivedPacket1_conn, rsi
+
+    storeall
+    mov rbp, rsp
+    initstack 20h
+
+    mov rcx, UNetConnectionReceivedPacket1_conn
+    mov rdx, UNetConnectionReceivedPacket1_bunch
+    call MlnUNetConnectionReceivedPacket1_Handler
+
+    mov rsp, rbp
+    restoreall
+    ret
+MlnUNetConnectionReceivedPacket1 endp
 
 externdef MlnUChannelSendBunch1_Handler:proc
 MlnUChannelSendBunch1 proc

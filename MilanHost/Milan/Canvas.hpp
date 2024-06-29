@@ -122,7 +122,7 @@ public:
     void PopIndent();
 
     void DrawHeader(std::wstring_view Subtitle, std::wstring_view Description, UObject* Target, FColor Color);
-    void DrawString(std::wstring_view String);
+    void DrawString(std::wstring_view String, float Scale = 1.f);
     void DrawProperty(std::wstring_view Name, std::wstring_view String);
     void DrawSeparator();
 

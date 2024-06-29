@@ -143,9 +143,11 @@ namespace Milan::Globals
         // Full-function hooks:
 
         INSTALL_HOOK_TWO(UActorChannel, ReplicateActor, GLOBAL_UACTORCHANNEL_REPLICATEACTOR_PHOOK);
+        INSTALL_HOOK_TWO(UActorChannel, SetChannelActor, GLOBAL_UACTORCHANNEL_SETCHANNELACTOR_PHOOK);
         INSTALL_HOOK_TWO(UGuidCache, LookupPackageGuid, GLOBAL_UGUIDCACHE_LOOKUPPACKAGEGUID_PHOOK);
         INSTALL_HOOK_TWO(UNetConnection, ClientSupportsLevel, GLOBAL_UNETCONNECTION_CLIENTSUPPORTSLEVEL_PATTERN);
         INSTALL_HOOK_TWO(UNetConnection, Close, GLOBAL_UNETCONNECTION_CLOSE_PATTERN);
+        INSTALL_HOOK_TWO(UNetConnection, CreateChannel, GLOBAL_UNETCONNECTION_CREATECHANNEL_PHOOK);
         INSTALL_HOOK_TWO(UPackageMap, SupportsObject, GLOBAL_UPACKAGEMAP_SUPPORTSOBJECT_PATTERN);
         INSTALL_HOOK_TWO(UNetPendingLevel, NotifyControlMessage, GLOBAL_UNETPENDINGLEVEL_NOTIFYCONTROLMESSAGE_PHOOK);
         INSTALL_HOOK_TWO(UWorld, NotifyControlMessage, GLOBAL_UWORLD_NOTIFYCONTROLMESSAGE_PHOOK);
@@ -162,6 +164,8 @@ namespace Milan::Globals
 
         [[maybe_unused]]
         ::CaveIndexer LocalCaveIndexer{ /* MinSize: */ 20 };
+
+        ::MiddleIntercept::Install(L"UNetConnection::ReceivedPacket-1", 0x48B663, MlnUNetConnectionReceivedPacket1, LocalCaveIndexer);
 
         ::MiddleIntercept::Install(L"UChannel::SendBunch-1", 0x48E3D9, MlnUChannelSendBunch1, LocalCaveIndexer);
         ::MiddleIntercept::Install(L"UChannel::SendBunch-2", 0x48E645, MlnUChannelSendBunch2, LocalCaveIndexer);
@@ -199,9 +203,11 @@ namespace Milan::Globals
 
 
 #ifndef _FINAL_RELEASE
+#if defined(ENABLE_GUIDCACHE_OVERRIDE) && ENABLE_GUIDCACHE_OVERRIDE
         MILAN_WARNW(L"this session is using guid cache override");
         gp_guidCacheOverride = new GuidCacheOverride("./guidcache-override.txt");
         gp_guidCacheOverride->UpdateLookup();
+#endif
 #endif
 
 
