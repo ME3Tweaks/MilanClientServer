@@ -8,6 +8,7 @@
 
 #include "Entry.hpp"
 #include "Milan/Base.hpp"
+#include "Milan/GuidCacheUtils.hpp"
 #include "Milan/Logger.hpp"
 #include "Milan/Misc.hpp"
 #include "Proxies/Core.hpp"
@@ -291,6 +292,14 @@ void RegisterNonshipCommands()
             gb_logPendingPackages = !gb_logPendingPackages;
             MILAN_INFOW(L"logging of net pending packages: %s",
                 gb_logPendingPackages ? L"enabled" : L"disabled");
+            return true;
+        });
+
+    ::Milan::Console::RegisterCommand(L"util", L"updateguidcacheoverride",
+        [](wchar_t const*)
+        {
+            if (gp_guidCacheOverride)
+                gp_guidCacheOverride->UpdateLookup();
             return true;
         });
 

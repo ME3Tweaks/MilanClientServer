@@ -1,12 +1,16 @@
 #include <LESDK/Headers.hpp>
 
 #include "Milan/Base.hpp"
+#include "Milan/GuidCacheUtils.hpp"
 #include "Milan/Hooks.hpp"
 #include "Milan/Intercept.hpp"
 #include "Milan/NetProfDecls.hpp"
 #include "Systems/Globals.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/Imgui.hpp"
+
+
+GuidCacheOverride* gp_guidCacheOverride = nullptr;
 
 
 // ! Allocator subsystem.
@@ -194,12 +198,25 @@ namespace Milan::Globals
         // Network debug end.
 
 
+#ifndef _FINAL_RELEASE
+        MILAN_WARNW(L"this session is using guid cache override");
+        gp_guidCacheOverride = new GuidCacheOverride("./guidcache-override.txt");
+        gp_guidCacheOverride->UpdateLookup();
+#endif
+
+
         MILAN_INFOW(L"globals system initialized");
     }
 
     void Terminate()
     {
         MILAN_INFOW(L"globals system terminating");
+
+        if (gp_guidCacheOverride)
+        {
+            MILAN_DEBUGW(L"deleting guidcache override");
+            delete std::exchange(gp_guidCacheOverride, nullptr);
+        }
     }
 
 

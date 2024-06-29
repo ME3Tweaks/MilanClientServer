@@ -12,6 +12,13 @@
 #include "Proxies/Engine.hpp"
 
 
+// ! Enable / disable definitions.
+// ========================================
+
+#define ENABLE_GUIDCACHE_OVERRIDE 1
+
+
+
 // ! Globals and hook patterns.
 // ========================================
 
@@ -110,7 +117,7 @@ extern bool gb_logLookupPackageGuid;
 extern bool gb_logPendingPackages;
 
 
-// ! Global variables.
+// ! Located global variables.
 // ========================================
 
 extern UObject**            pGPropObject;

@@ -15,6 +15,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Milan/Buffers.hpp
   ${PROJ_FOLDER}/Milan/Canvas.cpp
   ${PROJ_FOLDER}/Milan/Canvas.hpp
+  ${PROJ_FOLDER}/Milan/GuidCacheUtils.cpp
+  ${PROJ_FOLDER}/Milan/GuidCacheUtils.hpp
   ${PROJ_FOLDER}/Milan/Hooks.cpp
   ${PROJ_FOLDER}/Milan/Hooks.hpp
   ${PROJ_FOLDER}/Milan/Intercept.cpp

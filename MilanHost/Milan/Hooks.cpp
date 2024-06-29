@@ -1,5 +1,6 @@
 #include <array>
 
+#include "Milan/GuidCacheUtils.hpp"
 #include "Milan/Hooks.hpp"
 #include "Milan/Intercept.hpp"
 #include "Milan/Logger.hpp"
@@ -339,6 +340,15 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     // Additional information in the title bar for debugging.
 
     static bool s_updateWindow = true;
+    static int  s_savedPort = 0;
+
+    int WorldPort = 0;
+    if (*GWorld != nullptr)
+    {
+        WorldPort = reinterpret_cast<UWorld_Proxy*>(*GWorld)->URL.Port;
+        s_updateWindow = s_updateWindow || (s_savedPort != WorldPort);
+    }
+
     if (s_updateWindow)
     {
         for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
@@ -351,10 +361,11 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
 
             MILAN_TRACEW(L"Updating title for %s, FViewport* = %p, HWND = %p", *(*Iter)->StaticName(), Viewport, (void*)*Window);
 
-            *Name = FString::Printf(L"Mass Effect 3 (INST = %d) PID = %d", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
+            *Name = FString::Printf(L"Mass Effect 3 (INST = %d) PID = %d PORT = %d", GetGameInstanceOrdinal(), ::GetCurrentProcessId(), WorldPort);
             DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
 
             s_updateWindow = false;
+            s_savedPort = WorldPort;
         }
     }
 #endif
@@ -465,13 +476,29 @@ t_UGuidCache_LookupPackageGuid* UGuidCache_LookupPackageGuid_orig = nullptr;
 int UGuidCache_LookupPackageGuid_hook(UGuidCache* const Context, SFXName const Package, FGuid* const OutGuid)
 {
     auto const Cache = reinterpret_cast<UGuidCache_Proxy*>(Context);
-    bool const bFound = (*UGuidCache_LookupPackageGuid_orig)(Context, Package, OutGuid);
+    auto const bFound = (*UGuidCache_LookupPackageGuid_orig)(Context, Package, OutGuid);
 
     if (!bFound && gb_logLookupPackageGuid)
     {
         MILAN_WARNW(L"UGuidCache::LookupPackageGuid failed for cache = '%s', package = '%s'",
             *Cache->Filename, *Package.ToString());
     }
+
+#if defined(ENABLE_GUIDCACHE_OVERRIDE) && ENABLE_GUIDCACHE_OVERRIDE
+
+    if (gp_guidCacheOverride != nullptr)
+    {
+        auto const Override = gp_guidCacheOverride->Get(Package);
+        if (Override.has_value())
+        {
+            MILAN_WARNW(L"UGuidCache::LookupPackageGuid using override for package = '%s', new guid = '%s'",
+                *Package.ToString(), *FormatGuid(*Override));
+            *OutGuid = *Override;
+            return TRUE;
+        }
+    }
+
+#endif
 
     MILAN_UNUSED(Cache);
     return bFound;

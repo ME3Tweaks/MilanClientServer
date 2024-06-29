@@ -7,6 +7,10 @@
 #include <LESDK/Init.hpp>
 
 
+class GuidCacheOverride;
+extern GuidCacheOverride* gp_guidCacheOverride;
+
+
 namespace Milan::Allocator
 {
     void Initialize(::LESDK::Initializer& Context);

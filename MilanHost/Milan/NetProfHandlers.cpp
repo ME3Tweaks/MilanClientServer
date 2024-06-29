@@ -1,6 +1,7 @@
 #include <intrin.h>
 
 #include "Milan/Base.hpp"
+#include "Milan/Hooks.hpp"
 #include "Milan/Misc.hpp"
 #include "Milan/NetProfDecls.hpp"
 #include "Milan/NetProfStream.hpp"
@@ -311,6 +312,15 @@ void MlnUNetPendingLevelNotifyControlMessageUses_Handler(UNetConnection* const C
     for (TypedObjectIterator<UGuidCache, true, false> Iter{}; Iter; ++Iter)
     {
         // Let's assume our context netpendinglevel caches all the guidcaches.
+
+#if defined(ENABLE_GUIDCACHE_OVERRIDE) && ENABLE_GUIDCACHE_OVERRIDE
+        bFoundPackage = !!UGuidCache_LookupPackageGuid_hook(*Iter, Package->PackageName, &FoundGuid);
+        if (bFoundPackage)
+        {
+            bMatchedPackage = FoundGuid == Package->Guid;
+            break;
+        }
+#else
         auto* const Cache = reinterpret_cast<UGuidCache_Proxy*>(*Iter);
         auto* const Guid = Cache->PackageGuids.Find(SFXName(Package->PackageName));
 
@@ -322,6 +332,7 @@ void MlnUNetPendingLevelNotifyControlMessageUses_Handler(UNetConnection* const C
             FoundGuid = *Guid;
             break;
         }
+#endif
     }
 
     if (bMatchedPackage)
