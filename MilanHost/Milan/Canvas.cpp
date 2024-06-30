@@ -346,11 +346,12 @@ void ProfilePlayerControllers(MilanCanvasDrawer& Drawer, UObject* Target)
         Drawer.DrawString(Controller->StaticFullName());
         Drawer.PushIndent();
         Drawer.DrawProperty(L"Pawn", Controller->Pawn ? Controller->Pawn->StaticFullName() : L"n/a");
+        Drawer.DrawProperty(L"Player", Controller->Player ? Controller->Player->StaticFullName() : L"n/a");
         Drawer.DrawProperty(L"PRI", Controller->PlayerReplicationInfo ? Controller->PlayerReplicationInfo->StaticFullName() : L"n/a");
         if (Controller->PlayerReplicationInfo != nullptr)
         {
             Drawer.DrawProperty(L"PRI.Owner", Controller->PlayerReplicationInfo->Owner ? Controller->PlayerReplicationInfo->Owner->StaticFullName() : L"n/a");
-            Drawer.DrawProperty(L"PRI.UniqueId", FString::Printf(L"%u:%u", Controller->PlayerReplicationInfo->UniqueId.Uid.A, Controller->PlayerReplicationInfo->UniqueId.Uid.B));
+            //Drawer.DrawProperty(L"PRI.UniqueId", FString::Printf(L"%u:%u", Controller->PlayerReplicationInfo->UniqueId.Uid.A, Controller->PlayerReplicationInfo->UniqueId.Uid.B));
             Drawer.DrawProperty(L"PRI.SavedAddress", Controller->PlayerReplicationInfo->SavedNetworkAddress);
         }
         Drawer.DrawProperty(L"Actor", FString::Printf(L"bDeleteMe=%d, bStatic=%d, bGameRelevant=%d",
@@ -365,6 +366,37 @@ void ProfilePlayerControllers(MilanCanvasDrawer& Drawer, UObject* Target)
         Drawer.PopIndent();
     }
 
+    Drawer.DrawSeparator();
+
+    auto const World = reinterpret_cast<UWorld_Proxy*>(*GWorld);
+    auto const Persistent = reinterpret_cast<ULevelBase_Proxy*>(World->PersistentLevel);
+    auto const First = Persistent->Actors(0);
+
+    Drawer.DrawString(L"controller chain on persistent level:");
+    Drawer.PushIndent();
+
+    if (auto const WorldInfo = First->Cast<AWorldInfo>(); WorldInfo)
+    {
+        for (AController* Controller = WorldInfo->ControllerList;
+             Controller != nullptr; Controller = Controller->NextController)
+        {
+            auto Pawn = Controller->Pawn ? Controller->Pawn->GetName() : L"n/a";
+            auto Player = FString(L"n/a");
+
+            if (auto const BioPlayerController = Controller->Cast<ABioPlayerController>(); BioPlayerController)
+                Player = BioPlayerController->Player ? BioPlayerController->Player->GetName() : L"n/a";
+
+            Drawer.DrawString(*FString::Printf(L"%s, Pawn = %s, Player = %s", *Controller->GetName(), *Pawn, *Player));
+        }
+    }
+    else
+    {
+        Drawer.PushColor(255, 0, 0, 255);
+        Drawer.DrawString(L"first actor in persistent level is not a world info");
+        Drawer.PopColor();
+    }
+
+    Drawer.PopIndent();
 }
 
 void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* const Target)

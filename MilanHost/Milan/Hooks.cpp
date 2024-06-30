@@ -4,6 +4,7 @@
 #include "Milan/Hooks.hpp"
 #include "Milan/Intercept.hpp"
 #include "Milan/Logger.hpp"
+#include "Milan/Misc.hpp"
 #include "Milan/NetProfStream.hpp"
 #include "Systems/Console.hpp"
 #include "Systems/Globals.hpp"
@@ -340,15 +341,6 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     // Additional information in the title bar for debugging.
 
     static bool s_updateWindow = true;
-    static int  s_savedPort = 0;
-
-    int WorldPort = 0;
-    if (*GWorld != nullptr)
-    {
-        WorldPort = reinterpret_cast<UWorld_Proxy*>(*GWorld)->URL.Port;
-        s_updateWindow = s_updateWindow || (s_savedPort != WorldPort);
-    }
-
     if (s_updateWindow)
     {
         for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
@@ -361,11 +353,10 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
 
             MILAN_TRACEW(L"Updating title for %s, FViewport* = %p, HWND = %p", *(*Iter)->StaticName(), Viewport, (void*)*Window);
 
-            *Name = FString::Printf(L"Mass Effect 3 (INST = %d) PID = %d PORT = %d", GetGameInstanceOrdinal(), ::GetCurrentProcessId(), WorldPort);
+            *Name = FString::Printf(L"Mass Effect 3 (INST = %d) PID = %d", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
             DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
 
             s_updateWindow = false;
-            s_savedPort = WorldPort;
         }
     }
 #endif
@@ -398,6 +389,45 @@ int USFXEngine_UpdateDynamicLoadMappingFindHash_hook(USFXEngine* const Context, 
 
 // ! UWorld methods.
 // ========================================
+
+t_UWorld_SpawnActor* UWorld_SpawnActor_orig = nullptr;
+AActor* UWorld_SpawnActor_hook(
+    UWorld* const Context,
+    UClass* const Class, SFXName const Name,
+    FVector* const Location, FRotator* const Rotation,
+    AActor* const Template,
+    int const Unknown1, int const Unknown2,
+    AActor* const Owner, AActor* const Instigator,
+    int const Unknown4)
+{
+    MILAN_UNUSED(Context);
+    MILAN_UNUSED_2(Class, Name);
+    MILAN_UNUSED_2(Location, Rotation);
+    MILAN_UNUSED(Template);
+    MILAN_UNUSED_2(Unknown1, Unknown2);
+    MILAN_UNUSED_2(Owner, Instigator);
+    MILAN_UNUSED(Unknown4);
+
+    //MILAN_TRACEW(L"UWorld::SpawnActor: class = %s, template = %s, name = %s",
+    //    Class ? *Class->GetName() : L"n/a", Template ? *Template->GetName() : L"n/a", *Name.ToString());
+
+    AActor* const Spawned = (*UWorld_SpawnActor_orig)(
+        Context,
+        Class, Name,
+        Location, Rotation,
+        Template,
+        Unknown1, Unknown2,
+        Owner, Instigator,
+        Unknown4);
+
+    if (Spawned == nullptr)
+    {
+        MILAN_WARNW(L"UWorld::SpawnActor: failed, class = %s, template = %s, name = %s",
+            Class ? *Class->GetName() : L"n/a", Template ? *Template->GetName() : L"n/a", *Name.ToString());
+    }
+
+    return Spawned;
+}
 
 t_UWorld_Tick* UWorld_Tick_orig = nullptr;
 void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delta)
@@ -475,7 +505,7 @@ void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
 t_UActorChannel_SetChannelActor* UActorChannel_SetChannelActor_orig = nullptr;
 void UActorChannel_SetChannelActor_hook(UActorChannel* const Context, AActor* const Actor)
 {
-    //MILAN_TRACEW(L"UActorChannel::SetChannelActor: %s <- %s", *Context->GetName(), *Actor->GetName());
+    MILAN_TRACEW(L"UActorChannel::SetChannelActor: %s <- %s", *Context->GetName(), *Actor->GetName());
     (*UActorChannel_SetChannelActor_orig)(Context, Actor);
 }
 
@@ -639,6 +669,69 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
 
     return Return;
 }
+
+t_UPackageMap_SerializeObject* UPackageMap_SerializeObject_orig = nullptr;
+int UPackageMap_SerializeObject_hook(UPackageMap* const Context, FArchive* const Archive, UClass* const Class, UObject** const Object)
+{
+    if (Archive->ArIsSaving)
+    {
+        MILAN_DEBUGW(L"UPackageMap::SerializeObject: class = %s, in = %s",
+            Class ? *Class->GetName() : L"n/a", *Object ? *(*Object)->GetName() : L"n/a");
+
+        // default or archetype objects
+        if (*Object != nullptr && ((*Object)->ObjectFlags & 0x600) != 0)
+        {
+            auto const PackageMap = reinterpret_cast<UPackageMap_Proxy*>(Context);
+            auto const Outermost = GetOutermostOf(*Object);
+            auto const Index = PackageMap->PackageMapList.Find(SFXName(Outermost->Name));
+
+            FPackageInfo const* Info = nullptr;
+            if (Index != nullptr)
+                Info = &PackageMap->List(*Index);
+
+            MILAN_DEBUGW(L"  NetIndex = %d, Outermost = %s, Index = %s, ObjBase = %s, ObjCount = %s",
+                (*Object)->NetIndex,
+                Outermost ? *Outermost->GetName() : L"n/a",
+                Index ? *FString::Printf(L"%d", *Index) : L"n/a",
+                Info ? *FString::Printf(L"%d", Info->ObjectBase) : L"n/a",
+                Info ? *FString::Printf(L"%d", Info->ObjectCount) : L"n/a");
+        }
+    }
+
+    int const Return = (*UPackageMap_SerializeObject_orig)(Context, Archive, Class, Object);
+
+    if (Archive->ArIsLoading)
+    {
+        auto const PackageMap = reinterpret_cast<UPackageMap_Proxy*>(Context);
+        MILAN_UNUSED(PackageMap);
+
+        if (*Object == nullptr)
+        {
+            SFXName const CharEnemies(L"Char_Enemies", 0);
+            for (auto const& PackageInfo : PackageMap->List)
+            {
+                if (PackageInfo.PackageName == CharEnemies)
+                {
+                    auto const Package = PackageInfo.Parent;
+                }
+            }
+        }
+
+        MILAN_DEBUGW(L"UPackageMap::SerializeObject: class = %s, out = %s  ( => %d )",
+            Class ? *Class->GetName() : L"n/a", *Object ? *(*Object)->GetName() : L"n/a", Return);
+    }
+
+    //if (Archive->ArIsLoading)
+    //{
+    //    // Let's assume that this type only ever gets FInBunch as Archive.
+    //    auto const InBunch = reinterpret_cast<FInBunch*>(Archive);
+    //    MILAN_DEBUGW(L"  Pos => %d, Bytes:", InBunch->BunchPos);
+    //    PrintHex(stdout, InBunch->Buffer.GetData(), 16, "");
+    //}
+
+    return Return;
+}
+
 
 namespace
 {

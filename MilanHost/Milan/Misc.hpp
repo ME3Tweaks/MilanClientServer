@@ -172,3 +172,18 @@ public:
         return *this;
     }
 };
+
+
+inline UPackage* GetOutermostOf(UObject* const Object)
+{
+    UObject* Outermost = Object;
+    for (; Outermost && Outermost->Outer; Outermost = Outermost->Outer) ;
+    return Outermost->Cast<UPackage>();
+}
+
+inline UPackage const* GetOutermostOf(UObject const* const Object)
+{
+    UObject const* Outermost = Object;
+    for (; Outermost && Outermost->Outer; Outermost = Outermost->Outer);
+    return Outermost->Cast<UPackage>();
+}

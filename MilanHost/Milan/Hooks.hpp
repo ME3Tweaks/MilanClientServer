@@ -15,7 +15,7 @@
 // ! Enable / disable definitions.
 // ========================================
 
-#define ENABLE_GUIDCACHE_OVERRIDE 1
+#define ENABLE_GUIDCACHE_OVERRIDE 0
 
 
 
@@ -66,6 +66,9 @@
 #define GLOBAL_USFXENGINE_UPDATEDYNAMICLOADMAPPINGFINDHASH_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 89 5C 24 08 */ "48 89 6C 24 ?? 48 89 74 24 ?? 48 89 7C 24 ?? 41 56 48 83 EC 20 33 FF 44 8B F2")
 
+#define GLOBAL_UWORLD_SPAWNACTOR_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 8B C4 55 41 */ "54 41 55 41 56 41 57 48 8D 68 ?? 48 81 EC A0 00 00 00 48 C7 45 ?? FE FF FF FF 48 89 58 ?? 48 89 70 ?? 48 89 78 ?? 49 8B F9")
+
 #define GLOBAL_UWORLD_TICK_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 F3 0F */ "11 50 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D 68 A1")
 
@@ -90,6 +93,9 @@
 
 #define GLOBAL_UPACKAGEMAP_SUPPORTSOBJECT_PATTERN \
     ::LESDK::Address::FromPattern("48 83 EC 28 48 8B 01 FF 90 ?? ?? ?? ?? 33 C9 83 F8 FF")
+
+#define GLOBAL_UPACKAGEMAP_SERIALIZEOBJECT_PATTERN \
+    ::LESDK::Address::FromPattern("48 89 5C 24 08 48 89 74 24 ?? 48 89 7C 24 ?? 55 41 56 41 57 48 8B EC 48 83 EC 30 45 33 FF 4D 8B F1 49 8B F8 48 8B DA")
 
 #define GLOBAL_UNETPENDINGLEVEL_NOTIFYCONTROLMESSAGE_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 48 89 */ "50 ?? 48 89 48 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC F0 01 00 00 48 C7 45 00 FE FF FF FF")
@@ -243,6 +249,26 @@ int USFXEngine_UpdateDynamicLoadMappingFindHash_hook(USFXEngine* Context, int Ob
 // ! UWorld methods.
 // ========================================
 
+using t_UWorld_SpawnActor = AActor* (
+    UWorld* Context,
+    UClass* Class, SFXName Name,
+    FVector* Location, FRotator* Rotation,
+    AActor* Template,
+    int Unknown1, int Unknown2,
+    AActor* Owner, AActor* Instigator,
+    int Unknown4);
+extern t_UWorld_SpawnActor* UWorld_SpawnActor_orig;
+
+AActor* UWorld_SpawnActor_hook(
+    UWorld* Context,
+    UClass* Class, SFXName Name,
+    FVector* Location, FRotator* Rotation,
+    AActor* Template,
+    int Unknown1, int Unknown2,
+    AActor* Owner, AActor* Instigator,
+    int Unknown4);
+
+
 using t_UWorld_Tick = void(UWorld* Context, int Unknown, float Delta);
 extern t_UWorld_Tick* UWorld_Tick_orig;
 
@@ -290,6 +316,11 @@ using t_UPackageMap_SupportsObject = int(UPackageMap* Context, UObject* Object);
 extern t_UPackageMap_SupportsObject* UPackageMap_SupportsObject_orig;
 
 int UPackageMap_SupportsObject_hook(UPackageMap* Context, UObject* Object);
+
+using t_UPackageMap_SerializeObject = int(UPackageMap* Context, FArchive* Archive, UClass* Class, UObject** Object);
+extern t_UPackageMap_SerializeObject* UPackageMap_SerializeObject_orig;
+
+int UPackageMap_SerializeObject_hook(UPackageMap* Context, FArchive* Archive, UClass* Class, UObject** Object);
 
 using t_UNetPendingLevel_NotifyControlMessage = void(UNetPendingLevel* Context, UNetConnection* Connection, BYTE Type, FInBunch* InBunch);
 extern t_UNetPendingLevel_NotifyControlMessage* UNetPendingLevel_NotifyControlMessage_orig;
