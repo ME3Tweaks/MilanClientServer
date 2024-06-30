@@ -121,6 +121,7 @@ public class NetworkCapture : IDisposable, ICaptureReader
         {
             counter += 1;
             var recordPosition = reader.BaseStream.Position;
+            var clampedFrameIndex = Math.Clamp(frameIndex, 0, int.MaxValue);
 
             RecordType type = ReadRecordType();
             switch (type)
@@ -128,8 +129,8 @@ public class NetworkCapture : IDisposable, ICaptureReader
                 case RecordType.TieredStringLookup:
                     {
                         var record = ParseRecord<TieredStringLookupRecord>();
-                        if (callPredicate(type, frameIndex, timerTotal))
-                            visitor.OnTieredStringLookup(ref record, frameIndex, timerTotal);
+                        if (callPredicate(type, clampedFrameIndex, timerTotal))
+                            visitor.OnTieredStringLookup(ref record, clampedFrameIndex, timerTotal);
                         break;
                     }
                 case RecordType.FrameStart:
@@ -144,57 +145,57 @@ public class NetworkCapture : IDisposable, ICaptureReader
                 case RecordType.LevelStart:
                     {
                         var record = ParseRecord<LevelStartRecord>();
-                        if (callPredicate(type, frameIndex, timerTotal))
-                            visitor.OnLevelStart(ref record, frameIndex, timerTotal);
+                        if (callPredicate(type, clampedFrameIndex, timerTotal))
+                            visitor.OnLevelStart(ref record, clampedFrameIndex, timerTotal);
                         break;
                     }
                 case RecordType.RemoteFunction:
                     {
                         var record = ParseRecord<RemoteFunctionRecord>();
-                        if (callPredicate(type, frameIndex, timerTotal))
-                            visitor.OnRemoteFunction(ref record, frameIndex, timerTotal);
+                        if (callPredicate(type, clampedFrameIndex, timerTotal))
+                            visitor.OnRemoteFunction(ref record, clampedFrameIndex, timerTotal);
                         break;
                     }
                 case RecordType.ActorReplication:
                     {
                         var record = ParseRecord<ActorReplicationRecord>();
-                        if (callPredicate(type, frameIndex, timerTotal))
-                            visitor.OnActorReplication(ref record, frameIndex, timerTotal);
+                        if (callPredicate(type, clampedFrameIndex, timerTotal))
+                            visitor.OnActorReplication(ref record, clampedFrameIndex, timerTotal);
                         break;
                     }
                 case RecordType.PropertyReplication:
                     {
                         var record = ParseRecord<PropertyReplicationRecord>();
-                        if (callPredicate(type, frameIndex, timerTotal))
-                            visitor.OnPropertyReplication(ref record, frameIndex, timerTotal);
+                        if (callPredicate(type, clampedFrameIndex, timerTotal))
+                            visitor.OnPropertyReplication(ref record, clampedFrameIndex, timerTotal);
                         break;
                     }
                 case RecordType.ControlMessage:
                     {
                         var record = ParseRecord<ControlMessageRecord>();
-                        if (callPredicate(type, frameIndex, timerTotal))
-                            visitor.OnControlMessage(ref record, frameIndex, timerTotal);
+                        if (callPredicate(type, clampedFrameIndex, timerTotal))
+                            visitor.OnControlMessage(ref record, clampedFrameIndex, timerTotal);
                         break;
                     }
                 case RecordType.SessionEvent:
                     {
                         var record = ParseRecord<SessionEventRecord>();
-                        if (callPredicate(type, frameIndex, timerTotal))
-                            visitor.OnSessionEvent(ref record, frameIndex, timerTotal);
+                        if (callPredicate(type, clampedFrameIndex, timerTotal))
+                            visitor.OnSessionEvent(ref record, clampedFrameIndex, timerTotal);
                         break;
                     }
                 case RecordType.SocketCall:
                     {
                         var record = ParseRecord<SocketCallRecord>();
-                        if (callPredicate(type, frameIndex, timerTotal))
-                            visitor.OnSocketCall(ref record, frameIndex, timerTotal);
+                        if (callPredicate(type, clampedFrameIndex, timerTotal))
+                            visitor.OnSocketCall(ref record, clampedFrameIndex, timerTotal);
                         break;
                     }
                 case RecordType.SendBunch:
                     {
                         var record = ParseRecord<SendBunchRecord>();
-                        if (callPredicate(type, frameIndex, timerTotal))
-                            visitor.OnSendBunch(ref record, frameIndex, timerTotal);
+                        if (callPredicate(type, clampedFrameIndex, timerTotal))
+                            visitor.OnSendBunch(ref record, clampedFrameIndex, timerTotal);
                         break;
                     }
             }
