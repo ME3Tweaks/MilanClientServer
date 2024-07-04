@@ -183,6 +183,16 @@ namespace Milan::Output
     // ! Public interface.
     // ========================================
 
+    void On_VectoredException(void* const Address, DWORD const Code, _EXCEPTION_POINTERS* const Exceptions)
+    {
+        MILAN_WARNW(L"output: handling vectored exception, address = %p, code = 0x%08X", Address, Code);
+
+        if (gp_mainLogger != nullptr)
+            gp_mainLogger->ForceFlush();
+
+        MILAN_UNUSED_3(Address, Code, Exceptions);
+    }
+
     ILogger& GetMainLogger()
     {
         assert(gp_activeLogger != nullptr);

@@ -457,6 +457,7 @@ void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delt
                 MILAN_TRACEW(L"- %s, Guid = %s, Parent = %s",
                     *Pending.PackageName.ToString(), *FormatGuid(Pending.Guid),
                     Pending.Parent ? *Pending.Parent->GetFullName() : L"n/a");
+                MILAN_UNUSED(Pending);
             }
         } while (false);
     }
@@ -713,6 +714,7 @@ int UPackageMap_SerializeObject_hook(UPackageMap* const Context, FArchive* const
                 if (PackageInfo.PackageName == CharEnemies)
                 {
                     auto const Package = PackageInfo.Parent;
+                    MILAN_UNUSED(Package);
                 }
             }
         }

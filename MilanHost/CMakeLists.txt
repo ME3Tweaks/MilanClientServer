@@ -71,17 +71,6 @@ target_link_options (${PROJ_TARGET} PUBLIC ${MILAN_LINK_OPTIONS})
 target_link_libraries (${PROJ_TARGET} PUBLIC ${PROJ_LINKS})
 
 
-# Override unsupported options .asm files.
-
-# foreach (ASM_FILE IN LISTS PROJ_SOURCES)
-#   if (ASM_FILE MATCHES ".asm$")
-#     message (">> Fixing assembly compile flags for: ${ASM_FILE}")
-#     set_source_files_properties (${ASM_FILE} PROPERTIES COMPILE_FLAGS "")
-#   endif ()
-# endforeach ()
-
-
-
 # If there's an appropriate environment variable set auto-copy
 # the built .asi to game directory and update default debug options.
 

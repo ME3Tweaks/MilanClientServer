@@ -141,6 +141,12 @@ unsigned short ConsoleLoggerOutput::ExchangeConsoleColor(unsigned short const At
     CONSOLE_SCREEN_BUFFER_INFO ConsoleBufferInfo{};
     HANDLE const Handle = !bUseError ? OutputHandle : ErrorHandle;
 
+    if (Handle == INVALID_HANDLE_VALUE)
+    {
+        MILAN_BREAK_ATTACHED();
+        return PreviousAttributes;
+    }
+
     if (::GetConsoleScreenBufferInfo(Handle, &ConsoleBufferInfo))
         PreviousAttributes = ConsoleBufferInfo.wAttributes;
 

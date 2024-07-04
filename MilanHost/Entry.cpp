@@ -329,6 +329,7 @@ void RegisterVectoredExceptions()
             {
                 // Actual handlers must be filtered, so call them within this branch.
                 ::Milan::Profilers::On_VectoredException(Address, Code, Exceptions);
+                ::Milan::Output::On_VectoredException(Address, Code, Exceptions);
             }
 
             return EXCEPTION_CONTINUE_SEARCH;

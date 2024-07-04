@@ -21,6 +21,8 @@ namespace Milan::Output
     // ! Public interface.
     // ========================================
 
+    void On_VectoredException(void* Address, DWORD Code, _EXCEPTION_POINTERS* Exceptions);
+
     bool HasInitialized() noexcept;
 
     ILogger& GetMainLogger();
