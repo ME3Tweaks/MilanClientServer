@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <tuple>
 #include <LESDK/Init.hpp>
 #include "Milan/Hooks.hpp"
 
@@ -26,6 +27,8 @@ namespace Milan::Imgui
 
     bool OnWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     bool OnSwapChainPresent(IDXGISwapChain* pChain, UINT SyncInterval, UINT Flags);
+
+    std::pair<ID3D11Device*, HWND> GetRenderingGlobals();
 
 
     // ! Utilities for DirectX / Imgui integration.

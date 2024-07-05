@@ -89,6 +89,19 @@ set (CORROSION_INSTALL_ONLY OFF)
 add_subdirectory ("corrosion")
 
 
+# ! RenderDoc API interface.
+# ========================================
+
+set (RENDERDOC_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/renderdoc")
+set (RENDERDOC_SOURCE "${RENDERDOC_FOLDER}/renderdoc_app.h")
+set (RENDERDOC_TARGET "renderdoc-api")
+
+add_library (${RENDERDOC_TARGET} INTERFACE ${RENDERDOC_SOURCE})
+set_target_properties (${RENDERDOC_TARGET} PROPERTIES FOLDER "ThirdParty")
+source_group (TREE "${RENDERDOC_FOLDER}" FILES ${RENDERDOC_SOURCE})
+target_include_directories (${RENDERDOC_TARGET} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+
+
 # ! Zydis (dis)assembler.
 # ========================================
 

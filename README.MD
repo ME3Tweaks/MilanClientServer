@@ -91,6 +91,7 @@ General:
   - Corrosion - v0.4.7 - MIT - Andrew Gaspar
   - ImGui - v1.90.5 - MIT - Omar Cornut
   - ImPlot - #f156599 - MIT - Evan Pezent
+  - RenderDoc API - #9f4f0e6 - MIT - Baldur Karlsson & Crytek
   - Zydis - v4.1.0 - MIT - Florian Bernd & Joel Höner
 
 Network Profiler:

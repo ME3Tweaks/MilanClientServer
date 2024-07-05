@@ -11,6 +11,7 @@
 #include "Systems/Imgui.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/Profilers.hpp"
+#include "Systems/Renderdoc.hpp"
 #include "Systems/State.hpp"
 
 
@@ -233,6 +234,8 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     //}
 
     ::Milan::Profilers::On_UObject_ProcessEvent(Context, Function, Parms, Result);
+    ::Milan::Renderdoc::On_UObject_ProcessEvent(Context, Function, Parms, Result);
+
     (*UObject_ProcessEvent_orig)(Context, Function, Parms, Result);
 
 #ifndef _FINAL_RELEASE

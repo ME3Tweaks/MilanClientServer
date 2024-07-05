@@ -19,6 +19,7 @@
 #include "Systems/Imgui.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/Profilers.hpp"
+#include "Systems/Renderdoc.hpp"
 #include "Systems/State.hpp"
 
 
@@ -42,6 +43,10 @@ SPI_IMPLEMENT_ATTACH
     ::Milan::Profilers::Initialize(Context);
     ::Milan::Imgui::Initialize(Context);
     ::Milan::State::Initialize(Context);
+
+#ifndef _FINAL_RELEASE
+    ::Milan::Renderdoc::Initialize(Context);
+#endif
 
     // This needs to run after globals.
     ::Milan::Output::DeferredInitialize(Context);
@@ -85,6 +90,10 @@ void SingleDetachImpl()
 
     // Terminate subsystems in reverse.
     // ----------------------------------------
+
+#ifndef _FINAL_RELEASE
+    ::Milan::Renderdoc::Terminate();
+#endif
 
     ::Milan::State::Terminate();
     ::Milan::Imgui::Terminate();
@@ -330,6 +339,7 @@ void RegisterVectoredExceptions()
                 // Actual handlers must be filtered, so call them within this branch.
                 ::Milan::Profilers::On_VectoredException(Address, Code, Exceptions);
                 ::Milan::Output::On_VectoredException(Address, Code, Exceptions);
+                ::Milan::Renderdoc::On_VectoredException(Address, Code, Exceptions);
             }
 
             return EXCEPTION_CONTINUE_SEARCH;

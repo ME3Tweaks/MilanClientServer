@@ -47,6 +47,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Systems/Imgui.hpp
   ${PROJ_FOLDER}/Systems/Profilers.cpp
   ${PROJ_FOLDER}/Systems/Profilers.hpp
+  ${PROJ_FOLDER}/Systems/Renderdoc.cpp
+  ${PROJ_FOLDER}/Systems/Renderdoc.hpp
   ${PROJ_FOLDER}/Systems/State.cpp
   ${PROJ_FOLDER}/Systems/State.hpp
   ${PROJ_FOLDER}/Entry.cpp
@@ -57,6 +59,7 @@ set (PROJ_LINKS
   MilanCore  # ECSM FFI
   ImGui ImPlot LESDK-LE3 Zydis  # External libraries.
   d3d11.lib dxgi.lib dxguid.lib  # DirectX 11 SDK for ImGui.
+  renderdoc-api  # RenderDoc in-app header.
 )
 
 add_library (${PROJ_TARGET} SHARED ${PROJ_SOURCES})

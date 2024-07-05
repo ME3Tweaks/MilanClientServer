@@ -20,6 +20,8 @@ namespace Milan::Imgui
     ID3D11DeviceContext* gp_d3d11DeviceContext = nullptr;
     ID3D11RenderTargetView* gp_d3d11RenderTargetView = nullptr;
 
+    HWND g_activeWindow = nullptr;
+
 
     // Allocator callbacks for imgui.
     // ========================================
@@ -87,6 +89,7 @@ namespace Milan::Imgui
         //    ::Sleep(1000);
         //}
 
+        g_activeWindow = hWnd;
         static bool sb_skipOwnCode = false;
 
         if (sb_skipOwnCode)
@@ -181,6 +184,11 @@ namespace Milan::Imgui
         }
 
         return false;
+    }
+
+    std::pair<ID3D11Device*, HWND> GetRenderingGlobals()
+    {
+        return std::make_pair(gp_d3d11Device, g_activeWindow);
     }
 
 
