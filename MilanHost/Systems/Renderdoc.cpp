@@ -68,7 +68,7 @@ namespace Milan::Renderdoc
             return;
         }
 
-        gp_apiHandle->UnloadCrashHandler();
+        //gp_apiHandle->UnloadCrashHandler();
 
         Console::RegisterCommand(L"rdoc", L"start",
             [](wchar_t const*)
@@ -144,8 +144,7 @@ namespace Milan::Renderdoc
 #ifndef _FINAL_RELEASE
 
         MILAN_WARNW(L"renderdoc: handling vectored exception, address = %p, code = 0x%08X", Address, Code);
-
-        if (gp_apiHandle->IsFrameCapturing() == 1)
+        if (gp_apiHandle && gp_apiHandle->IsFrameCapturing() == 1)
         {
             MILAN_DEBUGW(L"renderdoc: terminating capture");
             if (gp_apiHandle->EndFrameCapture(nullptr, nullptr) != 1)
