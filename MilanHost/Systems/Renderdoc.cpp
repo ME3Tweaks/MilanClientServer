@@ -2,6 +2,7 @@
 
 #include "Milan/Base.hpp"
 #include "Systems/Console.hpp"
+#include "Systems/Globals.hpp"
 #include "Systems/Imgui.hpp"
 #include "Systems/Output.hpp"
 #include "Systems/Renderdoc.hpp"
@@ -60,6 +61,13 @@ namespace Milan::Renderdoc
             return;
         }
 
+        if (!FString{ Globals::GetCmdArgs() }.Contains(L"-ONETHREAD"))
+        {
+            MILAN_ERRORW(L"renderdoc is attached with a multithreaded renderer, commands will not be enabled");
+            MILAN_ERRORW(L"launch game with -ONETHREAD to fix this problem");
+            return;
+        }
+
         gp_apiHandle->UnloadCrashHandler();
 
         Console::RegisterCommand(L"rdoc", L"start",
@@ -79,8 +87,8 @@ namespace Milan::Renderdoc
 
                 //auto const [Device, Window] = Imgui::GetRenderingGlobals();
                 //MILAN_DEBUGW(L"renderdoc: starting capture on device 0x%p, window 0x%p", (void*)Device, (void*)Window);
+                MILAN_INFOW(L"renderdoc: starting capture");
                 gp_apiHandle->StartFrameCapture(nullptr, nullptr);
-
                 if (gp_apiHandle->IsFrameCapturing() != 1)
                 {
                     MILAN_WARNW(L"renderdoc: failed to start capture");
@@ -107,9 +115,10 @@ namespace Milan::Renderdoc
 
                 //auto const [Device, Window] = Imgui::GetRenderingGlobals();
                 //MILAN_DEBUGW(L"renderdoc: ending capture on device 0x%p, window 0x%p", (void*)Device, (void*)Window);
+                MILAN_INFOW(L"renderdoc: terminating capture");
                 if (gp_apiHandle->EndFrameCapture(nullptr, nullptr) != 1)
                 {
-                    MILAN_WARNW(L"renderdoc: failed to end capture");
+                    MILAN_WARNW(L"renderdoc: failed to terminate capture");
                     return true;
                 }
 
@@ -133,7 +142,16 @@ namespace Milan::Renderdoc
         MILAN_UNUSED_3(Address, Code, Exceptions);
 
 #ifndef _FINAL_RELEASE
-        // ...
+
+        MILAN_WARNW(L"renderdoc: handling vectored exception, address = %p, code = 0x%08X", Address, Code);
+
+        if (gp_apiHandle->IsFrameCapturing() == 1)
+        {
+            MILAN_DEBUGW(L"renderdoc: terminating capture");
+            if (gp_apiHandle->EndFrameCapture(nullptr, nullptr) != 1)
+                MILAN_WARNW(L"renderdoc: failed to terminate capture");
+        }
+
 #endif
     }
 
