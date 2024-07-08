@@ -21,6 +21,7 @@ bool gb_logProcessEvent = false;
 bool gb_logProcessInternal = false;
 bool gb_logLookupPackageGuid = false;
 bool gb_logPendingPackages = false;
+bool gb_logSerializeObject = false;
 
 
 UObject**           pGPropObject = nullptr;
@@ -509,7 +510,7 @@ void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
 t_UActorChannel_SetChannelActor* UActorChannel_SetChannelActor_orig = nullptr;
 void UActorChannel_SetChannelActor_hook(UActorChannel* const Context, AActor* const Actor)
 {
-    MILAN_TRACEW(L"UActorChannel::SetChannelActor: %s <- %s", *Context->GetName(), *Actor->GetName());
+    //MILAN_TRACEW(L"UActorChannel::SetChannelActor: %s <- %s", *Context->GetName(), *Actor->GetName());
     (*UActorChannel_SetChannelActor_orig)(Context, Actor);
 }
 
@@ -651,6 +652,9 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
             int const* const ListIndex = PackageMap->PackageMapList.Find(SFXName(OutermostPackage->Name));
             if (ListIndex == nullptr)
             {
+                // Uncomment this variable to see available packages in Visual Studio debugger.
+                //[[maybe_unused]] auto const DebugPackageMapList = CollectMapKeys(PackageMap->PackageMapList);
+
                 MILAN_WARNW(L"UPackageMap::SupportsObject: %s => FALSE (package=%s not found)",
                     Object ? *Object->GetFullName() : L"???", *OutermostPackage->Name.ToString());
                 return Return;
@@ -677,7 +681,7 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
 t_UPackageMap_SerializeObject* UPackageMap_SerializeObject_orig = nullptr;
 int UPackageMap_SerializeObject_hook(UPackageMap* const Context, FArchive* const Archive, UClass* const Class, UObject** const Object)
 {
-    if (Archive->ArIsSaving)
+    if (Archive->ArIsSaving && gb_logSerializeObject)
     {
         MILAN_DEBUGW(L"UPackageMap::SerializeObject: class = %s, in = %s",
             Class ? *Class->GetName() : L"n/a", *Object ? *(*Object)->GetName() : L"n/a");
@@ -706,24 +710,36 @@ int UPackageMap_SerializeObject_hook(UPackageMap* const Context, FArchive* const
 
     if (Archive->ArIsLoading)
     {
-        auto const PackageMap = reinterpret_cast<UPackageMap_Proxy*>(Context);
-        MILAN_UNUSED(PackageMap);
+        //auto const PackageMap = reinterpret_cast<UPackageMap_Proxy*>(Context);
+        //if (*Object == nullptr)
+        //{
+        //    SFXName const CharEnemies(L"Char_Enemies", 0);
+        //    for (auto const& PackageInfo : PackageMap->List)
+        //    {
+        //        if (PackageInfo.PackageName == CharEnemies)
+        //        {
+        //            auto const Package = PackageInfo.Parent;
+        //            MILAN_UNUSED(Package);
+        //        }
+        //    }
+        //}
 
-        if (*Object == nullptr)
+        if (gb_logSerializeObject || *Object == nullptr)
         {
-            SFXName const CharEnemies(L"Char_Enemies", 0);
-            for (auto const& PackageInfo : PackageMap->List)
+            if (*Object != nullptr)
             {
-                if (PackageInfo.PackageName == CharEnemies)
-                {
-                    auto const Package = PackageInfo.Parent;
-                    MILAN_UNUSED(Package);
-                }
+                MILAN_DEBUGW(L"UPackageMap::SerializeObject: class = %s, out = %s  ( => %d )",
+                    Class ? *Class->GetName() : L"n/a", *Object ? *(*Object)->GetName() : L"n/a", Return);
             }
+            else
+            {
+                // We want to log these failures.
+                MILAN_WARNW(L"UPackageMap::SerializeObject: class = %s, out = %s  ( => %d )",
+                    Class ? *Class->GetName() : L"n/a", *Object ? *(*Object)->GetName() : L"n/a", Return);
+            }
+            
         }
 
-        MILAN_DEBUGW(L"UPackageMap::SerializeObject: class = %s, out = %s  ( => %d )",
-            Class ? *Class->GetName() : L"n/a", *Object ? *(*Object)->GetName() : L"n/a", Return);
     }
 
     //if (Archive->ArIsLoading)

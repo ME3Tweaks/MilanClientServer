@@ -187,3 +187,15 @@ inline UPackage const* GetOutermostOf(UObject const* const Object)
     for (; Outermost && Outermost->Outer; Outermost = Outermost->Outer);
     return Outermost->Cast<UPackage>();
 }
+
+template<typename TKey, typename TValue>
+inline TArray<TKey> CollectMapKeys(TMap<TKey, TValue>& Map)
+{
+    TArray<TKey> Out{};
+    for (auto const& [Key, Value] : Map)
+    {
+        Out.Add(Key);
+        MILAN_UNUSED(Value);
+    }
+    return Out;
+}

@@ -127,6 +127,7 @@ extern bool gb_logProcessEvent;
 extern bool gb_logProcessInternal;
 extern bool gb_logLookupPackageGuid;
 extern bool gb_logPendingPackages;
+extern bool gb_logSerializeObject;
 
 
 // ! Located global variables.
