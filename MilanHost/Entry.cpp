@@ -262,6 +262,8 @@ void RegisterNonshipCommands()
             return true;
         });
 
+#if defined(MILAN_BUILD_LOGINTERNAL) && MILAN_BUILD_LOGINTERNAL
+
     ::Milan::Console::RegisterCommand(L"log", L"loginternal",
         [](wchar_t const*)
         {
@@ -277,6 +279,8 @@ void RegisterNonshipCommands()
             MILAN_INFOW(L"warninternal: %s", Enabled ? L"enabled" : L"disabled");
             return true;
         });
+
+#endif
 
     ::Milan::Console::RegisterCommand(L"log", L"processinternal",
         [](wchar_t const*)

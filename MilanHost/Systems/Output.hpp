@@ -8,6 +8,14 @@
 
 class ILogger;
 
+
+/**
+ * @def     MILAN_BUILD_LOGINTERNAL
+ * @brief   Controls whether LogInternal/WarnInternal hooks are enabled.
+ */
+#define MILAN_BUILD_LOGINTERNAL 0
+
+
 namespace Milan::Output
 {
     // ! Global subsystem functions.
@@ -28,6 +36,10 @@ namespace Milan::Output
     ILogger& GetMainLogger();
     void FlushEverything();
 
+#if defined(MILAN_BUILD_LOGINTERNAL) && MILAN_BUILD_LOGINTERNAL
+
     bool ToggleLogInternal() noexcept;
     bool ToggleWarnInternal() noexcept;
+
+#endif
 }

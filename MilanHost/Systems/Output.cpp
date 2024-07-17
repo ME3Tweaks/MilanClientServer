@@ -142,6 +142,9 @@ namespace Milan::Output
         gb_enableLogInternal = CmdArgs.Contains(L"-startloginternal", true);
         gb_enableWarnInternal = CmdArgs.Contains(L"-startwarninternal", true);
 
+
+#if defined(MILAN_BUILD_LOGINTERNAL) && MILAN_BUILD_LOGINTERNAL
+
         // Replace LogInternal() and WarnInternal() to output to our logger.
         // TODO: Disable this behavior when DebugLogger is installed.
 
@@ -152,6 +155,8 @@ namespace Milan::Output
         GNatives[0xE8] = UObject_WarnInternal;
         FindRequiredFunction(0xE8)->Func = UObject_WarnInternal;
         MILAN_INFOW(L"replaced WarnInternal through iNative");
+
+#endif
     }
 
     void Terminate()
@@ -205,6 +210,8 @@ namespace Milan::Output
         gp_mainLogger->ForceFlush();
     }
 
+#if defined(MILAN_BUILD_LOGINTERNAL) && MILAN_BUILD_LOGINTERNAL
+
     bool ToggleLogInternal() noexcept
     {
         gb_enableLogInternal = !gb_enableLogInternal;
@@ -216,5 +223,7 @@ namespace Milan::Output
         gb_enableWarnInternal = !gb_enableWarnInternal;
         return gb_enableWarnInternal;
     }
+
+#endif
 
 }
