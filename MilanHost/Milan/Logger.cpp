@@ -128,7 +128,7 @@ HANDLE ConsoleLoggerOutput::InitHandle(DWORD const Target)
         _snprintf(ErrorBuffer.data(), ErrorBuffer.size(),
             "GetStdHandle(%d) error = %d\n", Target, ::GetLastError());
         ::OutputDebugString(ErrorBuffer.data());
-        MILAN_BREAK_ATTACHED();
+        //MILAN_BREAK_ATTACHED();
 #endif
     }
 
