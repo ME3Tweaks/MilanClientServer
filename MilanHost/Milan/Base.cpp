@@ -123,3 +123,10 @@ void Details::OnFatalErrorW(::CodePlaceW const& Place,
         std::abort();
     }
 }
+
+bool Details::ShouldBreak() noexcept
+{
+    return !bDisableSafeBreak && ::IsDebuggerPresent();
+}
+
+bool Details::bDisableSafeBreak = false;

@@ -33,6 +33,13 @@ SPI_IMPLEMENT_ATTACH
     ::LESDK::Initializer Context{ InterfacePtr, "MilanHost" };
 
 
+    // Disable safe breaking.
+    // ----------------------------------------
+
+    // Can't use FString here because global allocator has not yet been initialized.
+    ::Details::bDisableSafeBreak = ::wcsstr(::Milan::Globals::GetCmdArgs(), L"-nobreak") != nullptr;
+
+
     // Initialize subsystems.
     // ----------------------------------------
 
@@ -108,6 +115,14 @@ void SingleDetachImpl()
 void RegisterNonshipCommands()
 {
 #ifndef _FINAL_RELEASE
+
+    ::Milan::Console::RegisterCommand(L"dbg", L"breakme",
+        [](wchar_t const*)
+        {
+            MILAN_INFOW(L"BREAKING THIS PLANE");
+            MILAN_BREAK_ATTACHED();
+            return true;
+        });
 
     ::Milan::Console::RegisterCommand(L"dbg", L"crashme",
         [](wchar_t const*)

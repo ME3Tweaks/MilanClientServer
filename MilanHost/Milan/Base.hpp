@@ -127,7 +127,7 @@ namespace Detail
 #define MILAN_UNREACHABLE                   __assume(false)
 
 #define MILAN_BREAK()                       __debugbreak()
-#define MILAN_BREAK_ATTACHED()              do { if (::IsDebuggerPresent()) { ::DebugBreak(); } } while (false)
+#define MILAN_BREAK_ATTACHED()              do { if (::Details::ShouldBreak()) { ::DebugBreak(); } } while (false)
 
 #define MILAN_UNUSED(v)                     (void)v
 #define MILAN_UNUSED_2(v1, v2)              do { MILAN_UNUSED(v1); MILAN_UNUSED(v2); } while (false)
@@ -445,6 +445,9 @@ public:
 namespace Details
 {
     void OnFatalErrorW(::CodePlaceW const& Place, wchar_t const* Expression, wchar_t const* Format, ...);
+    bool ShouldBreak() noexcept;
+
+    extern bool bDisableSafeBreak;
 }
 
 #define _MILAN_FATALW_IMPL(Expression, Format, ...)                                 \
