@@ -1,0 +1,56 @@
+MISON - Milan Structured Object Notation
+------------------------------------------
+
+Small binary format designed for serializing contents of client / server
+communications for Project Milan. Loosely based on Mongo's BSON and EA's TDF.
+
+  * All numeric values are serialized in big-endian byte order.
+  * Textual values are UTF-8 by default, or ASCII if specified otherwise.
+  * Syntax of this spec is not supposed to be valid BNF.
+
+
+
+type        ::= byte_t(0x00)            ; None, i.e. absence of value.
+              | byte_t(0x01)            ; Object, a collection of named values.
+              | byte_t(0x02)            ; Array, a collection of anonymous values.
+              | byte_t(0x03)            ; Map, a collection of value -> value pairs, possibly named.
+              | byte_t(0x04)            ; Int32, a signed 32-bit integer value.
+              | byte_t(0x05)            ; Int64, a signed 64-bit integer value.
+              | byte_t(0x06)            ; Single, a single-precision 32-bit floating-point value.
+              | byte_t(0x07)            ; Double, a double-precision 64-bit floating-point value.
+              | byte_t(0x08)            ; Boolean, an 8-bit boolean value.
+              | byte_t(0x09)            ; String, a UTF-8 string.
+              | byte_t(0x0A)            ; Binary, an untyped sequence of bytes.
+
+anonymous   ::= byte_t(0x00)            ; flag indicating that tag has a name.
+              | byte_t(0x80)            ; flag indicating that tag has no name.
+
+document    ::= element                 ; must be of "object" type
+
+element     ::= tag name value
+
+tag         ::= byte_t( (type & 0x7f) | anonymous )
+
+name        ::= (byte_t*7) byte_t(0x00) ; if not anonymous, up to 7 ASCII characters, padded by zeroes
+              | ()                      ; if anonymous
+
+value       ::= ()                      ; type is "None"
+              | object_value_t          ; type is "Object"
+              | array_value_t           ; type is "Array"
+              | map_value_t             ; type is "Map"
+              | int32_t                 ; type is "Int32"
+              | int64_t                 ; type is "Int64"
+              | f32_t                   ; type is "Single"
+              | f64_t                   ; type is "Double"
+              | byte_t(0x00)            ; type is "Boolean", meaning "false"
+              | byte_t(0x01)            ; type is "Boolean", meaning "true"
+              | string_value_t          ; type is "String"
+              | blob_value_t            ; type is "Binary"
+
+string_value_t ::= uint32_t('size + 1) (byte_t * 'size) byte_t(0x00)
+blob_value_t ::= uint32_t('size) (byte_t * 'size)
+
+; in all definitions below 'size means number of bytes until end of value
+object_value_t ::= uint32_t('size) uint16_t('count) (element * 'count)
+array_value_t ::= uint32_t('size) uint16_t('count) type (value * 'count)
+map_value_t ::= uint32_t('size) uint16_t('count) type('key_type) type('value_type) ((value('key) value('value)) * 'count)
