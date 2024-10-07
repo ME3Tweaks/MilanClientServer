@@ -26,7 +26,7 @@
             },
             "cacheVariables": {
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "1",
-                "CMAKE_CONFIGURATION_TYPES": "ASAN;DEBUG;RELEASE;FINAL",
+                "CMAKE_CONFIGURATION_TYPES": "DEBUG;RELEASE;FINAL",
                 "MILAN_BUILD_HOST": "ON",
                 "MILAN_BUILD_UTILS": "ON"
             },

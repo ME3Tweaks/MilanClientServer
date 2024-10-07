@@ -58,8 +58,9 @@ set (PROJ_SOURCES
 set (PROJ_LINKS
   MilanCore  # ECSM FFI
   ImGui ImPlot LESDK-LE3 Zydis  # External libraries.
-  d3d11.lib dxgi.lib dxguid.lib  # DirectX 11 SDK for ImGui.
-  renderdoc-api  # RenderDoc in-app header.
+  d3d11.lib dxgi.lib dxguid.lib  # Stuff for ImGui renderer.
+  Ws2_32.lib  # WinSock2 definitions necessary since we switched to dynamic MilanCore.
+  renderdoc-api  # RenderDoc in-app integration header.
 )
 
 add_library (${PROJ_TARGET} SHARED ${PROJ_SOURCES})

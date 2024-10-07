@@ -18,7 +18,7 @@ file (TOUCH ${FFI_HEADER})
 
 corrosion_import_crate (
   MANIFEST_PATH "${CMAKE_SOURCE_DIR}/Cargo.toml"
-  CRATE_TYPES "staticlib"
+  CRATE_TYPES "cdylib"
   CRATES "${FFI_CRATE}"
 )
 
