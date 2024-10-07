@@ -25,14 +25,14 @@ type        ::= byte_t(0x00)            ; None, i.e. absence of value.
 anonymous   ::= byte_t(0x00)            ; flag indicating that tag has a name.
               | byte_t(0x80)            ; flag indicating that tag has no name.
 
-document    ::= element                 ; must be of "object" type
+document    ::= element                 ; the root element which constitutes an entire message payload
 
 element     ::= tag name value
 
 tag         ::= byte_t( (type & 0x7f) | anonymous )
 
 name        ::= (byte_t*7) byte_t(0x00) ; if not anonymous, up to 7 ASCII characters, padded by zeroes
-              | ()                      ; if anonymous
+              | ()                      ; if anonymous, zero bytes
 
 value       ::= ()                      ; type is "None"
               | object_value_t          ; type is "Object"
@@ -52,5 +52,5 @@ blob_value_t ::= uint32_t('size) (byte_t * 'size)
 
 ; in all definitions below 'size means number of bytes until end of value
 object_value_t ::= uint32_t('size) uint16_t('count) (element * 'count)
-array_value_t ::= uint32_t('size) uint16_t('count) type (value * 'count)
+array_value_t ::= uint32_t('size) uint16_t('count) type('item_type) (value * 'count)
 map_value_t ::= uint32_t('size) uint16_t('count) type('key_type) type('value_type) ((value('key) value('value)) * 'count)
