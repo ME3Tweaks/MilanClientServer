@@ -411,7 +411,7 @@ public:
 #define MILAN_ERRORW(Format, ...)                       _MILAN_LOGW_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Error, Format, __VA_ARGS__)
 
 
-#ifndef _DEBUG
+#ifndef _MLN_DEBUG
 
     // In RELEASE and FINAL builds, disable TRACE.
 
@@ -439,7 +439,7 @@ public:
 
 #endif // _FINAL_RELEASE
 
-#endif // _DEBUG
+#endif // _MLN_DEBUG
 
 
 namespace Details

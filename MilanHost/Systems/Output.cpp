@@ -115,7 +115,7 @@ namespace Milan::Output
             LogFileName = std::string{ "MilanHost-" } + std::to_string(OrdinalInstance) + ".log";
         }
 
-#if defined(_DEBUG) || !defined(_FINAL_RELEASE)
+#if defined(_MLN_DEBUG) || !defined(_FINAL_RELEASE)
         // In DEBUG and RELEASE builds keep both sinks, and set file to overwrite previous log.
         gp_mainLogger->RegisterOutput(k_tagConsole, new ConsoleLoggerOutput{});
         gp_mainLogger->RegisterOutput(k_tagFile, new FileLoggerOutput{ LogFileName, false });
