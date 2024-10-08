@@ -29,9 +29,9 @@ document    ::= element                 ; the root element which constitutes an 
 
 element     ::= tag name value
 
-tag         ::= byte_t( (type & 0x7f) | anonymous )
+tag         ::= byte_t( (type & 0x7f) BITWISE-OR anonymous )
 
-name        ::= (byte_t*7) byte_t(0x00) ; if not anonymous, up to 7 ASCII characters, padded by zeroes
+name        ::= (byte_t*7) byte_t(0x00) ; if not anonymous, 8 bytes, up to 7 of which are ASCII characters, zero-padded
               | ()                      ; if anonymous, no bytes
 
 value       ::= ()                      ; type is "None"

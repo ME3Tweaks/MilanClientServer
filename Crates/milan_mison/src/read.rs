@@ -1,4 +1,4 @@
-//! (Almost)-zero-copy deserialization.
+//! Zero-allocation deserialization.
 
 use std::cell::Cell;
 use std::fmt;
@@ -119,7 +119,7 @@ impl<'a> MiElement<'a> {
     }
 
     /// Tries to deserialize an element `from` a slice.
-    pub fn read<'f: 'a>(from: &'f [u8], offset: &mut usize) -> Result<Self, MiError> {
+    pub fn read_from<'f: 'a>(from: &'f [u8], offset: &mut usize) -> Result<Self, MiError> {
         let element_start = *offset;
 
         let (mi_type, anonymous) = match from.first() {
@@ -150,25 +150,25 @@ impl<'a> MiElement<'a> {
 
         let value = match mi_type {
             MiType::None => MiValue::None,
-            MiType::Object => MiObjectView::read(payload, offset).map(MiValue::Object)?,
-            MiType::Array => MiArrayErased::read(payload, offset).map(MiValue::Array)?,
-            MiType::Map => MiMapErased::read(payload, offset).map(MiValue::Map)?,
-            MiType::Int32 => i32::read(payload, offset).map(MiValue::Int32)?,
-            MiType::Int64 => i64::read(payload, offset).map(MiValue::Int64)?,
-            MiType::Single => f32::read(payload, offset).map(MiValue::Single)?,
-            MiType::Double => f64::read(payload, offset).map(MiValue::Double)?,
-            MiType::Bool => bool::read(payload, offset).map(MiValue::Bool)?,
-            MiType::String => <&'a str>::read(payload, offset).map(MiValue::String)?,
-            MiType::Binary => <&'a [u8]>::read(payload, offset).map(MiValue::Binary)?,
+            MiType::Object => MiObjectView::read_from(payload, offset).map(MiValue::Object)?,
+            MiType::Array => MiArrayErased::read_from(payload, offset).map(MiValue::Array)?,
+            MiType::Map => MiMapErased::read_from(payload, offset).map(MiValue::Map)?,
+            MiType::Int32 => i32::read_value(payload, offset).map(MiValue::Int32)?,
+            MiType::Int64 => i64::read_value(payload, offset).map(MiValue::Int64)?,
+            MiType::Single => f32::read_value(payload, offset).map(MiValue::Single)?,
+            MiType::Double => f64::read_value(payload, offset).map(MiValue::Double)?,
+            MiType::Bool => bool::read_value(payload, offset).map(MiValue::Bool)?,
+            MiType::String => <&'a str>::read_value(payload, offset).map(MiValue::String)?,
+            MiType::Binary => <&'a [u8]>::read_value(payload, offset).map(MiValue::Binary)?,
         };
 
         Ok(Self { offset: element_start, name, value })
     }
 
-    /// Wrapper for [`Self::read`] which advances input slice after itself.
+    /// Wrapper for [`Self::read_from`] which advances input slice after itself.
     fn read_shift<'f: 'a>(from: &mut &'f [u8], offset: &mut usize) -> Result<Self, MiError> {
         let start = *offset;
-        Self::read(from, offset).inspect(|_| *from = from.get(*offset - start..).unwrap())
+        Self::read_from(from, offset).inspect(|_| *from = from.get(*offset - start..).unwrap())
     }
 }
 
@@ -193,9 +193,9 @@ impl<'a> MiObjectView<'a> {
     }
 
     /// Tries to deserialize an object `from` a slice.
-    pub fn read<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
+    pub fn read_from<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
         let header_start = *offset;
-        let MiObjectHeader { size, count } = MiObjectHeader::read(from, offset)?;
+        let MiObjectHeader { size, count } = MiObjectHeader::read_from(from, offset)?;
 
         let payload_start = *offset;
         let payload_end = payload_start + size as usize;
@@ -259,11 +259,11 @@ pub struct MiObjectHeader {
 }
 
 impl MiObjectHeader {
-    /// Number of bytes [`Self::read`] should read from a slice.
+    /// Number of bytes [`Self::read_from`] should read from a slice.
     pub const SERIAL_SIZE: usize = 6;
 
     /// Tries to deserialize a header `from` a slice.
-    pub fn read(from: &[u8], offset: &mut usize) -> Result<Self, MiError> {
+    pub fn read_from(from: &[u8], offset: &mut usize) -> Result<Self, MiError> {
         let size = match from.get(.. 4) {
             Some(slice) => { *offset += 4; u32::from_be_bytes(slice.try_into().unwrap()) },
             None => Err(MiError::end_of_buffer(*offset, 4, from.len()))?,
@@ -306,8 +306,8 @@ where
     }
 
     /// Tries to deserialize an array `from` a slice.
-    pub fn read<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
-        MiArrayErased::read(from, offset).and_then(Self::view)
+    pub fn read_from<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
+        MiArrayErased::read_from(from, offset).and_then(Self::view)
     }
 
     /// Checks if the array is empty, i.e. has no items.
@@ -365,9 +365,9 @@ pub struct MiArrayErased<'a> {
 
 impl<'a> MiArrayErased<'a> {
     /// Tries to deserialize an array `from` a slice.
-    pub fn read<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
+    pub fn read_from<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
         let header_start = *offset;
-        let MiArrayHeader { size, count, item_type } = MiArrayHeader::read(from, offset)?;
+        let MiArrayHeader { size, count, item_type } = MiArrayHeader::read_from(from, offset)?;
 
         let payload_start = *offset;
         let payload_end = payload_start + size as usize;
@@ -405,11 +405,11 @@ pub struct MiArrayHeader {
 }
 
 impl MiArrayHeader {
-    /// Number of bytes [`Self::read`] should read from a slice.
+    /// Number of bytes [`Self::read_from`] should read from a slice.
     pub const SERIAL_SIZE: usize = 7;
 
     /// Tries to deserialize a header `from` a slice.
-    pub fn read(from: &[u8], offset: &mut usize) -> Result<Self, MiError> {
+    pub fn read_from(from: &[u8], offset: &mut usize) -> Result<Self, MiError> {
         let size = match from.get(.. 4) {
             Some(slice) => { *offset += 4; u32::from_be_bytes(slice.try_into().unwrap()) },
             None => Err(MiError::end_of_buffer(*offset, 4, from.len()))?,
@@ -464,8 +464,8 @@ where
     }
 
     /// Tries to deserialize a map `from` a slice.
-    pub fn read<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
-        MiMapErased::read(from, offset).and_then(Self::view)
+    pub fn read_from<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
+        MiMapErased::read_from(from, offset).and_then(Self::view)
     }
 
     /// Checks if the map is empty, i.e. has no items.
@@ -522,9 +522,9 @@ pub struct MiMapErased<'a> {
 
 impl<'a> MiMapErased<'a> {
     /// Tries to deserialize a map `from` a slice.
-    pub fn read<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
+    pub fn read_from<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
         let header_start = *offset;
-        let MiMapHeader { size, count, key_type, value_type } = MiMapHeader::read(from, offset)?;
+        let MiMapHeader { size, count, key_type, value_type } = MiMapHeader::read_from(from, offset)?;
 
         let payload_start = *offset;
         let payload_end = payload_start + size as usize;
@@ -565,11 +565,11 @@ pub struct MiMapHeader {
 }
 
 impl MiMapHeader {
-    /// Number of bytes [`Self::read`] should read from a slice.
+    /// Number of bytes [`Self::read_from`] should read from a slice.
     pub const SERIAL_SIZE: usize = 8;
 
     /// Tries to deserialize a header `from` a slice.
-    pub fn read(from: &[u8], offset: &mut usize) -> Result<Self, MiError> {
+    pub fn read_from(from: &[u8], offset: &mut usize) -> Result<Self, MiError> {
         let size = match from.get(.. 4) {
             Some(slice) => { *offset += 4; u32::from_be_bytes(slice.try_into().unwrap()) },
             None => Err(MiError::end_of_buffer(*offset, 4, from.len()))?,
