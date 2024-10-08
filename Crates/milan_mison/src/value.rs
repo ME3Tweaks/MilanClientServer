@@ -1,124 +1,158 @@
-//! Value serialization and deserialization.
+//! Deserializable value representation.
 
 use std::str;
 
 use crate::MiType;
-use crate::read::{MiArrayErased, MiError};
+use crate::read::{MiArrayErased, MiArrayHeader, MiError, MiMapErased, MiMapHeader, MiObjectHeader, MiObjectView};
 
 
-/// Trait providing generic read/write support for serializable types.
+/// Shallowly deserialized MISON value.
+#[derive(Clone, Debug)]
+pub enum MiValue<'a> {
+    None,
+    Object(MiObjectView<'a>),
+    Array(MiArrayErased<'a>),
+    Map(MiMapErased<'a>),
+    Int32(i32),
+    Int64(i64),
+    Single(f32),
+    Double(f64),
+    Bool(bool),
+    String(&'a str),
+    Binary(&'a [u8]),
+}
+
+impl<'a> MiValue<'a> {
+    /// Maps value to its type marker.
+    pub fn get_type(&self) -> MiType {
+        match self {
+            MiValue::None => MiType::None,
+            MiValue::Array(_) => MiType::Array,
+            MiValue::Object(_) => MiType::Object,
+            MiValue::Map(_) => MiType::Map,
+            MiValue::Int32(_) => MiType::Int32,
+            MiValue::Int64(_) => MiType::Int64,
+            MiValue::Single(_) => MiType::Single,
+            MiValue::Double(_) => MiType::Double,
+            MiValue::Bool(_) => MiType::Bool,
+            MiValue::String(_) => MiType::String,
+            MiValue::Binary(_) => MiType::Binary,
+        }
+    }
+
+    /// Calculates the number of bytes this value takes in serialized form.
+    pub fn get_serial_size(&self) -> usize {
+        match self {
+            MiValue::None => 0,
+            MiValue::Array(array) =>
+                array.init_slice.len() + MiArrayHeader::SERIAL_SIZE,
+            MiValue::Object(object) =>
+                object.get_init_len() + MiObjectHeader::SERIAL_SIZE,
+            MiValue::Map(map) =>
+                map.init_slice.len() + MiMapHeader::SERIAL_SIZE,
+            MiValue::Int32(_) => 4,
+            MiValue::Int64(_) => 8,
+            MiValue::Single(_) => 4,
+            MiValue::Double(_) => 8,
+            MiValue::Bool(_) => 1,
+            MiValue::String(string) => string.as_bytes().len() + 5,
+            MiValue::Binary(blob) => blob.len() + 4,
+        }
+    }
+}
+
+impl<'a> From<&MiValue<'a>> for MiType {
+    fn from(value: &MiValue<'a>) -> Self {
+        value.get_type()
+    }
+}
+
+
+/// Provides generic value deserialization.
 pub trait SerialValue<'a>: Sized {
     /// Associated type tag.
     const MI_TYPE: MiType;
+
     /// Tries to deserialize a value of this type `from` a slice.
     fn read(from: &'a [u8], offset: &mut usize) -> Result<Self, MiError>;
-    /// Tries to serialize a `value` of this type `to` a slice.
-    fn write(value: Self, to: &mut [u8], offset: &mut usize) -> Result<(), MiError>;
+
+    /// Wrapper for [`Self::read`] which advances input slice after itself.
+    fn read_shift(from: &mut &'a [u8], offset: &mut usize) -> Result<Self, MiError> {
+        let start = *offset;
+        Self::read(from, offset).inspect(|_| *from = from.get(*offset - start..).unwrap())
+    }
 }
 
 impl<'a> SerialValue<'a> for () {
     const MI_TYPE: MiType = MiType::None;
-
     fn read(_: &'a [u8], _: &mut usize) -> Result<Self, MiError> {
-        Ok(())
-    }
-
-    fn write(_: Self, _: &mut [u8], _: &mut usize) -> Result<(), MiError> {
         Ok(())
     }
 }
 
 impl<'a> SerialValue<'a> for MiArrayErased<'a> {
     const MI_TYPE: MiType = MiType::Array;
-
     fn read(from: &'a [u8], offset: &mut usize) -> Result<Self, MiError> {
         MiArrayErased::read(from, offset)
     }
+}
 
-    fn write(_: Self, _: &mut [u8], _: &mut usize) -> Result<(), MiError> {
-        unimplemented!()
+impl<'a> SerialValue<'a> for MiObjectView<'a> {
+    const MI_TYPE: MiType = MiType::Object;
+    fn read(from: &'a [u8], offset: &mut usize) -> Result<Self, MiError> {
+        MiObjectView::read(from, offset)
     }
 }
 
-// TODO: Implement SerialValue<'a> for (Object), Array, Map.
-//   These values, at least Array and Map, will need special intermediate
-//   wrapper types, to avoid infinite number of type arg combinations.
+impl<'a> SerialValue<'a> for MiMapErased<'a> {
+    const MI_TYPE: MiType = MiType::Map;
+    fn read(from: &'a [u8], offset: &mut usize) -> Result<Self, MiError> {
+        MiMapErased::read(from, offset)
+    }
+}
 
 impl<'a> SerialValue<'a> for i32 {
     const MI_TYPE: MiType = MiType::Int32;
-
     fn read(from: &'a [u8], offset: &mut usize) -> Result<Self, MiError> {
         match from.get(.. 4) {
             Some(slice) => { *offset += 4; Ok(Self::from_be_bytes(slice.try_into().unwrap())) },
             None => Err(MiError::end_of_buffer(*offset, 4, from.len())),
-        }
-    }
-
-    fn write(value: Self, to: &mut [u8], offset: &mut usize) -> Result<(), MiError> {
-        match to.get_mut(.. 4) {
-            Some(slice) => { *offset += 4; slice.copy_from_slice(&value.to_be_bytes()); Ok(()) },
-            None => Err(MiError::end_of_buffer(*offset, 4, to.len())),
         }
     }
 }
 
 impl<'a> SerialValue<'a> for i64 {
     const MI_TYPE: MiType = MiType::Int64;
-
     fn read(from: &'a [u8], offset: &mut usize) -> Result<Self, MiError> {
         match from.get(.. 8) {
             Some(slice) => { *offset += 8; Ok(Self::from_be_bytes(slice.try_into().unwrap())) },
             None => Err(MiError::end_of_buffer(*offset, 8, from.len())),
         }
     }
-
-    fn write(value: Self, to: &mut [u8], offset: &mut usize) -> Result<(), MiError> {
-        match to.get_mut(.. 8) {
-            Some(slice) => { *offset += 8; slice.copy_from_slice(&value.to_be_bytes()); Ok(()) },
-            None => Err(MiError::end_of_buffer(*offset, 8, to.len())),
-        }
-    }
 }
 
 impl<'a> SerialValue<'a> for f32 {
     const MI_TYPE: MiType = MiType::Single;
-
     fn read(from: &'a [u8], offset: &mut usize) -> Result<Self, MiError> {
         match from.get(.. 4) {
             Some(slice) => { *offset += 4; Ok(Self::from_be_bytes(slice.try_into().unwrap())) },
             None => Err(MiError::end_of_buffer(*offset, 4, from.len())),
         }
     }
-
-    fn write(value: Self, to: &mut [u8], offset: &mut usize) -> Result<(), MiError> {
-        match to.get_mut(.. 4) {
-            Some(slice) => { *offset += 4; slice.copy_from_slice(&value.to_be_bytes()); Ok(()) },
-            None => Err(MiError::end_of_buffer(*offset, 4, to.len())),
-        }
-    }
 }
 
 impl<'a> SerialValue<'a> for f64 {
     const MI_TYPE: MiType = MiType::Double;
-
     fn read(from: &'a [u8], offset: &mut usize) -> Result<Self, MiError> {
             match from.get(.. 8) {
             Some(slice) => { *offset += 8; Ok(Self::from_be_bytes(slice.try_into().unwrap())) },
             None => Err(MiError::end_of_buffer(*offset, 8, from.len())),
         }
     }
-
-    fn write(value: Self, to: &mut [u8], offset: &mut usize) -> Result<(), MiError> {
-        match to.get_mut(.. 8) {
-            Some(slice) => { *offset += 8; slice.copy_from_slice(&value.to_be_bytes()); Ok(()) },
-            None => Err(MiError::end_of_buffer(*offset, 8, to.len())),
-        }
-    }
 }
 
 impl<'a> SerialValue<'a> for bool {
     const MI_TYPE: MiType = MiType::Bool;
-
     fn read(from: &'a [u8], offset: &mut usize) -> Result<Self, MiError> {
         match from.first() {
             Some(&0_u8) => { *offset += 1; Ok(false) },
@@ -127,20 +161,10 @@ impl<'a> SerialValue<'a> for bool {
             None => { Err(MiError::end_of_buffer(*offset, 1, 0)) },
         }
     }
-
-    fn write(value: Self, to: &mut [u8], offset: &mut usize) -> Result<(), MiError> {
-        match to.first_mut() {
-            Some(byte) if !value => { *offset += 1; *byte = 0_u8; Ok(()) },
-            Some(byte) if value => { *offset += 1; *byte = 1_u8; Ok(()) },
-            None => { Err(MiError::end_of_buffer(*offset, 1, 0)) },
-            _ => panic!("should be unreachable"),
-        }
-    }
 }
 
 impl<'a> SerialValue<'a> for &'a str {
     const MI_TYPE: MiType = MiType::String;
-
     fn read(from: &'a [u8], offset: &mut usize) -> Result<Self, MiError> {
         let length = match from.get(.. 4) {
             Some(slice) => { *offset += 4; u32::from_be_bytes(slice.try_into().unwrap()) },
@@ -160,31 +184,10 @@ impl<'a> SerialValue<'a> for &'a str {
 
         str::from_utf8(slice).map_err(move |_| MiError::bad_value(*offset, "not utf-8"))
     }
-
-    fn write(value: Self, to: &mut [u8], offset: &mut usize) -> Result<(), MiError> {
-        let bytes = value.as_bytes();
-        let length = (bytes.len() as u32).to_be_bytes();
-
-        match to.get_mut(.. 4) {
-            Some(slice) => { *offset += 4; slice.copy_from_slice(&length); },
-            None => Err(MiError::end_of_buffer(*offset, 4, to.len()))?,
-        };
-
-        match to.get_mut(4 .. 4 + bytes.len()) {
-            Some(slice) => { *offset += bytes.len(); slice.copy_from_slice(bytes); },
-            None => Err(MiError::end_of_buffer(*offset, 4 + bytes.len(), to.len()))?,
-        };
-
-        match to.get_mut(4 + bytes.len()) {
-            Some(null) => { *offset += 1; *null = 0_u8; Ok(()) },
-            None => Err(MiError::end_of_buffer(*offset, 4 + bytes.len() + 1, to.len())),
-        }
-    }
 }
 
 impl<'a> SerialValue<'a> for &'a [u8] {
     const MI_TYPE: MiType = MiType::Binary;
-
     fn read(from: &'a [u8], offset: &mut usize) -> Result<Self, MiError> {
         let length = match from.get(.. 4) {
             Some(slice) => { *offset += 4; u32::from_be_bytes(slice.try_into().unwrap()) },
@@ -196,26 +199,12 @@ impl<'a> SerialValue<'a> for &'a [u8] {
             None => Err(MiError::end_of_buffer(*offset, 4 + length as usize, from.len()))?,
         }
     }
-
-    fn write(value: Self, to: &mut [u8], offset: &mut usize) -> Result<(), MiError> {
-        let length = (value.len() as u32).to_be_bytes();
-
-        match to.get_mut(.. 4) {
-            Some(slice) => { *offset += 4; slice.copy_from_slice(&length); },
-            None => Err(MiError::end_of_buffer(*offset, 4, to.len()))?,
-        };
-
-        match to.get_mut(4 .. 4 + value.len()) {
-            Some(slice) => { *offset += value.len(); slice.copy_from_slice(value); Ok(()) },
-            None => Err(MiError::end_of_buffer(*offset, 4 + value.len(), to.len()))?,
-        }
-    }
 }
 
 
 #[cfg(test)]
 mod tests {
-    use super::SerialValue;
+    use super::{MiValue, SerialValue};
 
     #[test]
     fn check_string_lifetime() {
@@ -227,5 +216,10 @@ mod tests {
         }
 
         assert_eq!(foo(source).as_bytes(), &source[4..16]);
+    }
+
+    #[test]
+    fn log_value_size() {
+        println!("size of MiValue => {}", size_of::<MiValue>());
     }
 }
