@@ -7,6 +7,7 @@ use std::marker::PhantomData;
 use thiserror::Error;
 
 use crate::MiType;
+use crate::buffer::InputBuffer;
 use crate::value::{MiValue, SerialValue};
 
 
@@ -118,57 +119,44 @@ impl<'a> MiElement<'a> {
         self.value.get_type()
     }
 
-    /// Tries to deserialize an element `from` a slice.
-    pub fn read_from<'f: 'a>(from: &'f [u8], offset: &mut usize) -> Result<Self, MiError> {
-        let element_start = *offset;
+    /// Tries to deserialize an element from an `input` buffer.
+    pub fn read_from<'f: 'a>(input: &'a InputBuffer<'f>) -> Result<Self, MiError> {
+        let start = input.serial_offset();
+        let tag = input.get_next_byte()?;
 
-        let (mi_type, anonymous) = match from.first() {
-            Some(&byte) => match MiType::split_tag(byte) {
-                Some(pair) => { *offset += 1; pair },
-                None => Err(MiError::bad_value(*offset, "invalid tag"))?,
-            },
-            None => Err(MiError::end_of_buffer(*offset, 1, 0))?,
+        let (mi_type, anonymous) = match MiType::split_tag(tag) {
+            Some(pair) => { pair },
+            None => Err(MiError::bad_value(input.pos() - 1, "invalid tag"))?,
         };
 
-        let name = match anonymous {
-            true => None,
-            false => match from.get(1 .. 9) {
-                Some(slice) => match slice.iter().position(|&b| b == 0_u8) {
-                    None => Err(MiError::bad_value(*offset, "non-terminated name"))?,
-                    Some(0) => Err(MiError::bad_value(*offset, "empty name")) ?,
-                    Some(length) => match std::str::from_utf8(&slice[..length]) {
-                        Ok(string) => { *offset += 8; Some(string) },
-                        Err(_) => Err(MiError::bad_value(*offset, "non-utf8 name"))?,
-                    },
+        let mut name = None;
+        if !anonymous {
+            let (name_pos, slice) = (input.pos(), input.get_next(8)?);
+            match slice.iter().position(|&b| b == 0_u8) {
+                None => Err(MiError::bad_value(name_pos, "non-terminated name"))?,
+                Some(0) => Err(MiError::bad_value(name_pos, "empty name")) ?,
+                Some(length) => match std::str::from_utf8(&slice[..length]) {
+                    Err(_) => Err(MiError::bad_value(name_pos, "non-utf8 name"))?,
+                    Ok(string) => name = Some(string),
                 },
-                None => Err(MiError::end_of_buffer(*offset, 8, from.len()))?,
-            },
-        };
-
-        let value_start = *offset;
-        let payload = from.get(value_start - element_start ..).unwrap();
+            };
+        }
 
         let value = match mi_type {
             MiType::None => MiValue::None,
-            MiType::Object => MiObjectView::read_from(payload, offset).map(MiValue::Object)?,
-            MiType::Array => MiArrayErased::read_from(payload, offset).map(MiValue::Array)?,
-            MiType::Map => MiMapErased::read_from(payload, offset).map(MiValue::Map)?,
-            MiType::Int32 => i32::read_value(payload, offset).map(MiValue::Int32)?,
-            MiType::Int64 => i64::read_value(payload, offset).map(MiValue::Int64)?,
-            MiType::Single => f32::read_value(payload, offset).map(MiValue::Single)?,
-            MiType::Double => f64::read_value(payload, offset).map(MiValue::Double)?,
-            MiType::Bool => bool::read_value(payload, offset).map(MiValue::Bool)?,
-            MiType::String => <&'a str>::read_value(payload, offset).map(MiValue::String)?,
-            MiType::Binary => <&'a [u8]>::read_value(payload, offset).map(MiValue::Binary)?,
+            MiType::Object => MiObjectView::read_from(input).map(MiValue::Object)?,
+            MiType::Array => MiArrayErased::read_from(input).map(MiValue::Array)?,
+            MiType::Map => MiMapErased::read_from(input).map(MiValue::Map)?,
+            MiType::Int32 => i32::read_value(input).map(MiValue::Int32)?,
+            MiType::Int64 => i64::read_value(input).map(MiValue::Int64)?,
+            MiType::Single => f32::read_value(input).map(MiValue::Single)?,
+            MiType::Double => f64::read_value(input).map(MiValue::Double)?,
+            MiType::Bool => bool::read_value(input).map(MiValue::Bool)?,
+            MiType::String => <&'a str>::read_value(input).map(MiValue::String)?,
+            MiType::Binary => <&'a [u8]>::read_value(input).map(MiValue::Binary)?,
         };
 
-        Ok(Self { offset: element_start, name, value })
-    }
-
-    /// Wrapper for [`Self::read_from`] which advances input slice after itself.
-    fn read_shift<'f: 'a>(from: &mut &'f [u8], offset: &mut usize) -> Result<Self, MiError> {
-        let start = *offset;
-        Self::read_from(from, offset).inspect(|_| *from = from.get(*offset - start..).unwrap())
+        Ok(Self { offset: start, name, value })
     }
 }
 
@@ -183,32 +171,16 @@ impl<'a> MiElement<'a> {
 #[derive(Clone, Debug)]
 pub struct MiObjectView<'a> {
     count: usize,
-    initial: (usize, &'a [u8]),
-    current: Cell<(usize, &'a [u8])>,
+    index: Cell<usize>,
+    buffer: InputBuffer<'a>,
 }
 
 impl<'a> MiObjectView<'a> {
-    pub(crate) fn new<'s: 'a>(count: usize, offset: usize, source: &'s [u8]) -> Self {
-        Self { count, initial: (offset, source), current: Cell::new((offset, source)) }
-    }
-
     /// Tries to deserialize an object `from` a slice.
-    pub fn read_from<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
-        let header_start = *offset;
-        let MiObjectHeader { size, count } = MiObjectHeader::read_from(from, offset)?;
-
-        let payload_start = *offset;
-        let payload_end = payload_start + size as usize;
-
-        debug_assert_eq!(payload_start - header_start, MiObjectHeader::SERIAL_SIZE);
-
-        match from.get(payload_start .. payload_end) {
-            Some(slice) => {
-                *offset += size as usize;
-                Ok(Self::new(count as usize, payload_start, slice))
-            },
-            None => Err(MiError::end_of_buffer(payload_start, payload_end, from.len())),
-        }
+    pub fn read_from<'f: 'a>(input: &'a InputBuffer<'f>) -> Result<Self, MiError> {
+        let MiObjectHeader { size, count } = MiObjectHeader::read_from(input)?;
+        let buffer = input.get_next_buffer(size as usize, 0)?;
+        Ok(Self { count: count as usize, index: Cell::new(0), buffer })
     }
 
     /// Checks if the object is empty, i.e. has no elements.
@@ -221,30 +193,31 @@ impl<'a> MiObjectView<'a> {
         self.count
     }
 
-    /// Retrieves number of bytes in the initial slice.
-    pub fn get_init_len(&self) -> usize {
-        self.initial.1.len()
-    }
-
     /// Checks if object iteration has reached end.
     pub fn at_end(&self) -> bool {
-        self.current.get().1.is_empty()
+        self.index.get() == self.count
     }
 
     /// Resets object iteration to its initial state.
     pub fn reset(&self) {
-        self.current.set(self.initial)
+        self.buffer.reset()
     }
 
     /// Tries to deserialize next element in the object.
     pub fn next_element<'f: 'a>(&'f self) -> MiReadResult<MiElement> {
-        if self.at_end() { return MiReadResult::None; }
+        if self.at_end() {
+            // Having non-empty remaining slice after `count` elements
+            // is either a programming error on our side or mis-serialization.
+            debug_assert_eq!(self.buffer.remaining(), 0);
+            return MiReadResult::None;
+        }
+
         let implement = || -> Result<MiElement, MiError> {
-            let (mut item_start, mut item_slice) = self.current.get();
-            let element = MiElement::read_shift(&mut item_slice, &mut item_start)?;
-            self.current.set((item_start, item_slice));
+            let element = MiElement::read_from(&self.buffer)?;
+            self.index.set(self.index.get() + 1);
             Ok(element)
         };
+
         Some(implement()).into()
     }
 }
@@ -260,18 +233,14 @@ pub struct MiObjectHeader {
 
 impl MiObjectHeader {
     /// Number of bytes [`Self::read_from`] should read from a slice.
-    pub const SERIAL_SIZE: usize = 6;
+    pub const SIZE: usize = 6;
+    /// Signed number of bytes [`Self::read_from`] should read from a slice.
+    pub const ISIZE: isize = Self::SIZE as isize;
 
-    /// Tries to deserialize a header `from` a slice.
-    pub fn read_from(from: &[u8], offset: &mut usize) -> Result<Self, MiError> {
-        let size = match from.get(.. 4) {
-            Some(slice) => { *offset += 4; u32::from_be_bytes(slice.try_into().unwrap()) },
-            None => Err(MiError::end_of_buffer(*offset, 4, from.len()))?,
-        };
-        let count = match from.get(4 .. 6) {
-            Some(slice) => { *offset += 2; u16::from_be_bytes(slice.try_into().unwrap()) },
-            None => Err(MiError::end_of_buffer(*offset, 6, from.len()))?,
-        };
+    /// Tries to deserialize a header from an `input` buffer.
+    pub fn read_from(input: &InputBuffer<'_>) -> Result<Self, MiError> {
+        let size = input.get_next_array::<4>().map(u32::from_be_bytes)?;
+        let count = input.get_next_array::<2>().map(u16::from_be_bytes)?;
         Ok(Self { size, count })
     }
 }
@@ -284,8 +253,8 @@ where
     Item: SerialValue<'a>,
 {
     count: usize,
-    initial: (usize, &'a [u8]),
-    current: Cell<(usize, &'a [u8])>,
+    index: Cell<usize>,
+    buffer: InputBuffer<'a>,
     _marker: PhantomData<&'a Item>,
 }
 
@@ -293,21 +262,23 @@ impl<'a, Item> MiArrayView<'a, Item>
 where
     Item: SerialValue<'a>,
 {
-    pub(crate) fn new<'s: 'a>(count: usize, offset: usize, source: &'s [u8]) -> Self {
-        Self { count, initial: (offset, source), current: Cell::new((offset, source)), _marker: PhantomData }
-    }
-
     /// Tries to materialize a type-`erased` array into a typed array view.
     pub fn view<'s: 'a>(erased: MiArrayErased<'a>) -> Result<Self, MiError> {
-        match erased.item_type {
-            t if t == Item::MI_TYPE => Ok(Self::new(erased.count, erased.init_offset, erased.init_slice)),
-            _ => Err(MiError::value_type(Item::MI_TYPE, erased.item_type)),
+        if erased.item_type != Item::MI_TYPE {
+            Err(MiError::value_type(Item::MI_TYPE, erased.item_type))?;
         }
+
+        Ok(Self {
+            count: erased.count,
+            index: Cell::new(0),
+            buffer: erased.init_buffer,
+            _marker: PhantomData,
+        })
     }
 
-    /// Tries to deserialize an array `from` a slice.
-    pub fn read_from<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
-        MiArrayErased::read_from(from, offset).and_then(Self::view)
+    /// Tries to deserialize an array from an `input` buffer.
+    pub fn read_from<'f: 'a>(input: &'a InputBuffer<'f>) -> Result<Self, MiError> {
+        MiArrayErased::read_from(input).and_then(Self::view)
     }
 
     /// Checks if the array is empty, i.e. has no items.
@@ -322,23 +293,29 @@ where
 
     /// Checks if array iteration has reached end.
     pub fn at_end(&self) -> bool {
-        self.current.get().1.is_empty()
+        self.index.get() == self.count
     }
 
     /// Resets array iteration to its initial state.
     pub fn reset(&self) {
-        self.current.set(self.initial)
+        self.buffer.reset()
     }
 
     /// Tries to parse next value in the array.
     pub fn next_value<'f: 'a>(&'f self) -> MiReadResult<Item> {
-        if self.at_end() { return MiReadResult::None; }
+        if self.at_end() {
+            // Having non-empty remaining slice after `count` elements
+            // is either a programming error on our side or mis-serialization.
+            debug_assert_eq!(self.buffer.remaining(), 0);
+            return MiReadResult::None;
+        }
+
         let implement = || -> Result<Item, MiError> {
-            let (mut item_start, mut item_slice) = self.current.get();
-            let key = Item::read_shift(&mut item_slice, &mut item_start)?;
-            self.current.set((item_start, item_slice));
-            Ok(key)
+            let value = Item::read_value(&self.buffer)?;
+            self.index.set(self.index.get() + 1);
+            Ok(value)
         };
+
         Some(implement()).into()
     }
 }
@@ -357,31 +334,16 @@ pub struct MiArrayErased<'a> {
     pub count: usize,
     /// Value type of items in the array.
     pub item_type: MiType,
-    /// Initial serialization offset.
-    pub init_offset: usize,
-    /// Initial slice over the payload.
-    pub init_slice: &'a [u8],
+    /// Initial payload buffer.
+    pub init_buffer: InputBuffer<'a>,
 }
 
 impl<'a> MiArrayErased<'a> {
-    /// Tries to deserialize an array `from` a slice.
-    pub fn read_from<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
-        let header_start = *offset;
-        let MiArrayHeader { size, count, item_type } = MiArrayHeader::read_from(from, offset)?;
-
-        let payload_start = *offset;
-        let payload_end = payload_start + size as usize;
-
-        debug_assert_eq!(payload_start - header_start, MiArrayHeader::SERIAL_SIZE);
-
-        match from.get(payload_start .. payload_end) {
-            Some(init_slice) => {
-                *offset += size as usize;
-                let init_offset = payload_start;
-                Ok(Self { count: count as usize, item_type, init_offset, init_slice })
-            },
-            None => Err(MiError::end_of_buffer(payload_start, payload_end, from.len())),
-        }
+    /// Tries to deserialize an array from an `input` buffer.
+    pub fn read_from<'f: 'a>(input: &'a InputBuffer<'f>) -> Result<Self, MiError> {
+        let MiArrayHeader { size, count, item_type } = MiArrayHeader::read_from(input)?;
+        let init_buffer = input.get_next_buffer(size as usize, 0)?;
+        Ok(Self { count: count as usize, item_type, init_buffer })
     }
 
     /// Tries to materialize this type-erased array into a typed array view.
@@ -406,24 +368,16 @@ pub struct MiArrayHeader {
 
 impl MiArrayHeader {
     /// Number of bytes [`Self::read_from`] should read from a slice.
-    pub const SERIAL_SIZE: usize = 7;
+    pub const SIZE: usize = 7;
+    /// Signed number of bytes [`Self::read_from`] should read from a slice.
+    pub const ISIZE: isize = Self::SIZE as isize;
 
-    /// Tries to deserialize a header `from` a slice.
-    pub fn read_from(from: &[u8], offset: &mut usize) -> Result<Self, MiError> {
-        let size = match from.get(.. 4) {
-            Some(slice) => { *offset += 4; u32::from_be_bytes(slice.try_into().unwrap()) },
-            None => Err(MiError::end_of_buffer(*offset, 4, from.len()))?,
-        };
-        let count = match from.get(4 .. 6) {
-            Some(slice) => { *offset += 2; u16::from_be_bytes(slice.try_into().unwrap()) },
-            None => Err(MiError::end_of_buffer(*offset, 6, from.len()))?,
-        };
-        let mi_type = match from.get(6) {
-            Some(&tag) => { *offset += 1; MiType::from_tag(tag) },
-            None => Err(MiError::end_of_buffer(*offset, 7, from.len()))?,
-        };
-
-        let item_type = mi_type.ok_or(MiError::bad_value(*offset - 1, "invalid type"))?;
+    /// Tries to deserialize a header from an `input` buffer.
+    pub fn read_from(input: &InputBuffer<'_>) -> Result<Self, MiError> {
+        let size = input.get_next_array::<4>().map(u32::from_be_bytes)?;
+        let count = input.get_next_array::<2>().map(u16::from_be_bytes)?;
+        let item_type = MiType::from_tag(input.get_next_byte()?)
+            .ok_or(MiError::bad_value(input.pos() - 1, "invalid type"))?;
         Ok(Self { size, count, item_type })
     }
 }
@@ -437,8 +391,8 @@ where
     Value: SerialValue<'a>,
 {
     count: usize,
-    initial: (usize, &'a [u8]),
-    current: Cell<(usize, &'a [u8])>,
+    index: Cell<usize>,
+    buffer: InputBuffer<'a>,
     _marker: PhantomData<&'a (Key, Value)>,
 }
 
@@ -447,15 +401,16 @@ where
     Key: SerialValue<'a>,
     Value: SerialValue<'a>,
 {
-    pub(crate) fn new<'s: 'a>(count: usize, offset: usize, source: &'s [u8]) -> Self {
-        Self { count, initial: (offset, source), current: Cell::new((offset, source)), _marker: PhantomData }
-    }
-
     /// Tries to materialize an `erased` map into a typed map view.
     pub fn view<'s: 'a>(erased: MiMapErased<'a>) -> Result<Self, MiError> {
         match (erased.key_type, erased.value_type) {
             (key, value) if (key, value) == (Key::MI_TYPE, Value::MI_TYPE) =>
-                Ok(Self::new(erased.count, erased.init_offset, erased.init_slice)),
+                Ok(Self {
+                    count: erased.count,
+                    index: Cell::new(0),
+                    buffer: erased.init_buffer,
+                    _marker: Default::default(),
+                }),
             (_, value) if value == Value::MI_TYPE =>
                 Err(MiError::key_type(Key::MI_TYPE, erased.key_type)),
             _ =>  // this handles "wrong key" and "both wrong" cases
@@ -463,9 +418,9 @@ where
         }
     }
 
-    /// Tries to deserialize a map `from` a slice.
-    pub fn read_from<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
-        MiMapErased::read_from(from, offset).and_then(Self::view)
+    /// Tries to deserialize a map from an `input` buffer.
+    pub fn read_from<'f: 'a>(input: &'a InputBuffer<'f>) -> Result<Self, MiError> {
+        MiMapErased::read_from(input).and_then(Self::view)
     }
 
     /// Checks if the map is empty, i.e. has no items.
@@ -480,24 +435,30 @@ where
 
     /// Checks if map iteration has reached end.
     pub fn at_end(&self) -> bool {
-        self.current.get().1.is_empty()
+        self.index.get() == self.count
     }
 
     /// Resets map iteration to its initial state.
     pub fn reset(&self) {
-        self.current.set(self.initial)
+        self.buffer.reset()
     }
 
     /// Tries to parse next pair in the map.
     pub fn next_pair<'f: 'a>(&'f self) -> MiReadResult<(Key, Value)> {
-        if self.at_end() { return MiReadResult::None; }
+        if self.at_end() {
+            // Having non-empty remaining slice after `count` elements
+            // is either a programming error on our side or mis-serialization.
+            debug_assert_eq!(self.buffer.remaining(), 0);
+            return MiReadResult::None;
+        }
+
         let implement = || -> Result<(Key, Value), MiError> {
-            let (mut item_start, mut item_slice) = self.current.get();
-            let key = Key::read_shift(&mut item_slice, &mut item_start)?;
-            let value = Value::read_shift(&mut item_slice, &mut item_start)?;
-            self.current.set((item_start, item_slice));
+            let key = Key::read_value(&self.buffer)?;
+            let value = Value::read_value(&self.buffer)?;
+            self.index.set(self.index.get() + 1);
             Ok((key, value))
         };
+
         Some(implement()).into()
     }
 }
@@ -514,31 +475,16 @@ pub struct MiMapErased<'a> {
     pub key_type: MiType,
     /// Value type for pairs in the map.
     pub value_type: MiType,
-    /// Initial serialization offset.
-    pub init_offset: usize,
-    /// Initial slice over the payload.
-    pub init_slice: &'a [u8],
+    /// Initial payload buffer.
+    pub init_buffer: InputBuffer<'a>,
 }
 
 impl<'a> MiMapErased<'a> {
-    /// Tries to deserialize a map `from` a slice.
-    pub fn read_from<'s: 'a>(from: &'s [u8], offset: &mut usize) -> Result<Self, MiError> {
-        let header_start = *offset;
-        let MiMapHeader { size, count, key_type, value_type } = MiMapHeader::read_from(from, offset)?;
-
-        let payload_start = *offset;
-        let payload_end = payload_start + size as usize;
-
-        debug_assert_eq!(payload_start - header_start, MiMapHeader::SERIAL_SIZE);
-
-        match from.get(payload_start .. payload_end) {
-            Some(init_slice) => {
-                *offset += size as usize;
-                let init_offset = payload_start;
-                Ok(Self { count: count as usize, key_type, value_type, init_offset, init_slice })
-            }
-            None => Err(MiError::end_of_buffer(payload_start, payload_end, from.len())),
-        }
+    /// Tries to deserialize a map from an `input` buffer.
+    pub fn read_from<'f: 'a>(input: &'a InputBuffer<'f>) -> Result<Self, MiError> {
+        let MiMapHeader { size, count, key_type, value_type } = MiMapHeader::read_from(input)?;
+        let init_buffer = input.get_next_buffer(size as usize, 0)?;
+        Ok(Self { count: count as usize, key_type, value_type, init_buffer })
     }
 
     /// Tries to materialize this type-erased map into a typed map view.
@@ -566,45 +512,20 @@ pub struct MiMapHeader {
 
 impl MiMapHeader {
     /// Number of bytes [`Self::read_from`] should read from a slice.
-    pub const SERIAL_SIZE: usize = 8;
+    pub const SIZE: usize = 8;
+    /// Signed number of bytes [`Self::read_from`] should read from a slice.
+    pub const ISIZE: isize = Self::SIZE as isize;
 
-    /// Tries to deserialize a header `from` a slice.
-    pub fn read_from(from: &[u8], offset: &mut usize) -> Result<Self, MiError> {
-        let size = match from.get(.. 4) {
-            Some(slice) => { *offset += 4; u32::from_be_bytes(slice.try_into().unwrap()) },
-            None => Err(MiError::end_of_buffer(*offset, 4, from.len()))?,
-        };
-        let count = match from.get(4 .. 6) {
-            Some(slice) => { *offset += 2; u16::from_be_bytes(slice.try_into().unwrap()) },
-            None => Err(MiError::end_of_buffer(*offset, 6, from.len()))?,
-        };
-        let key_type = match from.get(6) {
-            Some(&tag) => { *offset += 1; MiType::from_tag(tag) },
-            None => Err(MiError::end_of_buffer(*offset, 7, from.len()))?,
-        };
-        let value_type = match from.get(7) {
-            Some(&tag) => { *offset += 1; MiType::from_tag(tag) },
-            None => Err(MiError::end_of_buffer(*offset, 8, from.len()))?,
-        };
+    /// Tries to deserialize a header from an `input` buffer.
+    pub fn read_from(input: &InputBuffer<'_>) -> Result<Self, MiError> {
+        let size = input.get_next_array::<4>().map(u32::from_be_bytes)?;
+        let count = input.get_next_array::<2>().map(u16::from_be_bytes)?;
 
-        let key_type = key_type.ok_or(MiError::bad_value(*offset - 2, "invalid key type"))?;
-        let value_type = value_type.ok_or(MiError::bad_value(*offset - 1, "invalid value type"))?;
+        let key_type = MiType::from_tag(input.get_next_byte()?)
+            .ok_or(MiError::bad_value(input.pos() - 1, "invalid key type"))?;
+        let value_type = MiType::from_tag(input.get_next_byte()?)
+            .ok_or(MiError::bad_value(input.pos() - 1, "invalid value type"))?;
 
         Ok(Self { size, count, key_type, value_type })
-    }
-}
-
-
-#[cfg(test)]
-mod tests {
-    use crate::read::{MiArrayView, MiReadResult};
-
-    #[test]
-    fn test_array_lifetime() {
-        let array = MiArrayView::<i32>::new(0, 0, &[]);
-        assert_eq!(array.len(), 0);
-        while let MiReadResult::Ok(value) = array.next_value() {
-            println!("value => {}", value);
-        }
     }
 }
