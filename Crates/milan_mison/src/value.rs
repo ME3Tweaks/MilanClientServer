@@ -49,7 +49,7 @@ impl<'a> From<&MiValue<'a>> for MiType {
 
 
 /// Provides generic value deserialization.
-pub trait SerialValue<'a>: Sized {
+pub trait MiDeserialValue<'a>: Sized {
     /// Associated type tag.
     const MI_TYPE: MiType;
 
@@ -57,63 +57,63 @@ pub trait SerialValue<'a>: Sized {
     fn read_value(input: &'a InputBuffer<'a>) -> Result<Self, MiError>;
 }
 
-impl<'a> SerialValue<'a> for () {
+impl<'a> MiDeserialValue<'a> for () {
     const MI_TYPE: MiType = MiType::None;
     fn read_value(_: &'a InputBuffer<'a>) -> Result<Self, MiError> {
         Ok(())
     }
 }
 
-impl<'a> SerialValue<'a> for MiObjectView<'a> {
+impl<'a> MiDeserialValue<'a> for MiObjectView<'a> {
     const MI_TYPE: MiType = MiType::Object;
     fn read_value(input: &'a InputBuffer<'a>) -> Result<Self, MiError> {
         MiObjectView::read_from(input)
     }
 }
 
-impl<'a> SerialValue<'a> for MiArrayErased<'a> {
+impl<'a> MiDeserialValue<'a> for MiArrayErased<'a> {
     const MI_TYPE: MiType = MiType::Array;
     fn read_value(input: &'a InputBuffer<'a>) -> Result<Self, MiError> {
         MiArrayErased::read_from(input)
     }
 }
 
-impl<'a> SerialValue<'a> for MiMapErased<'a> {
+impl<'a> MiDeserialValue<'a> for MiMapErased<'a> {
     const MI_TYPE: MiType = MiType::Map;
     fn read_value(input: &'a InputBuffer<'a>) -> Result<Self, MiError> {
         MiMapErased::read_from(input)
     }
 }
 
-impl<'a> SerialValue<'a> for i32 {
+impl<'a> MiDeserialValue<'a> for i32 {
     const MI_TYPE: MiType = MiType::Int32;
     fn read_value(input: &'a InputBuffer<'a>) -> Result<Self, MiError> {
         input.get_next_array::<4>().map(i32::from_be_bytes)
     }
 }
 
-impl<'a> SerialValue<'a> for i64 {
+impl<'a> MiDeserialValue<'a> for i64 {
     const MI_TYPE: MiType = MiType::Int64;
     fn read_value(input: &'a InputBuffer<'a>) -> Result<Self, MiError> {
         input.get_next_array::<8>().map(i64::from_be_bytes)
     }
 }
 
-impl<'a> SerialValue<'a> for f32 {
+impl<'a> MiDeserialValue<'a> for f32 {
     const MI_TYPE: MiType = MiType::Single;
     fn read_value(input: &'a InputBuffer<'a>) -> Result<Self, MiError> {
         input.get_next_array::<4>().map(f32::from_be_bytes)
     }
 }
 
-impl<'a> SerialValue<'a> for f64 {
+impl<'a> MiDeserialValue<'a> for f64 {
     const MI_TYPE: MiType = MiType::Double;
     fn read_value(input: &'a InputBuffer<'a>) -> Result<Self, MiError> {
         input.get_next_array::<8>().map(f64::from_be_bytes)
     }
 }
 
-impl<'a> SerialValue<'a> for bool {
+impl<'a> MiDeserialValue<'a> for bool {
     const MI_TYPE: MiType = MiType::Bool;
     fn read_value(input: &'a InputBuffer<'a>) -> Result<Self, MiError> {
         match input.get_next_byte()? {
@@ -123,7 +123,7 @@ impl<'a> SerialValue<'a> for bool {
     }
 }
 
-impl<'a> SerialValue<'a> for &'a str {
+impl<'a> MiDeserialValue<'a> for &'a str {
     const MI_TYPE: MiType = MiType::String;
     fn read_value(input: &'a InputBuffer<'a>) -> Result<Self, MiError> {
         let length = input.get_next_array::<4>().map(u32::from_be_bytes)?;
@@ -141,7 +141,7 @@ impl<'a> SerialValue<'a> for &'a str {
     }
 }
 
-impl<'a> SerialValue<'a> for &'a [u8] {
+impl<'a> MiDeserialValue<'a> for &'a [u8] {
     const MI_TYPE: MiType = MiType::Binary;
     fn read_value(input: &'a InputBuffer<'a>) -> Result<Self, MiError> {
         let length = input.get_next_array::<4>().map(u32::from_be_bytes)?;
@@ -155,14 +155,14 @@ impl<'a> SerialValue<'a> for &'a [u8] {
 mod tests {
     use crate::buffer::InputBuffer;
     use crate::read::{MiElement, MiReadResult};
-    use crate::value::{MiValue, SerialValue};
+    use crate::value::{MiValue, MiDeserialValue};
 
     #[test]
     fn test_string_read() {
         let source = b"\x00\x00\x00\x0DHello there!\x00";
 
         fn foo<'a>(input: &'a InputBuffer<'a>) -> &'a str {
-            SerialValue::read_value(input).unwrap()
+            MiDeserialValue::read_value(input).unwrap()
         }
 
         let buffer = InputBuffer::new(source);

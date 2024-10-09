@@ -8,7 +8,7 @@ use thiserror::Error;
 
 use crate::MiType;
 use crate::buffer::InputBuffer;
-use crate::value::{MiValue, SerialValue};
+use crate::value::{MiValue, MiDeserialValue};
 
 
 /// Internal error variants for [`MiError`].
@@ -250,7 +250,7 @@ impl MiObjectHeader {
 #[derive(Clone, Debug)]
 pub struct MiArrayView<'a, Item>
 where
-    Item: SerialValue<'a>,
+    Item: MiDeserialValue<'a>,
 {
     count: usize,
     index: Cell<usize>,
@@ -260,7 +260,7 @@ where
 
 impl<'a, Item> MiArrayView<'a, Item>
 where
-    Item: SerialValue<'a>,
+    Item: MiDeserialValue<'a>,
 {
     /// Tries to materialize a type-`erased` array into a typed array view.
     pub fn view<'s: 'a>(erased: MiArrayErased<'a>) -> Result<Self, MiError> {
@@ -325,7 +325,7 @@ where
 /// It must be [`materialize`]d into a [`MiArrayView`] before reading items.
 /// This type is designed for two purposes: to allow reading array values when
 /// the exact item type is not known at compile-time, and to expose a single type
-/// for (de)serializing arrays via the [`SerialValue`] trait.
+/// for (de)serializing arrays via the [`MiDeserialValue`] trait.
 ///
 /// [`materialize`]: Self::materialize
 #[derive(Clone, Debug)]
@@ -349,7 +349,7 @@ impl<'a> MiArrayErased<'a> {
     /// Tries to materialize this type-erased array into a typed array view.
     pub fn materialize<Item>(&self) -> Result<MiArrayView<'a, Item>, MiError>
     where
-        Item: SerialValue<'a>,
+        Item: MiDeserialValue<'a>,
     {
         MiArrayView::<'a, Item>::view(self.clone())
     }
@@ -387,8 +387,8 @@ impl MiArrayHeader {
 #[derive(Clone, Debug)]
 pub struct MiMapView<'a, Key, Value>
 where
-    Key: SerialValue<'a>,
-    Value: SerialValue<'a>,
+    Key: MiDeserialValue<'a>,
+    Value: MiDeserialValue<'a>,
 {
     count: usize,
     index: Cell<usize>,
@@ -398,8 +398,8 @@ where
 
 impl<'a, Key, Value> MiMapView<'a, Key, Value>
 where
-    Key: SerialValue<'a>,
-    Value: SerialValue<'a>,
+    Key: MiDeserialValue<'a>,
+    Value: MiDeserialValue<'a>,
 {
     /// Tries to materialize an `erased` map into a typed map view.
     pub fn view<'s: 'a>(erased: MiMapErased<'a>) -> Result<Self, MiError> {
@@ -490,8 +490,8 @@ impl<'a> MiMapErased<'a> {
     /// Tries to materialize this type-erased map into a typed map view.
     pub fn materialize<Key, Value>(&self) -> Result<MiMapView<'a, Key, Value>, MiError>
     where
-        Key: SerialValue<'a>,
-        Value: SerialValue<'a>,
+        Key: MiDeserialValue<'a>,
+        Value: MiDeserialValue<'a>,
     {
         MiMapView::<'a, Key, Value>::view(self.clone())
     }
