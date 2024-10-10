@@ -1,6 +1,7 @@
 //! Buffer types for reading / writing.
 
 use std::cell::Cell;
+
 use crate::read::MiError;
 
 #[cfg(doc)]
@@ -113,9 +114,88 @@ impl<'a> InputBuffer<'a> {
     }
 }
 
-
 impl<'a> From<&'a [u8]> for InputBuffer<'a> {
     fn from(value: &'a [u8]) -> Self {
         Self::new(value)
+    }
+}
+
+
+/// Serial binary output over a vector.
+pub struct OutputBuffer {
+    /// Underlying binary buffer which actually stores output bytes.
+    inner: Vec<u8>,
+    /// LIFO container of offset-size pairs for markers.
+    markers: Vec<(usize, usize, &'static str)>,
+}
+
+impl OutputBuffer {
+    /// Constructs a new output buffer.
+    pub fn new() -> Self {
+        Self { inner: vec![], markers: vec![] }
+    }
+
+    /// Retrieves the underlying binary slice.
+    pub fn view(&self) -> &[u8] {
+        &self.inner
+    }
+
+    /// Retrieves depth of the marker stack.
+    pub fn marker_count(&self) -> usize {
+        self.markers.len()
+    }
+
+    /// Retrieves number of bytes currently serialized.
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Checks if no bytes are currently serialized.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Resets this buffer to initial empty state.
+    pub fn reset(&mut self) {
+        self.inner.clear();
+        self.markers.clear();
+    }
+
+    /// Retrieves next `count` byte(s) for writing, advancing output forward.
+    pub fn get_next(&mut self, count: usize) -> &mut [u8] {
+        let offset = self.inner.len();
+        self.inner.resize(offset + count, 0_u8);
+        self.inner.get_mut(offset .. offset + count).unwrap()
+    }
+
+    /// Retrieves next `N` byte(s) for writing as a fixed-size array, advancing output forward.
+    pub fn get_next_array<const N: usize>(&mut self) -> &mut [u8; N] {
+        self.get_next(N).try_into().unwrap()
+    }
+
+    /// Retrieves next byte for writing, advancing output forward.
+    pub fn get_next_byte(&mut self) -> &mut u8 {
+        self.get_next(1).first_mut().unwrap()
+    }
+
+    /// Remembers current offset and advances the output `count` byte(s) forward.
+    pub fn mark_next(&mut self, count: usize, hint: &'static str) {
+        let offset = self.inner.len();
+        self.inner.resize(offset + count, 0_u8);
+        self.markers.push((offset, count, hint));
+    }
+
+    /// Tries to pop a marker off the stack and return the slice of the memory it marked.
+    pub fn try_write_marked(&mut self, check: &'static str) -> Option<&mut [u8]> {
+        self.markers.pop().map(|(offset, size, hint)| {
+            debug_assert_eq!(check, hint, "incorrect marker popped");
+            self.inner.get_mut(offset .. offset + size).unwrap()
+        })
+    }
+}
+
+impl Default for OutputBuffer {
+    fn default() -> Self {
+        Self::new()
     }
 }
