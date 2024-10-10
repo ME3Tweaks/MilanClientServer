@@ -501,7 +501,7 @@ impl<'a> MiMapBuilder<'a, ArrayValueMarker, ObjectValueMarker> {
 }
 
 impl<'a, Value: MiWriteValue> MiMapBuilder<'a, ArrayValueMarker, Value> {
-    /// Serializes a pair of *array* key and *simple* `value`, key
+    /// Serializes a pair of an *array* key and a *simple* `value`, key
     /// being constructed by the `key` callback, appending it to this map.
     pub fn push<Key, CbKey>(&mut self, key: CbKey, value: Value) -> &mut Self
     where
@@ -515,7 +515,185 @@ impl<'a, Value: MiWriteValue> MiMapBuilder<'a, ArrayValueMarker, Value> {
     }
 }
 
-// ...
+impl<'a> MiMapBuilder<'a, MapValueMarker, ArrayValueMarker> {
+    /// Serializes a pair of *map* key and *array* value, constructed
+    /// by `key` and `value` callbacks respectively, appending it to this map.
+    pub fn push<KeyKey, KeyValue, Value, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    where
+        for<'k> (KeyKey, KeyValue): MiMapBuilderFactory<'k, KeyKey, KeyValue>,
+        for<'v> Value: MiArrayBuilderFactory<'v, Value>,
+        CbKey: Fn(&mut MiMapBuilder<'_, KeyKey, KeyValue>),
+        CbValue: Fn(&mut MiArrayBuilder<'_, Value>),
+    {
+        key(&mut <(KeyKey, KeyValue)>::construct(self.buffer));
+        value(&mut Value::construct(self.buffer));
+        self.item_count += 1;
+        self
+    }
+}
+
+impl<'a> MiMapBuilder<'a, MapValueMarker, MapValueMarker> {
+    /// Serializes a pair of *map* key and *map* value, constructed
+    /// by `key` and `value` callbacks respectively, appending it to this map.
+    pub fn push<KeyKey, KeyValue, ValueKey, ValueValue, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    where
+        for<'k> (KeyKey, KeyValue): MiMapBuilderFactory<'k, KeyKey, KeyValue>,
+        for<'v> (ValueKey, ValueValue): MiMapBuilderFactory<'v, ValueKey, ValueValue>,
+        CbKey: Fn(&mut MiMapBuilder<'_, KeyKey, KeyValue>),
+        CbValue: Fn(&mut MiMapBuilder<'_, ValueKey, ValueValue>),
+    {
+        key(&mut <(KeyKey, KeyValue)>::construct(self.buffer));
+        value(&mut <(ValueKey, ValueValue)>::construct(self.buffer));
+        self.item_count += 1;
+        self
+    }
+}
+
+impl<'a> MiMapBuilder<'a, MapValueMarker, ObjectValueMarker> {
+    /// Serializes a pair of *map* key and *object* value, constructed
+    /// by `key` and `value` callbacks respectively, appending it to this map.
+    pub fn push<KeyKey, KeyValue, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    where
+        for<'k> (KeyKey, KeyValue): MiMapBuilderFactory<'k, KeyKey, KeyValue>,
+        CbKey: Fn(&mut MiMapBuilder<'_, KeyKey, KeyValue>),
+        CbValue: Fn(&mut MiObjectBuilder<'_>),
+    {
+        key(&mut <(KeyKey, KeyValue)>::construct(self.buffer));
+        value(&mut MiObjectBuilder::construct(self.buffer));
+        self.item_count += 1;
+        self
+    }
+}
+
+impl<'a, Value: MiWriteValue> MiMapBuilder<'a, MapValueMarker, Value> {
+    /// Serializes a pair of a *map* key and a *simple* `value`, key
+    /// being constructed by the `key` callback, appending it to this map.
+    pub fn push<KeyKey, KeyValue, CbKey>(&mut self, key: CbKey, value: Value) -> &mut Self
+    where
+        for<'k> (KeyKey, KeyValue): MiMapBuilderFactory<'k, KeyKey, KeyValue>,
+        CbKey: Fn(&mut MiMapBuilder<'_, KeyKey, KeyValue>),
+    {
+        key(&mut <(KeyKey, KeyValue)>::construct(self.buffer));
+        value.write_value(self.buffer);
+        self.item_count += 1;
+        self
+    }
+}
+
+impl<'a> MiMapBuilder<'a, ObjectValueMarker, ArrayValueMarker> {
+    /// Serializes a pair of *object* key and *array* value, constructed
+    /// by `key` and `value` callbacks respectively, appending it to this map.
+    pub fn push<Value, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    where
+        for<'v> Value: MiArrayBuilderFactory<'v, Value>,
+        CbKey: Fn(&mut MiObjectBuilder<'_>),
+        CbValue: Fn(&mut MiArrayBuilder<'_, Value>),
+    {
+        key(&mut MiObjectBuilder::construct(self.buffer));
+        value(&mut Value::construct(self.buffer));
+        self.item_count += 1;
+        self
+    }
+}
+
+impl<'a> MiMapBuilder<'a, ObjectValueMarker, MapValueMarker> {
+    /// Serializes a pair of *object* key and *map* value, constructed
+    /// by `key` and `value` callbacks respectively, appending it to this map.
+    pub fn push<ValueKey, ValueValue, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    where
+        for<'v> (ValueKey, ValueValue): MiMapBuilderFactory<'v, ValueKey, ValueValue>,
+        CbKey: Fn(&mut MiObjectBuilder<'_>),
+        CbValue: Fn(&mut MiMapBuilder<'_, ValueKey, ValueValue>),
+    {
+        key(&mut MiObjectBuilder::construct(self.buffer));
+        value(&mut <(ValueKey, ValueValue)>::construct(self.buffer));
+        self.item_count += 1;
+        self
+    }
+}
+
+impl<'a> MiMapBuilder<'a, ObjectValueMarker, ObjectValueMarker> {
+    /// Serializes a pair of *object* key and *object* value, constructed
+    /// by `key` and `value` callbacks respectively, appending it to this map.
+    pub fn push<CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    where
+        CbKey: Fn(&mut MiObjectBuilder<'_>),
+        CbValue: Fn(&mut MiObjectBuilder<'_>),
+    {
+        key(&mut MiObjectBuilder::construct(self.buffer));
+        value(&mut MiObjectBuilder::construct(self.buffer));
+        self.item_count += 1;
+        self
+    }
+}
+
+impl<'a, Value: MiWriteValue> MiMapBuilder<'a, ObjectValueMarker, Value> {
+    /// Serializes a pair of an *object* key and a *simple* `value`, key
+    /// being constructed by the `key` callback, appending it to this map.
+    pub fn push<CbKey>(&mut self, key: CbKey, value: Value) -> &mut Self
+    where
+        CbKey: Fn(&mut MiObjectBuilder<'_>),
+    {
+        key(&mut MiObjectBuilder::construct(self.buffer));
+        value.write_value(self.buffer);
+        self.item_count += 1;
+        self
+    }
+}
+
+impl<'a, Key: MiWriteValue> MiMapBuilder<'a, Key, ArrayValueMarker> {
+    /// Serializes a pair of a *simple* `key` and an *array* value, value
+    /// being constructed by the `value` callback, appending it to this map.
+    pub fn push<Value, CbValue>(&mut self, key: Key, value: CbValue) -> &mut Self
+    where
+        for<'v> Value: MiArrayBuilderFactory<'v, Value>,
+        CbValue: Fn(&mut MiArrayBuilder<'_, Value>),
+    {
+        key.write_value(self.buffer);
+        value(&mut Value::construct(self.buffer));
+        self.item_count += 1;
+        self
+    }
+}
+
+impl<'a, Key: MiWriteValue> MiMapBuilder<'a, Key, MapValueMarker> {
+    /// Serializes a pair of a *simple* `key` and a *map* value, value
+    /// being constructed by the `value` callback, appending it to this map.
+    pub fn push<ValueKey, ValueValue, CbValue>(&mut self, key: Key, value: CbValue) -> &mut Self
+    where
+        for<'v> (ValueKey, ValueValue): MiMapBuilderFactory<'v, ValueKey, ValueValue>,
+        CbValue: Fn(&mut MiMapBuilder<'_, ValueKey, ValueValue>),
+    {
+        key.write_value(self.buffer);
+        value(&mut <(ValueKey, ValueValue)>::construct(self.buffer));
+        self.item_count += 1;
+        self
+    }
+}
+
+impl<'a, Key: MiWriteValue> MiMapBuilder<'a, Key, ObjectValueMarker> {
+    /// Serializes a pair of a *simple* `key` and an *object* value, value
+    /// being constructed by the `value` callback, appending it to this map.
+    pub fn push<CbValue>(&mut self, key: Key, value: CbValue) -> &mut Self
+    where
+        CbValue: Fn(&mut MiObjectBuilder<'_>),
+    {
+        key.write_value(self.buffer);
+        value(&mut MiObjectBuilder::construct(self.buffer));
+        self.item_count += 1;
+        self
+    }
+}
+
+impl<'a, Key: MiWriteValue, Value: MiWriteValue> MiMapBuilder<'a, Key, Value> {
+    /// Serializes a pair of a *simple* `key` and a *simple* `value`, appending it to this map.
+    pub fn push(&mut self, key: Key, value: Value) -> &mut Self {
+        key.write_value(self.buffer);
+        value.write_value(self.buffer);
+        self.item_count += 1;
+        self
+    }
+}
 
 
 /// Writes contents of an object value.
@@ -610,6 +788,14 @@ mod tests {
                 let mut array = elem.array::<&str>(Some("chars"));
                 for kit in &kits { array.push(kit); }
                 array.finish()
+            })
+            .push(|elem| {
+                elem.map::<&str, i64>(Some("achvmnt"))
+                    .push("tracker-one", 832)
+                    .push("tracker-two", 0)
+                    .push("custom-tracker-x", 1234)
+                    .push("custom-tracker-y", -9)
+                    .finish()
             })
             .finish();
 
