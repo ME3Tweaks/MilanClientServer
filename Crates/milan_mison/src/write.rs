@@ -1,6 +1,7 @@
 //! Reference implementation for MISON serialization.
 
 use std::marker::PhantomData;
+use thiserror::Error;
 
 use crate::buffer::{OutputBuffer, OutputBufferLike};
 use crate::MiType;
@@ -160,6 +161,16 @@ pub mod factories {
 use factories::*;
 
 
+/// Errors produced by builder interface.
+#[derive(Clone, Debug, Error)]
+pub enum MiWriteError {
+    #[error("element name was not ascii")]
+    NameInvalidEncoding,
+    #[error("element name too long")]
+    NameTooLong,
+}
+
+
 /// Provides generic value serialization.
 ///
 /// # Remarks
@@ -170,54 +181,64 @@ use factories::*;
 ///
 /// [`MiReadValue`]: crate::read::MiReadValue
 pub trait MiWriteValue: Sized {
+    /// Associated type marker.
     const MI_TYPE: MiType;
+
+    /// Retrieves number of bytes this value would take in serialized form.
     fn get_size(&self) -> usize;
-    fn write_value(&self, output: &mut impl OutputBufferLike);
+
+    /// Tries to serialize a value of this type to an `output` buffer.
+    fn write_value(&self, output: &mut impl OutputBufferLike) -> Result<(), MiWriteError>;
 }
 
 impl MiWriteValue for () {
     const MI_TYPE: MiType = MiType::None;
     fn get_size(&self) -> usize { 0 }
-    fn write_value(&self, _: &mut impl OutputBufferLike) {}
+    fn write_value(&self, _: &mut impl OutputBufferLike) -> Result<(), MiWriteError> { Ok(()) }
 }
 
 impl MiWriteValue for i32 {
     const MI_TYPE: MiType = MiType::Int32;
     fn get_size(&self) -> usize { 4 }
-    fn write_value(&self, output: &mut impl OutputBufferLike) {
-        output.get_next_array::<4>().copy_from_slice(&self.to_be_bytes())
+    fn write_value(&self, output: &mut impl OutputBufferLike) -> Result<(), MiWriteError> {
+        output.get_next_array::<4>().copy_from_slice(&self.to_be_bytes());
+        Ok(())
     }
 }
 
 impl MiWriteValue for i64 {
     const MI_TYPE: MiType = MiType::Int64;
     fn get_size(&self) -> usize { 8 }
-    fn write_value(&self, output: &mut impl OutputBufferLike) {
-        output.get_next_array::<8>().copy_from_slice(&self.to_be_bytes())
+    fn write_value(&self, output: &mut impl OutputBufferLike) -> Result<(), MiWriteError> {
+        output.get_next_array::<8>().copy_from_slice(&self.to_be_bytes());
+        Ok(())
     }
 }
 
 impl MiWriteValue for f32 {
     const MI_TYPE: MiType = MiType::Single;
     fn get_size(&self) -> usize { 4 }
-    fn write_value(&self, output: &mut impl OutputBufferLike) {
-        output.get_next_array::<4>().copy_from_slice(&self.to_be_bytes())
+    fn write_value(&self, output: &mut impl OutputBufferLike) -> Result<(), MiWriteError> {
+        output.get_next_array::<4>().copy_from_slice(&self.to_be_bytes());
+        Ok(())
     }
 }
 
 impl MiWriteValue for f64 {
     const MI_TYPE: MiType = MiType::Double;
     fn get_size(&self) -> usize { 8 }
-    fn write_value(&self, output: &mut impl OutputBufferLike) {
-        output.get_next_array::<8>().copy_from_slice(&self.to_be_bytes())
+    fn write_value(&self, output: &mut impl OutputBufferLike) -> Result<(), MiWriteError> {
+        output.get_next_array::<8>().copy_from_slice(&self.to_be_bytes());
+        Ok(())
     }
 }
 
 impl MiWriteValue for bool {
     const MI_TYPE: MiType = MiType::Bool;
     fn get_size(&self) -> usize { 1 }
-    fn write_value(&self, output: &mut impl OutputBufferLike) {
-        *output.get_next_byte() = if *self { 1_u8 } else { 0_u8 }
+    fn write_value(&self, output: &mut impl OutputBufferLike) -> Result<(), MiWriteError> {
+        *output.get_next_byte() = if *self { 1_u8 } else { 0_u8 };
+        Ok(())
     }
 }
 
@@ -226,12 +247,13 @@ impl MiWriteValue for &str {
     fn get_size(&self) -> usize {
         4 + self.as_bytes().len() + 1
     }
-    fn write_value(&self, output: &mut impl OutputBufferLike) {
+    fn write_value(&self, output: &mut impl OutputBufferLike) -> Result<(), MiWriteError> {
         let bytes = self.as_bytes();
         let length = (bytes.len() + 1) as u32;
         output.get_next_array::<4>().copy_from_slice(&length.to_be_bytes());
         output.get_next(bytes.len()).copy_from_slice(bytes);
         *output.get_next_byte() = 0_u8;
+        Ok(())
     }
 }
 
@@ -240,15 +262,17 @@ impl MiWriteValue for &[u8] {
     fn get_size(&self) -> usize {
         4 + self.len()
     }
-    fn write_value(&self, output: &mut impl OutputBufferLike) {
+    fn write_value(&self, output: &mut impl OutputBufferLike) -> Result<(), MiWriteError> {
         output.get_next_array::<4>().copy_from_slice(&self.len().to_be_bytes());
         output.get_next(self.len()).copy_from_slice(self);
+        Ok(())
     }
 }
 
 
 /// Encapsulates serialization of a document.
 pub struct MiEncoder {
+    /// Stores serialized element contents.
     pub(crate) buffer: OutputBuffer,
 }
 
@@ -310,54 +334,68 @@ pub struct MiElementBuilder<'a> {
 }
 
 impl<'a> MiElementBuilder<'a> {
-    fn write_header_internal(&mut self, r#type: MiType, name: Option<&str>) {
-        *self.encoder.get_next_byte() = MiType::build_tag(r#type, name.is_none());
+    fn write_header_internal(
+        &mut self,
+        r#type: MiType,
+        name: Option<&str>,
+    ) -> Result<(), MiWriteError> {
+        *self.encoder.get_next_byte() =
+            MiType::build_tag(r#type, name.is_none());
 
         if let Some(name) = name {
-            assert!(name.is_ascii());
-            assert!(!name.is_empty() && name.len() < 8);
+            if !name.is_ascii() { Err(MiWriteError::NameInvalidEncoding)?; }
+            if name.is_empty() || name.len() >= 8 { Err(MiWriteError::NameTooLong)?; }
 
-            let mut name_buffer = [0_u8; 8];
-            let slice = unsafe { name_buffer.get_unchecked_mut(.. name.len()) };
+            let mut buffer = [0_u8; 8];
+            let slice = unsafe { buffer.get_unchecked_mut(.. name.len()) };
             slice.copy_from_slice(name.as_bytes());
 
-            self.encoder.get_next_array::<8>().copy_from_slice(&name_buffer);
+            self.encoder.get_next_array::<8>().copy_from_slice(&buffer);
         }
+
+        Ok(())
     }
 
     /// Writes a *simple* value.
-    pub fn value<Value>(&mut self, name: Option<&str>, value: Value)
+    pub fn value<Value>(&mut self, name: Option<&str>, value: Value) -> Result<(), MiWriteError>
     where
         Value: MiWriteValue,
     {
-        self.write_header_internal(Value::MI_TYPE, name);
-        value.write_value(self.encoder);
+        self.write_header_internal(Value::MI_TYPE, name)?;
+        value.write_value(self.encoder)?;
+        Ok(())
     }
 
     /// Starts writing an *array* value, effectively consuming builder.
-    pub fn array<'buf, Value>(&'buf mut self, name: Option<&str>) -> MiArrayBuilder<'buf, Value>
+    pub fn array<'buf, Value>(
+        &'buf mut self,
+        name: Option<&str>,
+    ) -> Result<MiArrayBuilder<'buf, Value>, MiWriteError>
     where
         'a: 'buf,
         Value: MiArrayBuilderFactory<'buf, Value>,
     {
-        self.write_header_internal(MiType::Array, name);
-        Value::construct(self.encoder)
+        self.write_header_internal(MiType::Array, name)?;
+        Ok(Value::construct(self.encoder))
     }
 
     /// Starts writing a *map* value, effectively consuming builder.
-    pub fn map<'buf, Key, Value>(&'buf mut self, name: Option<&str>) -> MiMapBuilder<'buf, Key, Value>
+    pub fn map<'buf, Key, Value>(
+        &'buf mut self,
+        name: Option<&str>,
+    ) -> Result<MiMapBuilder<'buf, Key, Value>, MiWriteError>
     where
         'a: 'buf,
         (Key, Value): MiMapBuilderFactory<'buf, Key, Value>,
     {
-        self.write_header_internal(MiType::Map, name);
-        <(Key, Value)>::construct(self.encoder)
+        self.write_header_internal(MiType::Map, name)?;
+        Ok(<(Key, Value)>::construct(self.encoder))
     }
 
     /// Starts writing an *object* value, effectively consuming builder.
-    pub fn object(&mut self, name: Option<&str>) -> MiObjectBuilder<'_> {
-        self.write_header_internal(MiType::Object, name);
-        MiObjectBuilder::construct(self.encoder)
+    pub fn object(&mut self, name: Option<&str>) -> Result<MiObjectBuilder<'_>, MiWriteError> {
+        self.write_header_internal(MiType::Object, name)?;
+        Ok(MiObjectBuilder::construct(self.encoder))
     }
 }
 
@@ -382,59 +420,59 @@ impl<'a, Value> MiArrayBuilder<'a, Value> {
     }
 
     /// Finalizes array serialization.
-    pub fn finish(&mut self) {
-        let size = self.encoder.pos() - self.start_offset;
-        self.encoder.try_write_marked("count").unwrap()
-            .copy_from_slice(&(self.item_count as u16).to_be_bytes());
-        self.encoder.try_write_marked("size").unwrap()
-            .copy_from_slice(&(size as u32).to_be_bytes());
+    pub fn finish(&mut self) -> Result<(), MiWriteError> {
+        let count = self.item_count as u16;
+        let size = (self.encoder.pos() - self.start_offset) as u32;
+        self.encoder.try_write_marked("count").unwrap().copy_from_slice(&count.to_be_bytes());
+        self.encoder.try_write_marked("size").unwrap().copy_from_slice(&size.to_be_bytes());
+        Ok(())
     }
 }
 
 impl<'a> MiArrayBuilder<'a, ArrayValueMarker> {
     /// Serializes an *array* value constructed by a `callback`, appending it to this array.
-    pub fn push<Item, Callback>(&mut self, callback: Callback) -> &mut Self
+    pub fn push<Item, Callback>(&mut self, callback: Callback) -> Result<&mut Self, MiWriteError>
     where
         for<'f> Item: MiArrayBuilderFactory<'f, Item>,
-        Callback: Fn(&mut MiArrayBuilder<'_, Item>),
+        Callback: Fn(&mut MiArrayBuilder<'_, Item>) -> Result<(), MiWriteError>,
     {
-        callback(&mut Item::construct(self.encoder));
+        callback(&mut Item::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a> MiArrayBuilder<'a, MapValueMarker> {
     /// Serializes a *map* value constructed by a `callback`, appending it to this array.
-    pub fn push<Key, Value, Callback>(&mut self, callback: Callback) -> &mut Self
+    pub fn push<Key, Value, Callback>(&mut self, callback: Callback) -> Result<&mut Self, MiWriteError>
     where
         for<'f> (Key, Value): MiMapBuilderFactory<'f, Key, Value>,
-        Callback: Fn(&mut MiMapBuilder<'_, Key, Value>),
+        Callback: Fn(&mut MiMapBuilder<'_, Key, Value>) -> Result<(), MiWriteError>,
     {
-        callback(&mut <(Key, Value)>::construct(self.encoder));
+        callback(&mut <(Key, Value)>::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a> MiArrayBuilder<'a, ObjectValueMarker> {
     /// Serializes an *object* value constructed by a `callback`, appending it to this array.
-    pub fn push<Callback>(&mut self, callback: Callback) -> &mut Self
+    pub fn push<Callback>(&mut self, callback: Callback) -> Result<&mut Self, MiWriteError>
     where
-        Callback: Fn(&mut MiObjectBuilder<'_>),
+        Callback: Fn(&mut MiObjectBuilder<'_>) -> Result<(), MiWriteError>,
     {
-        callback(&mut MiObjectBuilder::construct(self.encoder));
+        callback(&mut MiObjectBuilder::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a, Value: MiWriteValue> MiArrayBuilder<'a, Value> {
     /// Serializes a *simple* value, appending it to this array.
-    pub fn push(&mut self, value: Value) -> &mut Self {
-        value.write_value(self.encoder);
+    pub fn push(&mut self, value: Value) -> Result<&mut Self, MiWriteError> {
+        value.write_value(self.encoder)?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
@@ -464,257 +502,287 @@ impl<'a, Key, Value> MiMapBuilder<'a, Key, Value> {
     }
 
     /// Finalizes map serialization.
-    pub fn finish(&mut self) {
-        let size = self.encoder.pos() - self.start_offset;
-        self.encoder.try_write_marked("count").unwrap()
-            .copy_from_slice(&(self.item_count as u16).to_be_bytes());
-        self.encoder.try_write_marked("size").unwrap()
-            .copy_from_slice(&(size as u32).to_be_bytes());
+    pub fn finish(&mut self) -> Result<(), MiWriteError> {
+        let count = self.item_count as u16;
+        let size = (self.encoder.pos() - self.start_offset) as u32;
+        self.encoder.try_write_marked("count").unwrap().copy_from_slice(&count.to_be_bytes());
+        self.encoder.try_write_marked("size").unwrap().copy_from_slice(&size.to_be_bytes());
+        Ok(())
     }
 }
 
 impl<'a> MiMapBuilder<'a, ArrayValueMarker, ArrayValueMarker> {
     /// Serializes a pair of *array* key and *array* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
-    pub fn push<Key, Value, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    pub fn push<Key, Value, CbKey, CbValue>(
+        &mut self, key: CbKey, value: CbValue
+    ) -> Result<&mut Self, MiWriteError>
     where
         for<'k> Key: MiArrayBuilderFactory<'k, Key>,
         for<'v> Value: MiArrayBuilderFactory<'v, Value>,
-        CbKey: Fn(&mut MiArrayBuilder<'_, Key>),
-        CbValue: Fn(&mut MiArrayBuilder<'_, Value>),
+        CbKey: Fn(&mut MiArrayBuilder<'_, Key>) -> Result<(), MiWriteError>,
+        CbValue: Fn(&mut MiArrayBuilder<'_, Value>) -> Result<(), MiWriteError>,
     {
-        key(&mut Key::construct(self.encoder));
-        value(&mut Value::construct(self.encoder));
+        key(&mut Key::construct(self.encoder))?;
+        value(&mut Value::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a> MiMapBuilder<'a, ArrayValueMarker, MapValueMarker> {
     /// Serializes a pair of *array* key and *map* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
-    pub fn push<Key, ValueKey, ValueValue, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    pub fn push<Key, ValueKey, ValueValue, CbKey, CbValue>(
+        &mut self, key: CbKey, value: CbValue,
+    ) -> Result<&mut Self, MiWriteError>
     where
         for<'k> Key: MiArrayBuilderFactory<'k, Key>,
         for<'v> (ValueKey, ValueValue): MiMapBuilderFactory<'v, ValueKey, ValueValue>,
-        CbKey: Fn(&mut MiArrayBuilder<'_, Key>),
-        CbValue: Fn(&mut MiMapBuilder<'_, ValueKey, ValueValue>),
+        CbKey: Fn(&mut MiArrayBuilder<'_, Key>) -> Result<(), MiWriteError>,
+        CbValue: Fn(&mut MiMapBuilder<'_, ValueKey, ValueValue>) -> Result<(), MiWriteError>,
     {
-        key(&mut Key::construct(self.encoder));
-        value(&mut <(ValueKey, ValueValue)>::construct(self.encoder));
+        key(&mut Key::construct(self.encoder))?;
+        value(&mut <(ValueKey, ValueValue)>::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a> MiMapBuilder<'a, ArrayValueMarker, ObjectValueMarker> {
     /// Serializes a pair of *array* key and *object* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
-    pub fn push<Key, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    pub fn push<Key, CbKey, CbValue>(
+        &mut self, key: CbKey, value: CbValue,
+    ) -> Result<&mut Self, MiWriteError>
     where
         for<'k> Key: MiArrayBuilderFactory<'k, Key>,
-        CbKey: Fn(&mut MiArrayBuilder<'_, Key>),
-        CbValue: Fn(&mut MiObjectBuilder<'_>),
+        CbKey: Fn(&mut MiArrayBuilder<'_, Key>) -> Result<(), MiWriteError>,
+        CbValue: Fn(&mut MiObjectBuilder<'_>) -> Result<(), MiWriteError>,
     {
-        key(&mut Key::construct(self.encoder));
-        value(&mut MiObjectBuilder::construct(self.encoder));
+        key(&mut Key::construct(self.encoder))?;
+        value(&mut MiObjectBuilder::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a, Value: MiWriteValue> MiMapBuilder<'a, ArrayValueMarker, Value> {
     /// Serializes a pair of an *array* key and a *simple* `value`, key
     /// being constructed by the `key` callback, appending it to this map.
-    pub fn push<Key, CbKey>(&mut self, key: CbKey, value: Value) -> &mut Self
+    pub fn push<Key, CbKey>(
+        &mut self, key: CbKey, value: Value,
+    ) -> Result<&mut Self, MiWriteError>
     where
         for<'k> Key: MiArrayBuilderFactory<'k, Key>,
-        CbKey: Fn(&mut MiArrayBuilder<'_, Key>),
+        CbKey: Fn(&mut MiArrayBuilder<'_, Key>) -> Result<(), MiWriteError>,
     {
-        key(&mut Key::construct(self.encoder));
-        value.write_value(self.encoder);
+        key(&mut Key::construct(self.encoder))?;
+        value.write_value(self.encoder)?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a> MiMapBuilder<'a, MapValueMarker, ArrayValueMarker> {
     /// Serializes a pair of *map* key and *array* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
-    pub fn push<KeyKey, KeyValue, Value, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    pub fn push<KeyKey, KeyValue, Value, CbKey, CbValue>(
+        &mut self, key: CbKey, value: CbValue,
+    ) -> Result<&mut Self, MiWriteError>
     where
         for<'k> (KeyKey, KeyValue): MiMapBuilderFactory<'k, KeyKey, KeyValue>,
         for<'v> Value: MiArrayBuilderFactory<'v, Value>,
-        CbKey: Fn(&mut MiMapBuilder<'_, KeyKey, KeyValue>),
-        CbValue: Fn(&mut MiArrayBuilder<'_, Value>),
+        CbKey: Fn(&mut MiMapBuilder<'_, KeyKey, KeyValue>) -> Result<(), MiWriteError>,
+        CbValue: Fn(&mut MiArrayBuilder<'_, Value>) -> Result<(), MiWriteError>,
     {
-        key(&mut <(KeyKey, KeyValue)>::construct(self.encoder));
-        value(&mut Value::construct(self.encoder));
+        key(&mut <(KeyKey, KeyValue)>::construct(self.encoder))?;
+        value(&mut Value::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a> MiMapBuilder<'a, MapValueMarker, MapValueMarker> {
     /// Serializes a pair of *map* key and *map* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
-    pub fn push<KeyKey, KeyValue, ValueKey, ValueValue, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    pub fn push<KeyKey, KeyValue, ValueKey, ValueValue, CbKey, CbValue>(
+        &mut self, key: CbKey, value: CbValue,
+    ) -> Result<&mut Self, MiWriteError>
     where
         for<'k> (KeyKey, KeyValue): MiMapBuilderFactory<'k, KeyKey, KeyValue>,
         for<'v> (ValueKey, ValueValue): MiMapBuilderFactory<'v, ValueKey, ValueValue>,
-        CbKey: Fn(&mut MiMapBuilder<'_, KeyKey, KeyValue>),
-        CbValue: Fn(&mut MiMapBuilder<'_, ValueKey, ValueValue>),
+        CbKey: Fn(&mut MiMapBuilder<'_, KeyKey, KeyValue>) -> Result<(), MiWriteError>,
+        CbValue: Fn(&mut MiMapBuilder<'_, ValueKey, ValueValue>) -> Result<(), MiWriteError>,
     {
-        key(&mut <(KeyKey, KeyValue)>::construct(self.encoder));
-        value(&mut <(ValueKey, ValueValue)>::construct(self.encoder));
+        key(&mut <(KeyKey, KeyValue)>::construct(self.encoder))?;
+        value(&mut <(ValueKey, ValueValue)>::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a> MiMapBuilder<'a, MapValueMarker, ObjectValueMarker> {
     /// Serializes a pair of *map* key and *object* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
-    pub fn push<KeyKey, KeyValue, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    pub fn push<KeyKey, KeyValue, CbKey, CbValue>(
+        &mut self, key: CbKey, value: CbValue,
+    ) -> Result<&mut Self, MiWriteError>
     where
         for<'k> (KeyKey, KeyValue): MiMapBuilderFactory<'k, KeyKey, KeyValue>,
-        CbKey: Fn(&mut MiMapBuilder<'_, KeyKey, KeyValue>),
-        CbValue: Fn(&mut MiObjectBuilder<'_>),
+        CbKey: Fn(&mut MiMapBuilder<'_, KeyKey, KeyValue>) -> Result<(), MiWriteError>,
+        CbValue: Fn(&mut MiObjectBuilder<'_>) -> Result<(), MiWriteError>,
     {
-        key(&mut <(KeyKey, KeyValue)>::construct(self.encoder));
-        value(&mut MiObjectBuilder::construct(self.encoder));
+        key(&mut <(KeyKey, KeyValue)>::construct(self.encoder))?;
+        value(&mut MiObjectBuilder::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a, Value: MiWriteValue> MiMapBuilder<'a, MapValueMarker, Value> {
     /// Serializes a pair of a *map* key and a *simple* `value`, key
     /// being constructed by the `key` callback, appending it to this map.
-    pub fn push<KeyKey, KeyValue, CbKey>(&mut self, key: CbKey, value: Value) -> &mut Self
+    pub fn push<KeyKey, KeyValue, CbKey>(
+        &mut self, key: CbKey, value: Value,
+    ) -> Result<&mut Self, MiWriteError>
     where
         for<'k> (KeyKey, KeyValue): MiMapBuilderFactory<'k, KeyKey, KeyValue>,
-        CbKey: Fn(&mut MiMapBuilder<'_, KeyKey, KeyValue>),
+        CbKey: Fn(&mut MiMapBuilder<'_, KeyKey, KeyValue>) -> Result<(), MiWriteError>,
     {
-        key(&mut <(KeyKey, KeyValue)>::construct(self.encoder));
-        value.write_value(self.encoder);
+        key(&mut <(KeyKey, KeyValue)>::construct(self.encoder))?;
+        value.write_value(self.encoder)?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a> MiMapBuilder<'a, ObjectValueMarker, ArrayValueMarker> {
     /// Serializes a pair of *object* key and *array* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
-    pub fn push<Value, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    pub fn push<Value, CbKey, CbValue>(
+        &mut self, key: CbKey, value: CbValue,
+    ) -> Result<&mut Self, MiWriteError>
     where
         for<'v> Value: MiArrayBuilderFactory<'v, Value>,
-        CbKey: Fn(&mut MiObjectBuilder<'_>),
-        CbValue: Fn(&mut MiArrayBuilder<'_, Value>),
+        CbKey: Fn(&mut MiObjectBuilder<'_>) -> Result<(), MiWriteError>,
+        CbValue: Fn(&mut MiArrayBuilder<'_, Value>) -> Result<(), MiWriteError>,
     {
-        key(&mut MiObjectBuilder::construct(self.encoder));
-        value(&mut Value::construct(self.encoder));
+        key(&mut MiObjectBuilder::construct(self.encoder))?;
+        value(&mut Value::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a> MiMapBuilder<'a, ObjectValueMarker, MapValueMarker> {
     /// Serializes a pair of *object* key and *map* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
-    pub fn push<ValueKey, ValueValue, CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    pub fn push<ValueKey, ValueValue, CbKey, CbValue>(
+        &mut self, key: CbKey, value: CbValue,
+    ) -> Result<&mut Self, MiWriteError>
     where
         for<'v> (ValueKey, ValueValue): MiMapBuilderFactory<'v, ValueKey, ValueValue>,
-        CbKey: Fn(&mut MiObjectBuilder<'_>),
-        CbValue: Fn(&mut MiMapBuilder<'_, ValueKey, ValueValue>),
+        CbKey: Fn(&mut MiObjectBuilder<'_>) -> Result<(), MiWriteError>,
+        CbValue: Fn(&mut MiMapBuilder<'_, ValueKey, ValueValue>) -> Result<(), MiWriteError>,
     {
-        key(&mut MiObjectBuilder::construct(self.encoder));
-        value(&mut <(ValueKey, ValueValue)>::construct(self.encoder));
+        key(&mut MiObjectBuilder::construct(self.encoder))?;
+        value(&mut <(ValueKey, ValueValue)>::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a> MiMapBuilder<'a, ObjectValueMarker, ObjectValueMarker> {
     /// Serializes a pair of *object* key and *object* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
-    pub fn push<CbKey, CbValue>(&mut self, key: CbKey, value: CbValue) -> &mut Self
+    pub fn push<CbKey, CbValue>(
+        &mut self, key: CbKey, value: CbValue,
+    ) -> Result<&mut Self, MiWriteError>
     where
-        CbKey: Fn(&mut MiObjectBuilder<'_>),
-        CbValue: Fn(&mut MiObjectBuilder<'_>),
+        CbKey: Fn(&mut MiObjectBuilder<'_>) -> Result<(), MiWriteError>,
+        CbValue: Fn(&mut MiObjectBuilder<'_>) -> Result<(), MiWriteError>,
     {
-        key(&mut MiObjectBuilder::construct(self.encoder));
-        value(&mut MiObjectBuilder::construct(self.encoder));
+        key(&mut MiObjectBuilder::construct(self.encoder))?;
+        value(&mut MiObjectBuilder::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a, Value: MiWriteValue> MiMapBuilder<'a, ObjectValueMarker, Value> {
     /// Serializes a pair of an *object* key and a *simple* `value`, key
     /// being constructed by the `key` callback, appending it to this map.
-    pub fn push<CbKey>(&mut self, key: CbKey, value: Value) -> &mut Self
+    pub fn push<CbKey>(
+        &mut self, key: CbKey, value: Value,
+    ) -> Result<&mut Self, MiWriteError>
     where
-        CbKey: Fn(&mut MiObjectBuilder<'_>),
+        CbKey: Fn(&mut MiObjectBuilder<'_>) -> Result<(), MiWriteError>,
     {
-        key(&mut MiObjectBuilder::construct(self.encoder));
-        value.write_value(self.encoder);
+        key(&mut MiObjectBuilder::construct(self.encoder))?;
+        value.write_value(self.encoder)?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a, Key: MiWriteValue> MiMapBuilder<'a, Key, ArrayValueMarker> {
     /// Serializes a pair of a *simple* `key` and an *array* value, value
     /// being constructed by the `value` callback, appending it to this map.
-    pub fn push<Value, CbValue>(&mut self, key: Key, value: CbValue) -> &mut Self
+    pub fn push<Value, CbValue>(
+        &mut self, key: Key, value: CbValue,
+    ) -> Result<&mut Self, MiWriteError>
     where
         for<'v> Value: MiArrayBuilderFactory<'v, Value>,
-        CbValue: Fn(&mut MiArrayBuilder<'_, Value>),
+        CbValue: Fn(&mut MiArrayBuilder<'_, Value>) -> Result<(), MiWriteError>,
     {
-        key.write_value(self.encoder);
-        value(&mut Value::construct(self.encoder));
+        key.write_value(self.encoder)?;
+        value(&mut Value::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a, Key: MiWriteValue> MiMapBuilder<'a, Key, MapValueMarker> {
     /// Serializes a pair of a *simple* `key` and a *map* value, value
     /// being constructed by the `value` callback, appending it to this map.
-    pub fn push<ValueKey, ValueValue, CbValue>(&mut self, key: Key, value: CbValue) -> &mut Self
+    pub fn push<ValueKey, ValueValue, CbValue>(
+        &mut self, key: Key, value: CbValue,
+    ) -> Result<&mut Self, MiWriteError>
     where
         for<'v> (ValueKey, ValueValue): MiMapBuilderFactory<'v, ValueKey, ValueValue>,
-        CbValue: Fn(&mut MiMapBuilder<'_, ValueKey, ValueValue>),
+        CbValue: Fn(&mut MiMapBuilder<'_, ValueKey, ValueValue>) -> Result<(), MiWriteError>,
     {
-        key.write_value(self.encoder);
-        value(&mut <(ValueKey, ValueValue)>::construct(self.encoder));
+        key.write_value(self.encoder)?;
+        value(&mut <(ValueKey, ValueValue)>::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a, Key: MiWriteValue> MiMapBuilder<'a, Key, ObjectValueMarker> {
     /// Serializes a pair of a *simple* `key` and an *object* value, value
     /// being constructed by the `value` callback, appending it to this map.
-    pub fn push<CbValue>(&mut self, key: Key, value: CbValue) -> &mut Self
+    pub fn push<CbValue>(
+        &mut self, key: Key, value: CbValue,
+    ) -> Result<&mut Self, MiWriteError>
     where
-        CbValue: Fn(&mut MiObjectBuilder<'_>),
+        CbValue: Fn(&mut MiObjectBuilder<'_>) -> Result<(), MiWriteError>,
     {
-        key.write_value(self.encoder);
-        value(&mut MiObjectBuilder::construct(self.encoder));
+        key.write_value(self.encoder)?;
+        value(&mut MiObjectBuilder::construct(self.encoder))?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
 impl<'a, Key: MiWriteValue, Value: MiWriteValue> MiMapBuilder<'a, Key, Value> {
     /// Serializes a pair of a *simple* `key` and a *simple* `value`, appending it to this map.
-    pub fn push(&mut self, key: Key, value: Value) -> &mut Self {
-        key.write_value(self.encoder);
-        value.write_value(self.encoder);
+    pub fn push(&mut self, key: Key, value: Value) -> Result<&mut Self, MiWriteError> {
+        key.write_value(self.encoder)?;
+        value.write_value(self.encoder)?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
@@ -735,22 +803,22 @@ impl<'a> MiObjectBuilder<'a> {
     }
 
     /// Finalizes object serialization.
-    pub fn finish(&mut self) {
-        let size = self.encoder.pos() - self.start_offset;
-        self.encoder.try_write_marked("count").unwrap()
-            .copy_from_slice(&(self.item_count as u16).to_be_bytes());
-        self.encoder.try_write_marked("size").unwrap()
-            .copy_from_slice(&(size as u32).to_be_bytes());
+    pub fn finish(&mut self) -> Result<(), MiWriteError> {
+        let count = self.item_count as u16;
+        let size = (self.encoder.pos() - self.start_offset) as u32;
+        self.encoder.try_write_marked("count").unwrap().copy_from_slice(&count.to_be_bytes());
+        self.encoder.try_write_marked("size").unwrap().copy_from_slice(&size.to_be_bytes());
+        Ok(())
     }
 
     /// Serializes an element (i.e. field) constructed by a `callback`, appending it to this object.
-    pub fn push<Callback>(&mut self, callback: Callback) -> &mut Self
+    pub fn push<Callback>(&mut self, callback: Callback) -> Result<&mut Self, MiWriteError>
     where
-        Callback: Fn(&mut MiElementBuilder<'_>),
+        Callback: Fn(&mut MiElementBuilder<'_>) -> Result<(), MiWriteError>,
     {
-        callback(&mut MiElementBuilder { encoder: self.encoder });
+        callback(&mut MiElementBuilder { encoder: self.encoder })?;
         self.item_count += 1;
-        self
+        Ok(self)
     }
 }
 
@@ -762,9 +830,12 @@ mod tests {
     #[test]
     fn test_array_build() {
         let mut builder = MiEncoder::new();
-        builder.make_root().array::<i32>(Some("ARRAY"))
-            .push(2).push(4).push(8)
-            .finish();
+        builder.make_root()
+            .array::<i32>(Some("ARRAY")).unwrap()
+            .push(2).unwrap()
+            .push(4).unwrap()
+            .push(8).unwrap()
+            .finish().unwrap();
 
         let expected = b"\x02ARRAY\x00\x00\x00\x00\x00\x00\x0C\x00\x03\x04\x00\x00\x00\x02\x00\x00\x00\x04\x00\x00\x00\x08";
         assert_eq!(expected, builder.view_checked().unwrap());
@@ -775,10 +846,11 @@ mod tests {
     #[test]
     fn test_array_of_arrays() {
         let mut builder = MiEncoder::new();
-        builder.make_root().array::<ArrayValueMarker>(Some("ARRAYS"))
-            .push::<i32, _>(|inner| { inner.push(2).push(4).finish() })
-            .push::<&str, _>(|inner| { inner.push("cheers").push("hello").finish() })
-            .finish();
+        builder.make_root()
+            .array::<ArrayValueMarker>(Some("ARRAYS")).unwrap()
+            .push::<i32, _>(|inner| { inner.push(2)?.push(4)?.finish() }).unwrap()
+            .push::<&str, _>(|inner| { inner.push("cheers")?.push("hello")?.finish() }).unwrap()
+            .finish().unwrap();
 
         let expected_str = "02 41 52 52 41 59 53 00 00 00 00 00 2B 00 02 02 00 00 00 08 00 02 04 00 00 00 02 00 00 00 04 00 00 00 15 00 02 09 00 00 00 07 63 68 65 65 72 73 00 00 00 00 06 68 65 6C 6C 6F 00";
         let expected_slice = expected_str.split(' ').map(|s| u8::from_str_radix(s, 16).unwrap()).collect::<Vec<_>>();
@@ -791,10 +863,11 @@ mod tests {
     #[test]
     fn test_map_build() {
         let mut builder = MiEncoder::new();
-        builder.make_root().map::<ArrayValueMarker, &str>(None)
-            .push::<i32, _>(|inner| { inner.push(1).push(2).finish() }, "two")
-            .push::<bool, _>(|inner| { inner.push(true).finish() }, "one")
-            .finish();
+        builder.make_root()
+            .map::<ArrayValueMarker, &str>(None).unwrap()
+            .push::<i32, _>(|inner| { inner.push(1).unwrap().push(2).unwrap().finish() }, "two").unwrap()
+            .push::<bool, _>(|inner| { inner.push(true).unwrap().finish() }, "one").unwrap()
+            .finish().unwrap();
 
         // std::fs::write("./test_3.mison.bin", builder.view_checked().unwrap()).unwrap()
     }
@@ -804,23 +877,25 @@ mod tests {
         let kits = vec!["kit-1", "kit-4"];
 
         let mut builder = MiEncoder::new();
-        builder.make_root().object(None)
-            .push(|elem| elem.value(Some("map"), "some-level"))
-            .push(|elem| elem.value(Some("prvcy"), true))
+        builder.make_root()
+            .object(None).unwrap()
+            .push(|elem| elem.value(Some("map"), "some-level")).unwrap()
+            .push(|elem| elem.value(Some("prvcy"), true)).unwrap()
             .push(|elem| {
-                let mut array = elem.array::<&str>(Some("chars"));
-                for kit in &kits { array.push(kit); }
+                let mut array = elem.array::<&str>(Some("chars"))?;
+                for kit in &kits { array.push(kit)?; }
                 array.finish()
-            })
+            }).unwrap()
             .push(|elem| {
-                elem.map::<&str, i64>(Some("achvmnt"))
-                    .push("tracker-one", 832)
-                    .push("tracker-two", 0)
-                    .push("custom-tracker-x", 1234)
-                    .push("custom-tracker-y", -9)
+                elem.map::<&str, i64>(Some("achvmnt"))?
+                    .push("tracker-one", 832)?
+                    .push("tracker-two", 0)?
+                    .push("custom-tracker-x", 1234)?
+                    .push("custom-tracker-y", -9)?
                     .finish()
-            })
-            .finish();
+            }).unwrap()
+            .finish()
+            .unwrap();
 
         // std::fs::write("./test_4.mison.bin", builder.view_checked().unwrap()).unwrap()
     }
