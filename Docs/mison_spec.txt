@@ -12,8 +12,11 @@ communication for Project Milan. Originally based on Mongo's BSON and EA's TDF.
 
 document    ::= names element           ; a complete message
 
-names       ::= uint16_t('count) (name_entry * 'count)              ; element name table
-name_entry  ::= byte_t('size + 1) (byte_t * 'size) byte_t(0x00)     ; an ascii element name string
+   ; name table is serialized a sequence of null-terminated size-prefixed ascii strings,
+   ; preceded by two numbers: the total size of all name entries, and their count
+
+names       ::= uint32_t('size) uint16_t('count) (name_entry * 'count)
+name_entry  ::= byte_t('size + 1) (byte_t * 'size) byte_t(0x00)
 
 element     ::= type uint16_t(0xffff) value     ; anonymous element
               | type uint16_t('index) value     ; named element, with 'index into name table

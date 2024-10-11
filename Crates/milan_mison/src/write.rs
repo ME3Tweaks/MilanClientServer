@@ -1,6 +1,9 @@
 //! Reference implementation for MISON serialization.
 
+use std::hash::BuildHasher;
 use std::marker::PhantomData;
+
+use ordermap::OrderMap;
 use thiserror::Error;
 
 use crate::buffer::{OutputBuffer, OutputBufferLike};
@@ -164,10 +167,18 @@ use factories::*;
 /// Errors produced by builder interface.
 #[derive(Clone, Debug, Error)]
 pub enum MiWriteError {
+    /// Element name was not valid ASCII.
     #[error("element name was not ascii")]
     NameInvalidEncoding,
+    /// Element name was too long.
     #[error("element name too long")]
     NameTooLong,
+    /// Detected too many names.
+    #[error("detected too many names")]
+    TooManyNames,
+    /// Detected one or more unwritten markers.
+    #[error("detected one or more unwritten markers")]
+    UnusedMarkers,
 }
 
 
@@ -270,47 +281,121 @@ impl MiWriteValue for &[u8] {
 }
 
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MiEncoderState {
+    Reset,
+    Pending,
+    Finished,
+}
+
+
 /// Encapsulates serialization of a document.
 pub struct MiEncoder {
     /// Stores serialized element contents.
     pub(crate) buffer: OutputBuffer,
+    /// Stores serialized element name table contents.
+    pub(crate) name_buffer: OutputBuffer,
+    /// Provides lookup from string slice hash to offset-length pair.
+    pub(crate) name_lookup: OrderMap<u64, (u32, u8)>,
+
+    /// Internal operation state.
+    state: MiEncoderState,
 }
 
 impl MiEncoder {
-    /// Constructs a new, empty builder.
+    /// Constructs a new, empty builder, in a "reset" state.
     pub fn new() -> Self {
         Self {
             buffer: OutputBuffer::new(),
+            name_buffer: OutputBuffer::new(),
+            name_lookup: OrderMap::new(),
+            state: MiEncoderState::Reset,
         }
     }
 
-    /// Retrieves a view of currently serialized contents even if
-    /// serialization is not yet complete, which means that one or more
-    /// output markers have not been written to yet.
-    ///
-    /// # Safety
-    /// Only call this when you are confident that all
-    /// elements, including the root one, have been finalized.
-    pub unsafe fn view(&self) -> &[u8] {
-        self.buffer.view()
-    }
-
-    /// Retrieves a view of currently serialized contents.
-    pub fn view_checked(&self) -> Option<&[u8]> {
-        match self.buffer.marker_depth() {
-            0 => Some(unsafe { self.view() }),
-            _ => None,
-        }
-    }
-
-    /// Resets the builder to its initial empty state, preserving internal allocations.
+    /// Resets the builder to its initial empty state,
+    /// preserving internal allocations and restoring "reset" state.
     pub fn reset(&mut self) {
         self.buffer.reset();
+        self.name_buffer.reset();
+        self.name_lookup.clear();
+        self.state = MiEncoderState::Reset;
     }
 
-    /// Constructs a builder instance for the root element.
-    pub fn make_root(&mut self) -> MiElementBuilder<'_> {
+    /// Constructs a builder for the root element, moving the encoder into "pending" state.
+    ///
+    /// # Panics
+    /// This function will panic if called on an encoder in a state other than "reset".
+    pub fn start(&mut self) -> MiElementBuilder<'_> {
+        assert_eq!(self.state, MiEncoderState::Reset);
+        self.state = MiEncoderState::Pending;
+        self.name_buffer.mark_next(4, "name-table-size");
+        self.name_buffer.mark_next(2, "name-table-count");
         MiElementBuilder { encoder: self }
+    }
+
+    /// Finalizes document serialization, moving the encoder into "finished" state.
+    ///
+    /// # Panics
+    /// This function will panic if called on an encoder in a state other than "pending".
+    pub fn finish(&mut self) -> Result<(), MiWriteError> {
+        assert_eq!(self.state, MiEncoderState::Pending);
+
+        let size = (self.name_buffer.pos() - 6) as u32;
+        let count = self.name_lookup.len() as u16;
+
+        self.name_buffer.try_write_marked("name-table-count").unwrap().copy_from_slice(&count.to_be_bytes());
+        self.name_buffer.try_write_marked("name-table-size").unwrap().copy_from_slice(&size.to_be_bytes());
+
+        if self.buffer.marker_depth() != 0 {
+            Err(MiWriteError::UnusedMarkers)?;
+        }
+
+        self.state = MiEncoderState::Finished;
+        Ok(())
+    }
+
+    /// Retrieves name table slice and element buffer slice.
+    ///
+    /// # Panics
+    /// This function will panic if called on an encoder in a state other than "finished".
+    pub fn view(&self) -> (&[u8], &[u8]) {
+        assert_eq!(self.state, MiEncoderState::Finished);
+        (self.name_buffer.view(), self.buffer.view())
+    }
+
+    /// Resolves index for an element name, inserting it if necessary.
+    fn encode_name(&mut self, name: Option<&str>) -> Result<u16, MiWriteError> {
+        if let Some(name) = name {
+            if name.len() >= 256 { Err(MiWriteError::NameTooLong)?; }
+            if !name.is_ascii() { Err(MiWriteError::NameInvalidEncoding)?; }
+
+            let bytes = name.as_bytes();
+            let hash = self.name_lookup.hasher().hash_one(bytes);
+
+            if let Some(index) = self.name_lookup.get_index_of(&hash) {
+                return match index < (u16::MAX - 1) as usize {
+                    true => Ok(index as u16),
+                    false => Err(MiWriteError::TooManyNames),
+                }
+            }
+
+            let (offset, length) = (self.name_buffer.pos(), bytes.len());
+
+            *self.name_buffer.get_next_byte() = (length + 1) as u8;
+            self.name_buffer.get_next(length).copy_from_slice(bytes);
+            *self.name_buffer.get_next_byte() = 0_u8;
+
+            let pair = (offset as u32, length as u8);
+            let index = self.name_lookup.insert_full(hash, pair).0;
+
+            match index < (u16::MAX - 1) as usize {
+                true => Ok(index as u16),
+                false => Err(MiWriteError::TooManyNames),
+            }
+        } else {
+            Ok(u16::MAX)
+        }
     }
 }
 
@@ -335,24 +420,11 @@ pub struct MiElementBuilder<'a> {
 
 impl<'a> MiElementBuilder<'a> {
     fn write_header_internal(
-        &mut self,
-        r#type: MiType,
-        name: Option<&str>,
+        &mut self, r#type: MiType, name: Option<&str>,
     ) -> Result<(), MiWriteError> {
-        *self.encoder.get_next_byte() =
-            MiType::build_tag(r#type, name.is_none());
-
-        if let Some(name) = name {
-            if !name.is_ascii() { Err(MiWriteError::NameInvalidEncoding)?; }
-            if name.is_empty() || name.len() >= 8 { Err(MiWriteError::NameTooLong)?; }
-
-            let mut buffer = [0_u8; 8];
-            let slice = unsafe { buffer.get_unchecked_mut(.. name.len()) };
-            slice.copy_from_slice(name.as_bytes());
-
-            self.encoder.get_next_array::<8>().copy_from_slice(&buffer);
-        }
-
+        *self.encoder.get_next_byte() = r#type as u8;
+        let name_index = self.encoder.encode_name(name)?;
+        self.encoder.get_next(2).copy_from_slice(&name_index.to_be_bytes());
         Ok(())
     }
 
@@ -827,57 +899,73 @@ impl<'a> MiObjectBuilder<'a> {
 mod tests {
     use super::*;
 
+    fn parse_hex(s: &str) -> Vec<u8> {
+        s.split(' ').map(|s| u8::from_str_radix(s, 16).unwrap()).collect::<Vec<_>>()
+    }
+
     #[test]
     fn test_array_build() {
-        let mut builder = MiEncoder::new();
-        builder.make_root()
+        let mut encoder = MiEncoder::new();
+        encoder.start()
             .array::<i32>(Some("ARRAY")).unwrap()
             .push(2).unwrap()
             .push(4).unwrap()
             .push(8).unwrap()
             .finish().unwrap();
 
-        let expected = b"\x02ARRAY\x00\x00\x00\x00\x00\x00\x0C\x00\x03\x04\x00\x00\x00\x02\x00\x00\x00\x04\x00\x00\x00\x08";
-        assert_eq!(expected, builder.view_checked().unwrap());
+        encoder.finish().unwrap();
+        let (names, elements) = encoder.view();
 
-        // std::fs::write("./test_1.mison.bin", builder.view_checked().unwrap()).unwrap()
+        let exp_names = parse_hex("00 00 00 07 00 01 06 41 52 52 41 59 00");
+        let exp_elements = parse_hex("02 00 00 00 00 00 0C 00 03 04 00 00 00 02 00 00 00 04 00 00 00 08");
+
+        assert_eq!(&exp_names, names);
+        assert_eq!(&exp_elements, elements);
+
+        // std::fs::write("./test_1.mison.bin", &[names, elements].concat()).unwrap()
     }
 
     #[test]
     fn test_array_of_arrays() {
-        let mut builder = MiEncoder::new();
-        builder.make_root()
+        let mut encoder = MiEncoder::new();
+        encoder.start()
             .array::<ArrayValueMarker>(Some("ARRAYS")).unwrap()
             .push::<i32, _>(|inner| { inner.push(2)?.push(4)?.finish() }).unwrap()
             .push::<&str, _>(|inner| { inner.push("cheers")?.push("hello")?.finish() }).unwrap()
             .finish().unwrap();
 
-        let expected_str = "02 41 52 52 41 59 53 00 00 00 00 00 2B 00 02 02 00 00 00 08 00 02 04 00 00 00 02 00 00 00 04 00 00 00 15 00 02 09 00 00 00 07 63 68 65 65 72 73 00 00 00 00 06 68 65 6C 6C 6F 00";
-        let expected_slice = expected_str.split(' ').map(|s| u8::from_str_radix(s, 16).unwrap()).collect::<Vec<_>>();
+        encoder.finish().unwrap();
+        let (names, elements) = encoder.view();
 
-        assert_eq!(&expected_slice, builder.view_checked().unwrap());
+        let exp_names = parse_hex("00 00 00 08 00 01 07 41 52 52 41 59 53 00");
+        let exp_elements = parse_hex("02 00 00 00 00 00 2B 00 02 02 00 00 00 08 00 02 04 00 00 00 02 00 00 00 04 00 00 00 15 00 02 09 00 00 00 07 63 68 65 65 72 73 00 00 00 00 06 68 65 6C 6C 6F 00");
 
-        // std::fs::write("./test_2.mison.bin", builder.view_checked().unwrap()).unwrap()
+        assert_eq!(&exp_names, names);
+        assert_eq!(&exp_elements, elements);
+
+        // std::fs::write("./test_2.mison.bin", &[names, elements].concat()).unwrap()
     }
 
     #[test]
     fn test_map_build() {
-        let mut builder = MiEncoder::new();
-        builder.make_root()
+        let mut encoder = MiEncoder::new();
+        encoder.start()
             .map::<ArrayValueMarker, &str>(None).unwrap()
             .push::<i32, _>(|inner| { inner.push(1).unwrap().push(2).unwrap().finish() }, "two").unwrap()
             .push::<bool, _>(|inner| { inner.push(true).unwrap().finish() }, "one").unwrap()
             .finish().unwrap();
 
-        // std::fs::write("./test_3.mison.bin", builder.view_checked().unwrap()).unwrap()
+        encoder.finish().unwrap();
+        // let (names, elements) = encoder.view();
+        // std::fs::write("./test_3.mison.bin", &[names, elements].concat()).unwrap()
     }
 
     #[test]
     fn test_object_build() {
         let kits = vec!["kit-1", "kit-4"];
 
-        let mut builder = MiEncoder::new();
-        builder.make_root()
+        let mut encoder = MiEncoder::new();
+        encoder.start()
             .object(None).unwrap()
             .push(|elem| elem.value(Some("map"), "some-level")).unwrap()
             .push(|elem| elem.value(Some("prvcy"), true)).unwrap()
@@ -897,6 +985,8 @@ mod tests {
             .finish()
             .unwrap();
 
-        // std::fs::write("./test_4.mison.bin", builder.view_checked().unwrap()).unwrap()
+        encoder.finish().unwrap();
+        // let (names, elements) = encoder.view();
+        // std::fs::write("./test_4.mison.bin", &[names, elements].concat()).unwrap()
     }
 }
