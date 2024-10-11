@@ -140,8 +140,8 @@ impl OutputBuffer {
         &self.inner
     }
 
-    /// Retrieves depth of the marker stack.
-    pub fn marker_count(&self) -> usize {
+    /// Retrieves number of markers pushed but not written.
+    pub fn marker_depth(&self) -> usize {
         self.markers.len()
     }
 
@@ -160,42 +160,61 @@ impl OutputBuffer {
         self.inner.clear();
         self.markers.clear();
     }
-
-    /// Retrieves next `count` byte(s) for writing, advancing output forward.
-    pub fn get_next(&mut self, count: usize) -> &mut [u8] {
-        let offset = self.inner.len();
-        self.inner.resize(offset + count, 0_u8);
-        self.inner.get_mut(offset .. offset + count).unwrap()
-    }
-
-    /// Retrieves next `N` byte(s) for writing as a fixed-size array, advancing output forward.
-    pub fn get_next_array<const N: usize>(&mut self) -> &mut [u8; N] {
-        self.get_next(N).try_into().unwrap()
-    }
-
-    /// Retrieves next byte for writing, advancing output forward.
-    pub fn get_next_byte(&mut self) -> &mut u8 {
-        self.get_next(1).first_mut().unwrap()
-    }
-
-    /// Remembers current offset and advances the output `count` byte(s) forward.
-    pub fn mark_next(&mut self, count: usize, hint: &'static str) {
-        let offset = self.inner.len();
-        self.inner.resize(offset + count, 0_u8);
-        self.markers.push((offset, count, hint));
-    }
-
-    /// Tries to pop a marker off the stack and return the slice of the memory it marked.
-    pub fn try_write_marked(&mut self, check: &'static str) -> Option<&mut [u8]> {
-        self.markers.pop().map(|(offset, size, hint)| {
-            debug_assert_eq!(check, hint, "incorrect marker popped");
-            self.inner.get_mut(offset .. offset + size).unwrap()
-        })
-    }
 }
 
 impl Default for OutputBuffer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+
+/// Implements output operation on [`OutputBuffer`].
+pub trait OutputBufferLike {
+    /// Retrieves current serialization offset within the underlying buffer.
+    fn pos(&self) -> usize;
+    
+    /// Retrieves next `count` byte(s) for writing, advancing output forward.
+    fn get_next(&mut self, count: usize) -> &mut [u8];
+
+    /// Retrieves next `N` byte(s) for writing as a fixed-size array, advancing output forward.
+    fn get_next_array<const N: usize>(&mut self) -> &mut [u8; N] {
+        self.get_next(N).try_into().unwrap()
+    }
+
+    /// Retrieves next byte for writing, advancing output forward.
+    fn get_next_byte(&mut self) -> &mut u8 {
+        self.get_next(1).first_mut().unwrap()
+    }
+
+    /// Remembers current offset and advances the output `count` byte(s) forward.
+    fn mark_next(&mut self, count: usize, hint: &'static str);
+
+    /// Tries to pop a marker off the stack and return the slice of the memory it marked.
+    fn try_write_marked(&mut self, check: &'static str) -> Option<&mut [u8]>;
+}
+
+impl OutputBufferLike for OutputBuffer {
+    fn pos(&self) -> usize {
+        self.len()
+    }
+    
+    fn get_next(&mut self, count: usize) -> &mut [u8] {
+        let offset = self.inner.len();
+        self.inner.resize(offset + count, 0_u8);
+        self.inner.get_mut(offset .. offset + count).unwrap()
+    }
+
+    fn mark_next(&mut self, count: usize, hint: &'static str) {
+        let offset = self.inner.len();
+        self.inner.resize(offset + count, 0_u8);
+        self.markers.push((offset, count, hint));
+    }
+
+    fn try_write_marked(&mut self, check: &'static str) -> Option<&mut [u8]> {
+        self.markers.pop().map(|(offset, size, hint)| {
+            debug_assert_eq!(check, hint, "incorrect marker popped");
+            self.inner.get_mut(offset .. offset + size).unwrap()
+        })
     }
 }

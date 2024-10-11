@@ -13,6 +13,9 @@ pub mod read;
 pub mod write;
 
 
+pub use write::MiEncoder;
+
+
 /// Serializable value types.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash)]

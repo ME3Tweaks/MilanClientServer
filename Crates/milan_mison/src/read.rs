@@ -1,4 +1,4 @@
-//! Zero-allocation deserialization.
+//! Reference implementation for MISON deserialization.
 
 use std::cell::Cell;
 use std::fmt;
