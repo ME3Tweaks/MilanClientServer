@@ -9,6 +9,12 @@ communications for Project Milan. Loosely based on Mongo's BSON and EA's TDF.
   * Syntax of this spec is not supposed to be valid BNF.
 
 
+document    ::= element                 ; a complete message
+
+element     ::= byte_t((type & 0x7f) | 0x80) value
+              | byte_t((type & 0x7f) | 0x00) name value
+
+name        ::= (byte_t*7) byte_t(0x00) ; zero-padded 8 bytes, up to 7 of which are ASCII characters
 
 type        ::= byte_t(0x00)            ; None, i.e. absence of value.
               | byte_t(0x01)            ; Object, a collection of elements (named).
@@ -21,18 +27,6 @@ type        ::= byte_t(0x00)            ; None, i.e. absence of value.
               | byte_t(0x08)            ; Bool, an 8-bit boolean value.
               | byte_t(0x09)            ; String, a UTF-8 string.
               | byte_t(0x0A)            ; Binary, an untyped sequence of bytes.
-
-anonymous   ::= byte_t(0x00)            ; flag indicating that tag has a name.
-              | byte_t(0x80)            ; flag indicating that tag has no name.
-
-document    ::= element                 ; the root element which constitutes an entire message payload
-
-element     ::= tag name value
-
-tag         ::= byte_t( (type & 0x7f) BITWISE-OR anonymous )
-
-name        ::= (byte_t*7) byte_t(0x00) ; if not anonymous, 8 bytes, up to 7 of which are ASCII characters, zero-padded
-              | ()                      ; if anonymous, no bytes
 
 value       ::= ()                      ; type is "None"
               | object_value_t          ; type is "Object"
@@ -47,11 +41,14 @@ value       ::= ()                      ; type is "None"
               | string_value_t          ; type is "String"
               | blob_value_t            ; type is "Binary"
 
-string_value_t ::= uint32_t('size + 1) (byte_t * 'size) byte_t(0x00)
-blob_value_t ::= uint32_t('size) (byte_t * 'size)
+string_value_t  ::= uint32_t('size + 1) (byte_t * 'size) byte_t(0x00)
+blob_value_t    ::= uint32_t('size) (byte_t * 'size)
 
-; in all definitions below 'size means number of bytes until end of value
+   ; in all definitions below 'size means number of bytes until end of value
 
-object_value_t ::= uint32_t('size) uint16_t('count) (element * 'count)
-array_value_t ::= uint32_t('size) uint16_t('count) type('item_type) (value * 'count)
-map_value_t ::= uint32_t('size) uint16_t('count) type('key_type) type('value_type) ((value('key) value('value)) * 'count)
+object_value_t  ::= uint32_t('size) uint16_t('count) (element * 'count)
+array_value_t   ::= uint32_t('size) uint16_t('count) type('value_type) (value * 'count)
+
+map_value_t     ::= uint32_t('size) uint16_t('count)
+                    type('key_type) type('value_type)
+                    ((value('key) value('value)) * 'count)
