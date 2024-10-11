@@ -2,24 +2,26 @@ MISON - Milan Structured Object Notation
 ------------------------------------------
 
 Small binary format designed for serializing contents of client / server
-communications for Project Milan. Loosely based on Mongo's BSON and EA's TDF.
+communication for Project Milan. Originally based on Mongo's BSON and EA's TDF.
 
-  * All numeric values are serialized in big-endian byte order.
-  * Textual values are UTF-8 by default, or ASCII if specified otherwise.
+  * All numerics must be serialized in big-endian byte order.
+  * All textual values must be valid UTF-8, narrowed down to ASCII when specified.
+  * While a document is entirely self-describing, individual elements are no longer so.
   * Syntax of this spec is not supposed to be valid BNF.
 
 
-document    ::= element                 ; a complete message
+document    ::= names element           ; a complete message
 
-element     ::= byte_t((type & 0x7f) | 0x80) value
-              | byte_t((type & 0x7f) | 0x00) name value
+names       ::= uint16_t('count) (name_entry * 'count)              ; element name table
+name_entry  ::= byte_t('size + 1) (byte_t * 'size) byte_t(0x00)     ; an ascii element name string
 
-name        ::= (byte_t*7) byte_t(0x00) ; zero-padded 8 bytes, up to 7 of which are ASCII characters
+element     ::= type uint16_t(0xffff) value     ; anonymous element
+              | type uint16_t('index) value     ; named element, with 'index into name table
 
-type        ::= byte_t(0x00)            ; None, i.e. absence of value.
-              | byte_t(0x01)            ; Object, a collection of elements (named).
-              | byte_t(0x02)            ; Array, a collection of values (anonymous).
-              | byte_t(0x03)            ; Map, a collection of value -> value pairs (anonymous).
+type        ::= byte_t(0x00)            ; None, an absence of value.
+              | byte_t(0x01)            ; Object, a collection of elements.
+              | byte_t(0x02)            ; Array, a collection of values.
+              | byte_t(0x03)            ; Map, a collection of value -> value pairs.
               | byte_t(0x04)            ; Int32, a signed 32-bit integer value.
               | byte_t(0x05)            ; Int64, a signed 64-bit integer value.
               | byte_t(0x06)            ; Single, a single-precision 32-bit floating-point value.
