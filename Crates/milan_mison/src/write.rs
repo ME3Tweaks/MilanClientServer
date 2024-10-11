@@ -1,9 +1,9 @@
 //! Reference implementation for MISON serialization.
 
+use std::collections::HashMap;
 use std::hash::BuildHasher;
 use std::marker::PhantomData;
 
-use ordermap::OrderMap;
 use thiserror::Error;
 
 use crate::buffer::{OutputBuffer, OutputBufferLike};
@@ -295,8 +295,8 @@ pub struct MiEncoder {
     pub(crate) buffer: OutputBuffer,
     /// Stores serialized element name table contents.
     pub(crate) name_buffer: OutputBuffer,
-    /// Provides lookup from string slice hash to offset-length pair.
-    pub(crate) name_lookup: OrderMap<u64, (u32, u8)>,
+    /// Provides lookup from string slice hash to serial index.
+    pub(crate) name_lookup: HashMap<u64, usize>,
 
     /// Internal operation state.
     state: MiEncoderState,
@@ -308,7 +308,7 @@ impl MiEncoder {
         Self {
             buffer: OutputBuffer::new(),
             name_buffer: OutputBuffer::new(),
-            name_lookup: OrderMap::new(),
+            name_lookup: HashMap::new(),
             state: MiEncoderState::Reset,
         }
     }
@@ -373,21 +373,21 @@ impl MiEncoder {
             let bytes = name.as_bytes();
             let hash = self.name_lookup.hasher().hash_one(bytes);
 
-            if let Some(index) = self.name_lookup.get_index_of(&hash) {
+            if let Some(&index) = self.name_lookup.get(&hash) {
                 return match index < (u16::MAX - 1) as usize {
                     true => Ok(index as u16),
                     false => Err(MiWriteError::TooManyNames),
                 }
             }
 
-            let (offset, length) = (self.name_buffer.pos(), bytes.len());
+            let length = bytes.len();
 
             *self.name_buffer.get_next_byte() = (length + 1) as u8;
             self.name_buffer.get_next(length).copy_from_slice(bytes);
             *self.name_buffer.get_next_byte() = 0_u8;
 
-            let pair = (offset as u32, length as u8);
-            let index = self.name_lookup.insert_full(hash, pair).0;
+            let index = self.name_lookup.len();
+            self.name_lookup.insert(hash, index);
 
             match index < (u16::MAX - 1) as usize {
                 true => Ok(index as u16),
