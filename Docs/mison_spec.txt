@@ -12,14 +12,17 @@ communication for Project Milan. Originally based on Mongo's BSON and EA's TDF.
 
 document    ::= names element           ; a complete message
 
-   ; name table is serialized a sequence of null-terminated size-prefixed ascii strings,
-   ; preceded by two numbers: the total size of all name entries, and their count
+   ; Name table is serialized a sequence of null-terminated size-prefixed ASCII strings,
+   ; preceded by two numbers: the total size of all name entries, and their count.
 
-names       ::= uint32_t('size) uint16_t('count) (name_entry * 'count)
+names       ::= uint16_t('size) uint16_t('count) (name_entry * 'count)
 name_entry  ::= byte_t('size + 1) (byte_t * 'size) byte_t(0x00)
 
+   ; Offset signifying element's name starts with uint16_t(0x04), which is the first string
+   ; starting right after names' header block consisting of size and count.
+
 element     ::= type uint16_t(0xffff) value     ; anonymous element
-              | type uint16_t('index) value     ; named element, with 'index into name table
+              | type uint16_t('offset) value    ; named element, with 'offset into names.
 
 type        ::= byte_t(0x00)            ; None, an absence of value.
               | byte_t(0x01)            ; Object, a collection of elements.
@@ -49,7 +52,7 @@ value       ::= ()                      ; type is "None"
 string_value_t  ::= uint32_t('size + 1) (byte_t * 'size) byte_t(0x00)
 blob_value_t    ::= uint32_t('size) (byte_t * 'size)
 
-   ; in all definitions below 'size means number of bytes until end of value
+   ; For all definitions below 'size means number of bytes until end of value.
 
 object_value_t  ::= uint32_t('size) uint16_t('count) (element * 'count)
 array_value_t   ::= uint32_t('size) uint16_t('count) type('value_type) (value * 'count)
