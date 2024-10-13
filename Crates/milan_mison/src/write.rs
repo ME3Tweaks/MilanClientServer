@@ -1,4 +1,33 @@
 //! Reference implementation for MISON serialization.
+//!
+//! # Example
+//! ```rust
+//! # use milan_mison::write::*;
+//! # fn example() -> Result<(), WriteError> {
+//! // Create a new encoder, in real scenarios it would probably be re-used.
+//! let mut encoder = MiEncoder::new();
+//! encoder.start()
+//!     // Use an anonymous object for root.
+//!     .object(None)?
+//!         // Push a string element.
+//!         .push(|elem| elem.value(Some("name"), "Pekka"))?
+//!         // Push an i32 element.
+//!         .push(|elem| elem.value(Some("age"), 42_i32))?
+//!         // Push a map element (string -> bool).
+//!         .push(|elem| {
+//!             elem.map::<&str, bool>(Some("states"))?
+//!                 .push("alive", true)?
+//!                 .push("married", false)?
+//!                 .push("happy", false)?
+//!                 .finish()
+//!         })?
+//!     .finish()?;
+//!
+//! // Get serialized name table and element tree.
+//! let (names, elements) = encoder.view();
+//! # Ok(())
+//! # }
+//! ```
 
 use std::collections::HashMap;
 use std::hash::BuildHasher;

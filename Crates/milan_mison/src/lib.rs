@@ -7,7 +7,8 @@
 //! contents of client / server communication for *Project Milan*. Originally designed
 //! based on Mongo's BSON and EA's TDF.
 //!
-//! See full specification (.txt) embedded in the [`spec`] module.
+//! See [`mod@read`] and [`mod@write`] module-level documentation and crate-level
+//! tests for usage examples. See the [`spec`] module for an embedded specification (.txt).
 
 
 use std::fmt;

@@ -1,4 +1,37 @@
 //! Reference implementation for MISON deserialization.
+//!
+//! # Example
+//! ```rust
+//! # use milan_mison::read::*;
+//! # fn example(slice: &[u8]) -> Result<(), ReadError> {
+//! // let slice: &[u8] = ...;
+//!
+//! let decoder = MiDecoder::decode(&slice)?;
+//! let root = decoder.root()?;
+//!
+//! assert!(root.name.is_none(), "expected anonymous root");
+//! if let MiValue::Object(object) = root.value {
+//!     println!("root has {} field(s)", object.count);
+//!
+//!     for elem_res in &object {
+//!         let MiElement { name, value } = elem_res?;
+//!         print!("field '{}' has value of type {}: ",
+//!             name.unwrap_or("<anonymous>"), value.get_type());
+//!
+//!         match value {
+//!             MiValue::Array(arr) => todo!("do something with array"),
+//!             MiValue::Int32(int32) => println!("{}", int32),
+//!             MiValue::Bool(boolean) => println!("{}", boolean),
+//!             _ => todo!("value type is not implemented"),
+//!         }
+//!     }
+//! } else {
+//!     panic!("expected root object");
+//! }
+//!
+//! # Ok(())
+//! # }
+//! ```
 
 use std::marker::PhantomData;
 use thiserror::Error;
