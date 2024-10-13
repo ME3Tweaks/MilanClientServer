@@ -14,10 +14,8 @@ use std::fmt;
 use std::str::FromStr;
 
 
-pub mod buffer;
 pub mod io;
 pub mod read;
-pub mod read2;
 pub mod write;
 
 
@@ -30,7 +28,7 @@ pub mod spec {
 }
 
 
-pub use read2::MiDecoder;
+pub use read::MiDecoder;
 pub use write::MiEncoder;
 
 
@@ -80,22 +78,6 @@ impl MiType {
             0x0A => Some(Self::Binary),
             _ => None,
         }
-    }
-
-    /// "Anonymous" flag value.
-    pub const ANONYMOUS_FLAG: u8 = 0x80;
-    /// Mask for the type value.
-    pub const TYPE_MASK: u8 = 0x7f;
-
-    /// Tries to split a byte `tag` into a type variant and `anonymous` flag.
-    pub fn split_tag(tag: u8) -> Option<(Self, bool)> {
-        let anonymous = (tag & Self::ANONYMOUS_FLAG) != 0x00;
-        Self::from_tag(tag & Self::TYPE_MASK).map(|v| (v, anonymous ))
-    }
-
-    /// Composes a byte `tag` from a type variant and `anonymous` flag.
-    pub fn build_tag(self, anonymous: bool) -> u8 {
-        (self as u8) | if anonymous { Self::ANONYMOUS_FLAG } else { 0_u8 }
     }
 
     /// Tries to retrieve a content-independent size that a value of this type has.
