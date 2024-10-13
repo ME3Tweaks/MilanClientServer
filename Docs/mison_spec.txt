@@ -4,10 +4,10 @@ MISON - Milan Structured Object Notation
 Small binary format designed for serializing contents of client / server
 communication for Project Milan. Originally based on Mongo's BSON and EA's TDF.
 
-  * All numerics must be serialized in big-endian byte order.
-  * All textual values must be valid UTF-8, narrowed down to ASCII when specified.
-  * While a document is entirely self-describing, individual elements are no longer so.
-  * Syntax of this spec is not supposed to be valid BNF.
+   * All numerics must be serialized in big-endian byte order.
+   * All textual values must be valid UTF-8, narrowed down to ASCII when specified.
+   * While a document is entirely self-describing, individual elements are no longer so.
+   * Syntax of this spec is not supposed to be valid BNF.
 
 
 document    ::= names element           ; a complete message

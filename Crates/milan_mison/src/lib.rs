@@ -2,6 +2,12 @@
 #![allow(unsafe_code)]
 
 //! MISON - Milan Structured Object Notation.
+//!
+//! This crate implements *MISON*, a small binary format designed for serializing
+//! contents of client / server communication for *Project Milan*. Originally designed
+//! based on Mongo's BSON and EA's TDF.
+//!
+//! See full specification (.txt) embedded in the [`spec`] module.
 
 
 use std::fmt;
@@ -9,10 +15,22 @@ use std::str::FromStr;
 
 
 pub mod buffer;
+pub mod io;
 pub mod read;
+pub mod read2;
 pub mod write;
 
 
+#[cfg(doc)]
+pub mod spec {
+    //! *Embedded specification (this module is only built for docs).*
+    #![doc = "```text"]
+    #![doc = include_str!("../../../Docs/mison_spec.txt")]
+    #![doc = "```"]
+}
+
+
+pub use read2::MiDecoder;
 pub use write::MiEncoder;
 
 

@@ -1,4 +1,4 @@
-//! Reference implementation for MISON deserialization (old).
+//! Reference implementation for MISON deserialization.
 
 use std::cell::Cell;
 use std::fmt;

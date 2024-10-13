@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 
 use thiserror::Error;
 
-use crate::buffer::{OutputBuffer, OutputBufferLike};
+use crate::io::{OutputBuffer, OutputBufferLike};
 use crate::MiType;
 
 
@@ -896,17 +896,17 @@ impl<'a> MiObjectBuilder<'a> {
 
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[inline]
-    fn parse_hex(string: &str) -> Vec<u8> {
+    pub(crate) fn parse_hex(string: &str) -> Vec<u8> {
         let parse = |s| u8::from_str_radix(s, 16).unwrap();
         string.split(' ').map(parse).collect::<Vec<_>>()
     }
 
     #[inline]
-    fn dump_binary(path: impl AsRef<std::path::Path>, names: &[u8], elements: &[u8]) {
+    pub(crate) fn dump_binary(path: impl AsRef<std::path::Path>, names: &[u8], elements: &[u8]) {
         let dump = true;
         if dump { std::fs::write(path, &[names, elements].concat()).unwrap(); }
     }
