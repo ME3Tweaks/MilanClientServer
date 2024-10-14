@@ -35,6 +35,7 @@ function (MLN_UTILITY_ASI PROJ_TARGET)
   target_link_libraries (${PROJ_TARGET} PRIVATE ${PROJ_LINKS} LESDK-LE3)
 
   mln_utility_source_group (${PROJ_TARGET})
+  mln_organize_pchs (${PROJ_TARGET})
 endfunction ()
 
 

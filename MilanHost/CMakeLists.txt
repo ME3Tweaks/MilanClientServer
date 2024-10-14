@@ -74,6 +74,8 @@ target_include_directories (${PROJ_TARGET} PUBLIC ${PROJ_FOLDER})
 target_link_options (${PROJ_TARGET} PUBLIC ${MILAN_LINK_OPTIONS})
 target_link_libraries (${PROJ_TARGET} PUBLIC ${PROJ_LINKS})
 
+mln_organize_pchs (${PROJ_TARGET})
+
 
 # If there's an appropriate environment variable set auto-copy
 # the built .asi to game directory and update default debug options.

@@ -63,9 +63,10 @@ Build/                      - output directory
   Cargo/                    - output for rust code
   VisualStudio/             - output for c++ code
     Projects/               - generated visual studio solution and projects
-    {DEBUG|RELESE|FINAL}/   - directories for built artifacts
+    {DEBUG|RELEASE|FINAL}/  - directories for built artifacts
     MilanBuildConfig.cmake  - workspace-wide build configuration
-  Crates/                   - local rust libraries
+    MilanTargetUtils.cmake  - auxiliary logic for adding cmake targets
+Crates/                     - local rust libraries
 MilanCore/                  - the rust library and a cmake target for linking it into c++ code
   client_core/              - ecsm implementation as a non-system library
   client_ffi/               - system library wrapping the ecsm interface for ffi

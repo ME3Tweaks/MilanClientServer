@@ -32,7 +32,9 @@ endif ()
 # ========================================
 
 list (APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/Build)
+
 include (MilanBuildConfig)
+include (MilanTargetUtils)
 
 
 # ! Output paths.
