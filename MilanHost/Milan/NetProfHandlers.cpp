@@ -82,7 +82,7 @@ void MlnUNetConnectionReceivedPacket1_Handler(UNetConnection* const Connection, 
 }
 
 // Used by UChannel::SendBunch handlers: stored by 1st, loaded and cleared by 2nd.
-static thread_local INT SendBunch1_BitsWrittenBefore = 0;
+static INT SendBunch1_BitsWrittenBefore = 0;
 
 void MlnUChannelSendBunch1_Handler(FOutBunch* const Bunch)
 {
@@ -101,7 +101,7 @@ void MlnUChannelSendBunch2_Handler(UChannel* const Channel, FOutBunch* const Bun
 }
 
 // Used by UActorChannel::ReplicateActor handlers: stored by 2nd, loaded and cleared by 3rd.
-static thread_local INT ReplicateActor_BitsWrittenBeforeProp = 0;
+static INT ReplicateActor_BitsWrittenBeforeProp = 0;
 
 void MlnUActorChannelReplicateActor1_Handler(UActorChannel* const Channel, AActor* const Actor)
 {

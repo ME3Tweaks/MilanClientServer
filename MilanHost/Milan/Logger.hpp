@@ -16,36 +16,41 @@
 // ! Output devices.
 // ========================================
 
+class BasicConsoleLoggerOutput final : public ILoggerOutput
+{
+public:
+
+    BasicConsoleLoggerOutput();
+    ~BasicConsoleLoggerOutput() noexcept override;
+    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds) override;
+    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds) override;
+    void Flush(bool bError) override;
+};
+
 class ConsoleLoggerOutput final : public ILoggerOutput
 {
-    HANDLE OutputHandle{ INVALID_HANDLE_VALUE };
-    HANDLE ErrorHandle{ INVALID_HANDLE_VALUE };
-
-    static HANDLE InitHandle(DWORD Target);
-    unsigned short ExchangeConsoleColor(unsigned short Attributes, bool bUseError);
-
 public:
 
     ConsoleLoggerOutput();
-
     ~ConsoleLoggerOutput() noexcept override;
-    void AcceptAnsi(ESeverity Severity, char const* Data, size_t Size) override;
-    void AcceptUnicode(ESeverity Severity, wchar_t const* Data, size_t Size) override;
+    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds) override;
+    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds) override;
     void Flush(bool bError) override;
 };
 
 class FileLoggerOutput final : public ILoggerOutput
 {
     std::FILE* OutputFile{ nullptr };
+    std::mutex AnsiConvMutex;
 
 public:
 
-    FileLoggerOutput(std::string_view OutputPath, bool bAppend);
     bool Initialized() const noexcept;
 
+    FileLoggerOutput(std::string_view OutputPath, bool bAppend);
     ~FileLoggerOutput() noexcept override;
-    void AcceptAnsi(ESeverity Severity, char const* Data, size_t Size) override;
-    void AcceptUnicode(ESeverity Severity, wchar_t const* Data, size_t Size) override;
+    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds) override;
+    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds) override;
     void Flush(bool bError) override;
 };
 

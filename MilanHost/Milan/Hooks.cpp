@@ -67,14 +67,6 @@ void BioRequestExit_hook(UBOOL const bForce, INT const ExitCode, INT const Unuse
             MILAN_DEBUGW(L"BioRequestExit: bForce = FALSE, ExitCode = %d", ExitCode);
         }
     }
-    else
-    {
-        thread_local std::array<wchar_t, 128> OutputBuffer{ '\0' };
-        ::swprintf(OutputBuffer.data(), OutputBuffer.size(),
-            L"BioRequestExit: bForce = %s, ExitCode = %d",
-            bForce ? L"TRUE" : L"FALSE", ExitCode);
-        ::OutputDebugStringW(OutputBuffer.data());
-    }
 #endif
 
     (*BioRequestExit_orig)(bForce, ExitCode, Unused);

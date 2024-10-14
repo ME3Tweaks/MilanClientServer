@@ -5,207 +5,138 @@
 #include "Milan/Logger.hpp"
 
 
-// ! Windows console colors.
-// ! Taken from: https://stackoverflow.com/a/49929936
-//========================================
-
-enum FG_COLORS : WORD
-{
-    FG_BLACK = 0,
-    FG_BLUE = 1,
-    FG_GREEN = 2,
-    FG_CYAN = 3,
-    FG_RED = 4,
-    FG_MAGENTA = 5,
-    FG_BROWN = 6,
-    FG_LIGHTGRAY = 7,
-    FG_GRAY = 8,
-    FG_LIGHTBLUE = 9,
-    FG_LIGHTGREEN = 10,
-    FG_LIGHTCYAN = 11,
-    FG_LIGHTRED = 12,
-    FG_LIGHTMAGENTA = 13,
-    FG_YELLOW = 14,
-    FG_WHITE = 15
-} FG_COLORS;
-
-enum BG_COLORS : WORD
-{
-    BG_NAVYBLUE = 16,
-    BG_GREEN = 32,
-    BG_TEAL = 48,
-    BG_MAROON = 64,
-    BG_PURPLE = 80,
-    BG_OLIVE = 96,
-    BG_SILVER = 112,
-    BG_GRAY = 128,
-    BG_BLUE = 144,
-    BG_LIME = 160,
-    BG_CYAN = 176,
-    BG_RED = 192,
-    BG_MAGENTA = 208,
-    BG_YELLOW = 224,
-    BG_WHITE = 240
-} BG_COLORS;
-
-
 // ! Shared internal logic.
 // ========================================
 
-char const* FormatSeverityAnsi(ESeverity const Severity)
+struct FormatStyleA final
 {
+    std::FILE*          OutStream;      /** Standard stream to log to, if logging to stdout/stderr. */
+    bool                bFlush;         /** Whether logger should flush stream after current line. */
+    char const*         SevToken;       /** Textual representation of a severity level. */
+    char const*         OpenSeq;        /** Characters to prepend to the message line (escape sequences). */
+    char const*         CloseSeq;       /** Characters to append to the message line (escape sequences). */
+};
+
+struct FormatStyleW final
+{
+    std::FILE*          OutStream;      /** Standard stream to log to, if logging to stdout/stderr. */
+    bool                bFlush;         /** Whether logger should flush stream after current line. */
+    wchar_t const*      SevToken;       /** Textual representation of a severity level. */
+    wchar_t const*      OpenSeq;        /** Characters to prepend to the message line (escape sequences). */
+    wchar_t const*      CloseSeq;       /** Characters to append to the message line (escape sequences). */
+};
+
+FormatStyleA const& GetFormatStyleShortA(ESeverity const Severity) noexcept
+{
+    static FormatStyleA s_styleTrace    { stdout, false,    "TRC",      "\x1b[1m\x1b[30m", "\x1b[0m" };     // bright black (= darkgray)
+    static FormatStyleA s_styleDebug    { stdout, false,    "DBG",      "\x1b[0m", "\x1b[0m" };             // default
+    static FormatStyleA s_styleInfo     { stdout, false,    "INF",      "\x1b[1m\x1b[34m", "\x1b[0m" };     // bright blue
+    static FormatStyleA s_styleWarn     { stdout, true,     "WRN",      "\x1b[33m", "\x1b[0m" };            // yellow
+    static FormatStyleA s_styleError    { stdout, true,     "ERR",      "\x1b[1m\x1b[31m", "\x1b[0m" };     // bright red
+    static FormatStyleA s_styleDefault  { stdout, true,     "N/A",      "", "" };
+
     switch (Severity)
     {
-    case ESeverity::Trace:  return "TRC";
-    case ESeverity::Debug:  return "DBG";
-    case ESeverity::Info:   return "INF";
-    case ESeverity::Warn:   return "WRN";
-    case ESeverity::Error:  return "ERR";
-    };
-
-    return "???";
+    case k_logTrace:    return s_styleTrace;
+    case k_logDebug:    return s_styleDebug;
+    case k_logInfo:     return s_styleInfo;
+    case k_logWarn:     return s_styleWarn;
+    case k_logError:    return s_styleError;
+    default:            return s_styleDefault;
+    }
 }
 
-wchar_t const* FormatSeverityUnicode(ESeverity const Severity)
+FormatStyleW const& GetFormatStyleShortW(ESeverity const Severity) noexcept
 {
+    static FormatStyleW s_styleTrace    { stdout, false,    L"TRC",     L"\x1b[1m\x1b[30m", L"\x1b[0m" };   // bright black (= darkgray)
+    static FormatStyleW s_styleDebug    { stdout, false,    L"DBG",     L"\x1b[0m", L"\x1b[0m" };           // default
+    static FormatStyleW s_styleInfo     { stdout, false,    L"INF",     L"\x1b[1m\x1b[34m", L"\x1b[0m" };   // bright blue
+    static FormatStyleW s_styleWarn     { stdout, true,     L"WRN",     L"\x1b[33m", L"\x1b[0m" };          // yellow
+    static FormatStyleW s_styleError    { stdout, true,     L"ERR",     L"\x1b[1m\x1b[31m", L"\x1b[0m" };   // bright red
+    static FormatStyleW s_styleDefault  { stdout, true,     L"N/A",     L"", L"" };
+
     switch (Severity)
     {
-    case ESeverity::Trace:  return L"TRC";
-    case ESeverity::Debug:  return L"DBG";
-    case ESeverity::Info:   return L"INF";
-    case ESeverity::Warn:   return L"WRN";
-    case ESeverity::Error:  return L"ERR";
-    };
-
-    return L"???";
-}
-
-unsigned short MapSeverityToColor(ESeverity const Severity)
-{
-    switch (Severity)
-    {
-    case ESeverity::Trace:  return FG_GRAY;
-    case ESeverity::Debug:  return FG_LIGHTGRAY;
-    case ESeverity::Info:   return FG_CYAN;
-    case ESeverity::Warn:   return FG_YELLOW;
-    case ESeverity::Error:  return FG_RED;
-    };
-
-    return FG_LIGHTGRAY;
-}
-
-bool EnableVirtualTerminalMode(bool const bStandardError)
-{
-    DWORD const HandleIndex = bStandardError ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE;
-
-    HANDLE const StandardOutput = ::GetStdHandle(HandleIndex);
-    if (StandardOutput == INVALID_HANDLE_VALUE)
-        return false;
-
-    DWORD CurrentMode = 0u;
-    if (!::GetConsoleMode(StandardOutput, &CurrentMode))
-        return false;
-
-    CurrentMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-    if (!::SetConsoleMode(StandardOutput, CurrentMode))
-        return false;
-
-    return true;
+    case k_logTrace:    return s_styleTrace;
+    case k_logDebug:    return s_styleDebug;
+    case k_logInfo:     return s_styleInfo;
+    case k_logWarn:     return s_styleWarn;
+    case k_logError:    return s_styleError;
+    default:            return s_styleDefault;
+    }
 }
 
 
-// ! ConsoleLoggerOutput impl.
+// ! BasicConsoleLoggerOutput implementation.
 // ========================================
 
-HANDLE ConsoleLoggerOutput::InitHandle(DWORD const Target)
+BasicConsoleLoggerOutput::BasicConsoleLoggerOutput() = default;
+BasicConsoleLoggerOutput::~BasicConsoleLoggerOutput() noexcept {}
+
+void BasicConsoleLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Severity,
+    char const* const Data, size_t const Size, float const Seconds)
 {
-    HANDLE const Handle = ::GetStdHandle(Target);
+    assert(Data != nullptr && Size != 0);
 
-    if (Handle == INVALID_HANDLE_VALUE)
-    {
-#ifndef _FINAL_RELEASE
-        std::array<char, 64> ErrorBuffer{ '\0' };
-        _snprintf(ErrorBuffer.data(), ErrorBuffer.size(),
-            "GetStdHandle(%d) error = %d\n", Target, ::GetLastError());
-        ::OutputDebugString(ErrorBuffer.data());
-        //MILAN_BREAK_ATTACHED();
-#endif
-    }
+    auto const& [Stream, bFlush, SevToken, OpenSeq, CloseSeq] = GetFormatStyleShortA(Severity);
+    std::fprintf(Stream, "[%07.3f] [%s] %s\n", Seconds, SevToken, Data);
 
-    return Handle;
+    if (Severity >= ESeverity::Warn)
+        std::fflush(Stream);
+
+    MILAN_UNUSED_4(Place, Size, OpenSeq, CloseSeq);
 }
 
-unsigned short ConsoleLoggerOutput::ExchangeConsoleColor(unsigned short const Attributes, bool const bUseError)
+void BasicConsoleLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Severity,
+    wchar_t const* const Data, size_t const Size, float const Seconds)
 {
-    WORD PreviousAttributes = FG_WHITE;
-    CONSOLE_SCREEN_BUFFER_INFO ConsoleBufferInfo{};
-    HANDLE const Handle = !bUseError ? OutputHandle : ErrorHandle;
+    assert(Data != nullptr && Size != 0);
 
-    if (Handle == INVALID_HANDLE_VALUE)
-    {
-        MILAN_BREAK_ATTACHED();
-        return PreviousAttributes;
-    }
+    auto const& [Stream, bFlush, SevToken, OpenSeq, CloseSeq] = GetFormatStyleShortW(Severity);
+    std::fwprintf(Stream, L"[%07.3f] [%s] %s\n", Seconds, SevToken, Data);
 
-    if (::GetConsoleScreenBufferInfo(Handle, &ConsoleBufferInfo))
-        PreviousAttributes = ConsoleBufferInfo.wAttributes;
+    if (Severity >= ESeverity::Warn)
+        std::fflush(Stream);
 
-    [[maybe_unused]] BOOL const Result = ::SetConsoleTextAttribute(Handle, Attributes);
-    assert(Result == TRUE && "SetConsoleTextAttribute failed");
-
-    return PreviousAttributes;
+    MILAN_UNUSED_4(Place, Size, OpenSeq, CloseSeq);
 }
 
-ConsoleLoggerOutput::ConsoleLoggerOutput()
+void BasicConsoleLoggerOutput::Flush(bool const bError)
 {
-    OutputHandle = InitHandle(STD_OUTPUT_HANDLE);
-    ErrorHandle = InitHandle(STD_ERROR_HANDLE);
+    MILAN_UNUSED(bError);
+    std::fflush(stdout);
+    std::fflush(stderr);
 }
 
+
+// ! ConsoleLoggerOutput implementation.
+// ========================================
+
+ConsoleLoggerOutput::ConsoleLoggerOutput() = default;
 ConsoleLoggerOutput::~ConsoleLoggerOutput() noexcept {}
 
-void ConsoleLoggerOutput::AcceptAnsi(ESeverity const Severity,
-    char const* const Data, [[maybe_unused]] size_t const Size)
+void ConsoleLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Severity,
+    char const* const Data, size_t const Size, float const Seconds)
 {
     assert(Data != nullptr && Size != 0);
 
-    FILE* Stream = stdout;
-    bool bUseError = false;
-    if (Severity == ESeverity::Error)
-    {
-        Stream = stderr;
-        bUseError = true;
-    }
+    auto const& [Stream, bFlush, SevToken, OpenSeq, CloseSeq] = GetFormatStyleShortA(Severity);
+    std::fprintf(Stream, "%s[%07.3f] [%s] %s%s\n", OpenSeq, Seconds, SevToken, Data, CloseSeq);
+    if (bFlush) std::fflush(Stream);
 
-    auto const Attributes = ExchangeConsoleColor(MapSeverityToColor(Severity), bUseError);
-
-    std::fprintf(Stream, "%s\n", Data);
-    if (Severity == ESeverity::Error)
-        std::fflush(Stream);
-
-    ExchangeConsoleColor(Attributes, bUseError);
+    MILAN_UNUSED_2(Place, Size);
 }
 
-void ConsoleLoggerOutput::AcceptUnicode(ESeverity const Severity,
-    wchar_t const* const Data, [[maybe_unused]] size_t const Size)
+void ConsoleLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Severity,
+    wchar_t const* const Data, size_t const Size, float const Seconds)
 {
     assert(Data != nullptr && Size != 0);
 
-    FILE* Stream = stdout;
-    bool bUseError = false;
-    if (Severity == ESeverity::Error)
-    {
-        Stream = stderr;
-        bUseError = true;
-    }
+    auto const& [Stream, bFlush, SevToken, OpenSeq, CloseSeq] = GetFormatStyleShortW(Severity);
+    std::fwprintf(Stream, L"%s[%07.3f] [%s] %s%s\n", OpenSeq, Seconds, SevToken, Data, CloseSeq);
+    if (bFlush) std::fflush(Stream);
 
-    auto const Attributes = ExchangeConsoleColor(MapSeverityToColor(Severity), bUseError);
-
-    std::fwprintf(Stream, L"%s\n", Data);
-    if (Severity == ESeverity::Error)
-        std::fflush(Stream);
-
-    ExchangeConsoleColor(Attributes, bUseError);
+    MILAN_UNUSED_2(Place, Size);
 }
 
 void ConsoleLoggerOutput::Flush(bool const bError)
@@ -218,6 +149,11 @@ void ConsoleLoggerOutput::Flush(bool const bError)
 
 // ! FileLoggerOutput impl.
 // ========================================
+
+bool FileLoggerOutput::Initialized() const noexcept
+{
+    return OutputFile != nullptr;
+}
 
 FileLoggerOutput::FileLoggerOutput(std::string_view const OutputPath, bool const bAppend)
 {
@@ -235,11 +171,6 @@ FileLoggerOutput::FileLoggerOutput(std::string_view const OutputPath, bool const
     }
 }
 
-bool FileLoggerOutput::Initialized() const noexcept
-{
-    return OutputFile != nullptr;
-}
-
 FileLoggerOutput::~FileLoggerOutput() noexcept
 {
     if (OutputFile != nullptr)
@@ -249,8 +180,8 @@ FileLoggerOutput::~FileLoggerOutput() noexcept
     }
 }
 
-void FileLoggerOutput::AcceptAnsi(ESeverity const Severity,
-    char const* const Data, size_t const Size)
+void FileLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Severity,
+    char const* const Data, size_t const Size, float const Seconds)
 {
     assert(Data != nullptr && Size != 0);
     assert(OutputFile != nullptr);
@@ -258,35 +189,46 @@ void FileLoggerOutput::AcceptAnsi(ESeverity const Severity,
     if (Data != nullptr && Size != 0)
     {
         assert(Size < 8192);
-        thread_local std::array<wchar_t, 8192> UnicodeBuffer{ L'\0' };
 
+        static std::array<wchar_t, 4096>    UnicodeBuffer{ 0u };
+        std::lock_guard<std::mutex>         AnsiConvLock{ AnsiConvMutex };
+
+        std::fill(UnicodeBuffer.begin(), UnicodeBuffer.end(), wchar_t(0u));
         [[maybe_unused]] int const UnicodeLength = ::MultiByteToWideChar(CP_ACP, 0u,
             Data, static_cast<int>(Size + 1), UnicodeBuffer.data(), static_cast<int>(UnicodeBuffer.size()));
 
         assert(UnicodeLength > 0 && UnicodeLength < UnicodeBuffer.size());
-        std::fwprintf(OutputFile, L"%s\n", UnicodeBuffer.data());
+
+        auto const Token = GetFormatStyleShortW(Severity).SevToken;
+        std::fwprintf(OutputFile, L"[%07.3f] [%s] %s\n", Seconds, Token, UnicodeBuffer.data());
     }
 
-    if (Severity == ESeverity::Error)
+    if (Severity >= ESeverity::Warn)
         std::fflush(OutputFile);
+
+    MILAN_UNUSED_2(Place, Seconds);
 }
 
-void FileLoggerOutput::AcceptUnicode(ESeverity const Severity,
-    wchar_t const* const Data, [[maybe_unused]] size_t const Size)
+void FileLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Severity,
+    wchar_t const* const Data, size_t const Size, float const Seconds)
 {
     assert(Data != nullptr && Size != 0);
     assert(OutputFile != nullptr);
 
-    std::fwprintf(OutputFile, L"%s\n", Data);
-    if (Severity == ESeverity::Error)
+    auto const Token = GetFormatStyleShortW(Severity).SevToken;
+    std::fwprintf(OutputFile, L"[%07.3f] [%s] %s\n", Seconds, Token, Data);
+
+    if (Severity >= ESeverity::Warn)
         std::fflush(OutputFile);
+
+    MILAN_UNUSED_3(Place, Size, Seconds);
 }
 
 void FileLoggerOutput::Flush(bool const bError)
 {
     MILAN_UNUSED(bError);
-    assert(OutputFile != nullptr);
-    std::fflush(OutputFile);
+    if (OutputFile != nullptr)
+        std::fflush(OutputFile);
 }
 
 
@@ -312,71 +254,25 @@ MilanLogger::~MilanLogger() noexcept
     // It should clean up Sinks automatically...
 }
 
-void MilanLogger::WriteAnsi(CodePlaceA const& Place,
-    ESeverity const Severity, std::string_view const Message)
+void MilanLogger::WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view const Message)
 {
-    std::array<char, 4096> FormatBuffer{ '\0' };
-    int Result = 0;
-
-#ifndef _FINAL_RELEASE
-    bool const bWritePlace = Severity > ESeverity::Info;
-#else
-    static constexpr bool bWritePlace = false;
-#endif
-
-    if (bWritePlace)
-    {
-        Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%07.3f] [%s] %s  [%s:%d]",
-            MessageTimer.GetSeconds(), FormatSeverityAnsi(Severity), Message.data(), Place.File, Place.Line);
-    }
-    else
-    {
-        Result = _snprintf(FormatBuffer.data(), FormatBuffer.size(), "[%07.3f] [%s] %s",
-            MessageTimer.GetSeconds(), FormatSeverityAnsi(Severity), Message.data());
-        MILAN_UNUSED(Place);
-    }
-
-    assert(Result > 0);
-
+    auto const Seconds = MessageTimer.GetSeconds();
     std::lock_guard<std::mutex> _(WriteMutex);
     for (auto& [Sink, Tag] : Sinks)
     {
         MILAN_UNUSED(Tag);
-        Sink->AcceptAnsi(Severity, FormatBuffer.data(), static_cast<size_t>(Result));
+        Sink->AcceptAnsi(Place, Severity, Message.data(), Message.size(), Seconds);
     }
 }
 
-void MilanLogger::WriteUnicode(CodePlaceW const& Place,
-    ESeverity const Severity, std::wstring_view const Message)
+void MilanLogger::WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view const Message)
 {
-    std::array<wchar_t, 2048> FormatBuffer{ '\0' };
-    int Result = 0;
-
-#ifndef _FINAL_RELEASE
-    bool const bWritePlace = Severity > ESeverity::Info;
-#else
-    static constexpr bool bWritePlace = false;
-#endif
-
-    if (bWritePlace)
-    {
-        Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%07.3f] [%s] %s  [%s:%d]",
-            MessageTimer.GetSeconds(), FormatSeverityUnicode(Severity), Message.data(), Place.File, Place.Line);
-    }
-    else
-    {
-        Result = _snwprintf(FormatBuffer.data(), FormatBuffer.size(), L"[%07.3f] [%s] %s",
-            MessageTimer.GetSeconds(), FormatSeverityUnicode(Severity), Message.data());
-        MILAN_UNUSED(Place);
-    }
-
-    assert(Result > 0);
-
+    auto const Seconds = MessageTimer.GetSeconds();
     std::lock_guard<std::mutex> _(WriteMutex);
     for (auto& [Sink, Tag] : Sinks)
     {
         MILAN_UNUSED(Tag);
-        Sink->AcceptUnicode(Severity, FormatBuffer.data(), static_cast<size_t>(Result));
+        Sink->AcceptUnicode(Place, Severity, Message.data(), Message.size(), Seconds);
     }
 }
 

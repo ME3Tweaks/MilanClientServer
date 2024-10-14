@@ -32,7 +32,9 @@ namespace Milan::Renderdoc
 
                 int Major = 0, Minor = 0, Patch = 0;
                 gp_apiHandle->GetAPIVersion(&Major, &Minor, &Patch);
-                int CaptureCount = gp_apiHandle->GetNumCaptures();
+
+                int const CaptureCount = gp_apiHandle->GetNumCaptures();
+                MILAN_UNUSED(CaptureCount);
 
                 MILAN_INFOW(L"renderdoc: version = %d.%d.%d", Major, Minor, Patch);
                 MILAN_INFOW(L"renderdoc: capture count = %u", CaptureCount);

@@ -360,8 +360,8 @@ public:
 
     virtual ~ILoggerOutput() noexcept {}
 
-    virtual void AcceptAnsi(ESeverity Severity, char const* Data, size_t Size) = 0;
-    virtual void AcceptUnicode(ESeverity Severity, wchar_t const* Data, size_t Size) = 0;
+    virtual void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds) = 0;
+    virtual void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds) = 0;
 
     virtual void Flush(bool bError) = 0;
 };

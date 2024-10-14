@@ -31,7 +31,7 @@ void ILogger::WriteFormatUnicode(CodePlaceW const& Place, ESeverity const Severi
 void ILogger::WriteFormatAnsiVararg(CodePlaceA const& Place, ESeverity Severity,
     std::string_view const Format, std::va_list Args)
 {
-    thread_local std::array<char, 2048> FormatBuffer{ '\0' };
+    thread_local std::array<char, 4096> FormatBuffer{ '\0' };
     int Result = _vsnprintf(FormatBuffer.data(), FormatBuffer.size() - 1, Format.data(), Args);
 
     if (Result < 0)
@@ -49,7 +49,7 @@ void ILogger::WriteFormatAnsiVararg(CodePlaceA const& Place, ESeverity Severity,
 void ILogger::WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity Severity,
     std::wstring_view const Format, std::va_list Args)
 {
-    thread_local std::array<wchar_t, 1024> FormatBuffer{ L'\0' };
+    thread_local std::array<wchar_t, 4096> FormatBuffer{ L'\0' };
     int Result = _vsnwprintf(FormatBuffer.data(), FormatBuffer.size() - 1, Format.data(), Args);
 
     if (Result < 0)
@@ -68,7 +68,7 @@ void ILogger::WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity Severi
 // ! Fatal error handling.
 // ========================================
 
-void Details::OnFatalErrorW(::CodePlaceW const& Place,
+void Details::OnFatalErrorW(CodePlaceW const& Place,
     wchar_t const* const Expression, wchar_t const* const Format, ...)
 {
     if (::Milan::Output::HasInitialized())
@@ -91,10 +91,9 @@ void Details::OnFatalErrorW(::CodePlaceW const& Place,
     }
     else
     {
-        thread_local std::array<wchar_t, 8192> AuxiliaryBuffer{ L'\0' };
+        static std::array<wchar_t, 4096> AuxiliaryBuffer{ 0u };
         signed int Offset = _snwprintf(AuxiliaryBuffer.data(), AuxiliaryBuffer.size(),
-            L"fatal error: %s\nlocation: %s:%d\nfunction: %s\n",
-            Expression, Place.File, Place.Line, Place.Func);
+            L"fatal error: %s\nlocation: %s:%d\nfunction: %s\n", Expression, Place.File, Place.Line, Place.Func);
 
         std::va_list Args;
         va_start(Args, Format);

@@ -45,8 +45,8 @@ void UObject_LogInternal(UObject* const Context, FFrame* const Stack, [[maybe_un
     NATIVE_GET_NAME_OPTIONAL(Tag, SFXName{});
     NATIVE_FINISH();
 
-    thread_local FString ObjectName{};
-    thread_local FString FunctionName{};
+    static FString ObjectName{};
+    static FString FunctionName{};
 
     if (!gb_enableLogInternal)
         return;
@@ -65,8 +65,8 @@ void UObject_WarnInternal(UObject* const Context, FFrame* const Stack, [[maybe_u
     NATIVE_GET_STRING(Str);
     NATIVE_FINISH();
 
-    thread_local FString ObjectName{};
-    thread_local FString FunctionName{};
+    static FString ObjectName{};
+    static FString FunctionName{};
 
     if (!gb_enableWarnInternal)
         return;
@@ -99,6 +99,26 @@ namespace Milan::Output
 #ifndef _FINAL_RELEASE
         ::LESDK::InitializeConsole();
         ::SetConsoleCtrlHandler(::MilanConsoleHandler, TRUE);
+
+        HANDLE const    ConsoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+        BOOL            bEnableVirtualTerminal = TRUE;
+        DWORD           dwOriginalMode = 0u;
+
+        if (ConsoleHandle == INVALID_HANDLE_VALUE) [[unlikely]]
+        {
+            bEnableVirtualTerminal = FALSE;
+            auto const ErrorCode = std::to_string(::GetLastError());
+            auto const ErrorMessage = std::string("can't get stdout handle: ") + ErrorCode;
+            ::OutputDebugStringA(ErrorMessage.c_str());
+        }
+        else if (0 == ::GetConsoleMode(ConsoleHandle, &dwOriginalMode) ||
+            0 == ::SetConsoleMode(ConsoleHandle, dwOriginalMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+        {
+            bEnableVirtualTerminal = FALSE;
+            auto const ErrorCode = std::to_string(::GetLastError());
+            auto const ErrorMessage = std::string("can't enable virtual terminal: ") + ErrorCode;
+            ::OutputDebugStringA(ErrorMessage.c_str());
+        }
 #endif
 
         gp_mainLogger = new MilanLogger{};
@@ -117,7 +137,8 @@ namespace Milan::Output
 
 #if defined(_MLN_DEBUG) || !defined(_FINAL_RELEASE)
         // In DEBUG and RELEASE builds keep both sinks, and set file to overwrite previous log.
-        gp_mainLogger->RegisterOutput(k_tagConsole, new ConsoleLoggerOutput{});
+        gp_mainLogger->RegisterOutput(k_tagConsole, bEnableVirtualTerminal
+            ? (ILoggerOutput*)(new ConsoleLoggerOutput) : new BasicConsoleLoggerOutput);
         gp_mainLogger->RegisterOutput(k_tagFile, new FileLoggerOutput{ LogFileName, false });
 #else
         // In FINAL_RELEASE builds only enable file sink, and set it to append.
@@ -127,7 +148,7 @@ namespace Milan::Output
         if (gp_activeLogger == nullptr)
             gp_activeLogger = gp_mainLogger;
 
-        // From now on, it should be possible to use logging.
+        // From now on, it should be possible to use normal logging.
 
         gb_initialized = true;
         MILAN_INFOW(L"output system initialized");

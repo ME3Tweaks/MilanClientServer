@@ -60,6 +60,8 @@ void GuidCacheOverride::UpdateLookup()
         std::memset(&Guid, 0, sizeof Guid);
 
         int const Count = std::fscanf(File, "%s = %08X%08X%08X%08X\n", Name, &Guid.A, &Guid.B, &Guid.C, &Guid.D);
+
+        MILAN_UNUSED(Count);
         MILAN_CHECKW(Count == 5, L"");
 
         SFXName const Package(Name, 0);
@@ -70,7 +72,9 @@ void GuidCacheOverride::UpdateLookup()
 
     auto const EntryCount = Temp.size();
     Lookup = std::move(Temp);
+
     MILAN_DEBUGW(L"GuidCacheOverride: total %llu package(s) overriden in %f ms.", EntryCount, Timer.GetMilliseconds());
+    MILAN_UNUSED(EntryCount);
 }
 
 

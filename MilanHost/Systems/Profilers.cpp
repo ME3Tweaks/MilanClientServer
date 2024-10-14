@@ -116,6 +116,7 @@ namespace Milan::Profilers
                     auto const Packages = reinterpret_cast<UPackageMap_Proxy*>(*Iter);
                     for (FPackageInfo const& Package : Packages->List)
                     {
+                        MILAN_UNUSED(Package);
                         MILAN_DEBUGW(L"    %s, guid = %s, gen = %d / %d",
                             *Package.PackageName.ToString(), *FormatGuid(Package.Guid),
                             Package.LocalGeneration, Package.RemoteGeneration);
