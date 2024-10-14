@@ -11,9 +11,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
-    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.122" />
-    <PackageReference Include="ScottPlot.WPF" Version="5.0.35" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.135" />
+    <PackageReference Include="ScottPlot.WPF" Version="5.0.39" />
   </ItemGroup>
 
   <ItemGroup>
