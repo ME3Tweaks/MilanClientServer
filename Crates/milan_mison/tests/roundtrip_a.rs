@@ -38,8 +38,8 @@ fn serialize() -> Result<Vec<u8>, WriteError> {
         })?
         .finish()?;
 
-    encoder.finish()?;
-    Ok([encoder.view().0, encoder.view().1].concat())
+    let (names, elements) = encoder.finish()?;
+    Ok([names, elements].concat())
 }
 
 /// Reads and deserializes an object.

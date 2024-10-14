@@ -20,11 +20,10 @@
 //!                 .push("married", false)?
 //!                 .push("happy", false)?
 //!                 .finish()
-//!         })?
-//!     .finish()?;
+//!         })?;
 //!
 //! // Get serialized name table and element tree.
-//! let (names, elements) = encoder.view();
+//! let (names, elements) = encoder.finish()?;
 //! # Ok(())
 //! # }
 //! ```
@@ -363,32 +362,52 @@ impl MiEncoder {
         MiElementBuilder { encoder: self }
     }
 
-    /// Finalizes document serialization, moving the encoder into "finished" state.
+    /// Finalizes document serialization, moving the encoder into "finished" state
+    /// and retrieving the serialized slices for name table and element buffer.
+    ///
+    /// Note that it is safe to call this function multiple times. The first invocation
+    /// will move the encoder into "finished" state, every call afterward will simply
+    /// return the serialized slices for name table and element buffer.
+    ///
+    /// **Prefer this function to [`Self::view`]! Otherwise, it's very easy to forget
+    /// to call [`Self::finish`] for the encoder, which leads to a runtime panic!**
     ///
     /// # Panics
-    /// This function will panic if called on an encoder in a state other than "pending".
-    pub fn finish(&mut self) -> Result<(), WriteError> {
-        assert_eq!(self.state, MiEncoderState::Pending);
+    /// This function will panic if the encoder is not in "pending" or "finished" state.
+    pub fn finish(&mut self) -> Result<(&[u8], &[u8]), WriteError> {
+        if self.state == MiEncoderState::Pending {
+            let size = (self.name_buffer.pos() - 4) as u16;
+            let count = self.name_lookup.len() as u16;
 
-        let size = (self.name_buffer.pos() - 4) as u16;
-        let count = self.name_lookup.len() as u16;
+            self.name_buffer.try_write_marked("name-table-count").unwrap().copy_from_slice(&count.to_be_bytes());
+            self.name_buffer.try_write_marked("name-table-size").unwrap().copy_from_slice(&size.to_be_bytes());
 
-        self.name_buffer.try_write_marked("name-table-count").unwrap().copy_from_slice(&count.to_be_bytes());
-        self.name_buffer.try_write_marked("name-table-size").unwrap().copy_from_slice(&size.to_be_bytes());
+            if self.buffer.marker_depth() != 0 {
+                Err(WriteError::UnusedMarkers)?;
+            }
 
-        if self.buffer.marker_depth() != 0 {
-            Err(WriteError::UnusedMarkers)?;
+            self.state = MiEncoderState::Finished;
+            Ok((self.name_buffer.view(), self.buffer.view()))
+        } else if self.state == MiEncoderState::Finished {
+            // Do nothing, just return the views.
+            Ok((self.name_buffer.view(), self.buffer.view()))
+        } else {
+            panic!("invalid encoder state for this call: {:?}", self.state);
         }
-
-        self.state = MiEncoderState::Finished;
-        Ok(())
     }
 
     /// Retrieves name table slice and element buffer slice.
     ///
+    /// # Safety
+    /// While implementation of this function is not inherently unsafe,
+    /// at least in terms of Rust conventions, it is marked as unsafe to emphasize
+    /// the fact that you **must** call [`Self::finish`] on the encoder before using it.
+    /// Failure to do so will result in a runtime panic. Given that `finish` already returns
+    /// the same thing as this function, you should prefer calling it, once, whenever possible.
+    ///
     /// # Panics
     /// This function will panic if called on an encoder in a state other than "finished".
-    pub fn view(&self) -> (&[u8], &[u8]) {
+    pub unsafe fn view(&self) -> (&[u8], &[u8]) {
         assert_eq!(self.state, MiEncoderState::Finished);
         (self.name_buffer.view(), self.buffer.view())
     }
@@ -950,9 +969,7 @@ pub(crate) mod tests {
             .push(8).unwrap()
             .finish().unwrap();
 
-        encoder.finish().unwrap();
-        let (names, elements) = encoder.view();
-
+        let (names, elements) = encoder.finish().unwrap();
         dump_binary("./test_1.mison.bin", names, elements);
 
         let exp_names = parse_hex("00 07 00 01 06 41 52 52 41 59 00");
@@ -971,9 +988,7 @@ pub(crate) mod tests {
             .push::<&str, _>(|inner| { inner.push("cheers")?.push("hello")?.finish() }).unwrap()
             .finish().unwrap();
 
-        encoder.finish().unwrap();
-        let (names, elements) = encoder.view();
-
+        let (names, elements) = encoder.finish().unwrap();
         dump_binary("./test_2.mison.bin", names, elements);
 
         let exp_names = parse_hex("00 08 00 01 07 41 52 52 41 59 53 00");
@@ -992,9 +1007,7 @@ pub(crate) mod tests {
             .push::<bool, _>(|inner| { inner.push(true).unwrap().finish() }, "one").unwrap()
             .finish().unwrap();
 
-        encoder.finish().unwrap();
-        let (names, elements) = encoder.view();
-
+        let (names, elements) = encoder.finish().unwrap();
         dump_binary("./test_3.mison.bin", names, elements);
 
         let exp_names = parse_hex("00 00 00 00");
@@ -1029,9 +1042,7 @@ pub(crate) mod tests {
             .finish()
             .unwrap();
 
-        encoder.finish().unwrap();
-        let (names, elements) = encoder.view();
-
+        let (names, elements) = encoder.finish().unwrap();
         dump_binary("./test_4.mison.bin", names, elements);
 
         let exp_names = parse_hex("00 1C 00 04 04 6D 61 70 00 06 70 72 76 63 79 00 06 63 68 61 72 73 00 08 61 63 68 76 6D 6E 74 00");
