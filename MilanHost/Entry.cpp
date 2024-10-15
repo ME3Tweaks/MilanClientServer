@@ -8,6 +8,7 @@
 
 #include "Entry.hpp"
 #include "Milan/Base.hpp"
+#include "Milan/ClientConfig.hpp"
 #include "Milan/GuidCacheUtils.hpp"
 #include "Milan/Logger.hpp"
 #include "Milan/Misc.hpp"
@@ -66,6 +67,21 @@ SPI_IMPLEMENT_ATTACH
     RegisterVectoredExceptions();
     SpawnLocalClients();
 
+
+    // Load client-side config.
+    // ----------------------------------------
+
+    static constexpr wchar_t const* k_configFilename = L"./MilanHost.toml";
+
+    ClientConfig    Config{};
+    FString         ConfigError{};
+
+    if (!Config.TryRead(k_configFilename, ConfigError)) [[unlikely]]
+    {
+        MILAN_ERRORW(L"failed to load config '%s': %s", k_configFilename, * ConfigError);
+        MILAN_WARNW(L"default configuration will be used, which is probably not what you want");
+        Config = ClientConfig{};
+    }
 
     MILAN_INFOW(L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
     MILAN_INFOW(L"ordinal instance = %d", ::GetGameInstanceOrdinal());

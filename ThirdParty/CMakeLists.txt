@@ -102,6 +102,20 @@ source_group (TREE "${RENDERDOC_FOLDER}" FILES ${RENDERDOC_SOURCE})
 target_include_directories (${RENDERDOC_TARGET} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 
+# ! toml++ interface.
+# ========================================
+
+set (TOMLPLUSPLUS_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/tomlplusplus")
+set (TOMLPLUSPLUS_SOURCE "${TOMLPLUSPLUS_FOLDER}/toml.hpp")
+set (TOMLPLUSPLUS_TARGET "tomlplusplus")
+
+
+add_library (${TOMLPLUSPLUS_TARGET} INTERFACE ${TOMLPLUSPLUS_SOURCE})
+set_target_properties (${TOMLPLUSPLUS_TARGET} PROPERTIES FOLDER "ThirdParty")
+source_group (TREE "${TOMLPLUSPLUS_FOLDER}" FILES ${TOMLPLUSPLUS_SOURCE})
+target_include_directories (${TOMLPLUSPLUS_TARGET} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+
+
 # ! Zydis (dis)assembler.
 # ========================================
 

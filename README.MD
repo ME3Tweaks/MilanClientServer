@@ -93,6 +93,7 @@ General:
   - ImGui - v1.91.3 - MIT - Omar Cornut
   - ImPlot - #f156599 - MIT - Evan Pezent
   - RenderDoc API - #9f4f0e6 - MIT - Baldur Karlsson & Crytek
+  - toml++ - v3.4.0 - MIT - Mark Gillard
   - Zydis - v4.1.0 - MIT - Florian Bernd & Joel Höner
 
 Network Profiler:

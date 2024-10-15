@@ -15,6 +15,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Milan/Buffers.hpp
   ${PROJ_FOLDER}/Milan/Canvas.cpp
   ${PROJ_FOLDER}/Milan/Canvas.hpp
+  ${PROJ_FOLDER}/Milan/ClientConfig.cpp
+  ${PROJ_FOLDER}/Milan/ClientConfig.hpp
   ${PROJ_FOLDER}/Milan/GuidCacheUtils.cpp
   ${PROJ_FOLDER}/Milan/GuidCacheUtils.hpp
   ${PROJ_FOLDER}/Milan/Hooks.cpp
@@ -56,11 +58,11 @@ set (PROJ_SOURCES
 )
 
 set (PROJ_LINKS
-  MilanCore  # ECSM FFI
-  ImGui ImPlot LESDK-LE3 Zydis  # External libraries.
-  d3d11.lib dxgi.lib dxguid.lib  # Stuff for ImGui renderer.
-  Ws2_32.lib  # WinSock2 definitions necessary since we switched to dynamic MilanCore.
-  renderdoc-api  # RenderDoc in-app integration header.
+  MilanCore
+  ImGui ImPlot LESDK-LE3 Zydis
+  renderdoc-api tomlplusplus
+  d3d11.lib dxgi.lib dxguid.lib
+  Ws2_32.lib
 )
 
 add_library (${PROJ_TARGET} SHARED ${PROJ_SOURCES})
