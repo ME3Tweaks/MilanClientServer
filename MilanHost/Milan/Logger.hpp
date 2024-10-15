@@ -24,7 +24,7 @@ public:
     ~BasicConsoleLoggerOutput() noexcept override;
     void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds) override;
     void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds) override;
-    void Flush(bool bError) override;
+    void Flush() override;
 };
 
 class ConsoleLoggerOutput final : public ILoggerOutput
@@ -35,7 +35,7 @@ public:
     ~ConsoleLoggerOutput() noexcept override;
     void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds) override;
     void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds) override;
-    void Flush(bool bError) override;
+    void Flush() override;
 };
 
 class FileLoggerOutput final : public ILoggerOutput
@@ -51,7 +51,7 @@ public:
     ~FileLoggerOutput() noexcept override;
     void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds) override;
     void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds) override;
-    void Flush(bool bError) override;
+    void Flush() override;
 };
 
 
@@ -64,25 +64,26 @@ public:
  */
 class MilanLogger final : public ILogger, public NonCopyable
 {
-    // These unique_ptrs will allocate through GMalloc because ILoggerOutput specifies that.
-    using SinkVector = game::vector<std::pair<std::unique_ptr<ILoggerOutput>, int>>;
+    // ILoggerOutput specifies these will allocate via GMalloc.
+    using SinkPointer = std::unique_ptr<ILoggerOutput>;
 
-    SinkVector      Sinks{};
-    std::mutex      WriteMutex;
-    RelativeTimer   MessageTimer{};
+    game::vector<SinkPointer>   Sinks{};
+    std::mutex                  WriteMutex;
+    RelativeTimer               MessageTimer{};
 
 public:
 
     MilanLogger();
-    void ForceFlush();
 
     ~MilanLogger() noexcept override;
+    void Flush() override;
+
     void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view Message) override;
     void WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Message) override;
 
-    void RegisterOutput(int Tag, ILoggerOutput* Output);
-    void UnregisterOutput(int Tag);
+    void RegisterOutput(ILoggerOutput* Output);
 };
+
 
 /**
  * @brief
@@ -105,6 +106,11 @@ class FilterLoggerProxy : public ILogger
 public:
 
     ~FilterLoggerProxy() noexcept override {}
+
+    void Flush() override
+    {
+        Inner->Flush();
+    }
 
     FilterLoggerProxy(ILogger* const pInner)
         : FilterLoggerProxy{ pInner, ESeverity::Trace, ESeverity::Error }
@@ -134,6 +140,7 @@ public:
     }
 };
 
+
 /**
  * @brief
  * An ILogger implementation that does nothing.
@@ -143,6 +150,7 @@ class NopLogger final : public ILogger
 public:
 
     ~NopLogger() noexcept override {}
+    void Flush() override {}
     void WriteAnsi(CodePlaceA const&, ESeverity, std::string_view) override {}
     void WriteUnicode(CodePlaceW const&, ESeverity, std::wstring_view) override {}
 };

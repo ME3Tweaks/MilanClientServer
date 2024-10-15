@@ -122,10 +122,6 @@ namespace Milan::Output
 #endif
 
         gp_mainLogger = new MilanLogger{};
-
-        static constexpr int k_tagConsole = 200;
-        static constexpr int k_tagFile = 201;
-
         std::string LogFileName = "MilanHost.log";
 
         int const OrdinalInstance = ::GetGameInstanceOrdinal();
@@ -137,12 +133,11 @@ namespace Milan::Output
 
 #if defined(_MLN_DEBUG) || !defined(_FINAL_RELEASE)
         // In DEBUG and RELEASE builds keep both sinks, and set file to overwrite previous log.
-        gp_mainLogger->RegisterOutput(k_tagConsole, bEnableVirtualTerminal
-            ? (ILoggerOutput*)(new ConsoleLoggerOutput) : new BasicConsoleLoggerOutput);
-        gp_mainLogger->RegisterOutput(k_tagFile, new FileLoggerOutput{ LogFileName, false });
+        gp_mainLogger->RegisterOutput(bEnableVirtualTerminal ? (ILoggerOutput*)(new ConsoleLoggerOutput) : new BasicConsoleLoggerOutput);
+        gp_mainLogger->RegisterOutput(new FileLoggerOutput{ LogFileName, false });
 #else
         // In FINAL_RELEASE builds only enable file sink, and set it to append.
-        gp_mainLogger->RegisterOutput(k_tagFile, new FileLoggerOutput{ LogFileName, true });
+        gp_mainLogger->RegisterOutput(new FileLoggerOutput{ LogFileName, true });
 #endif
 
         if (gp_activeLogger == nullptr)
@@ -214,7 +209,7 @@ namespace Milan::Output
         MILAN_WARNW(L"output: handling vectored exception, address = %p, code = 0x%08X", Address, Code);
 
         if (gp_mainLogger != nullptr)
-            gp_mainLogger->ForceFlush();
+            gp_mainLogger->Flush();
 
         MILAN_UNUSED_3(Address, Code, Exceptions);
     }
@@ -227,8 +222,8 @@ namespace Milan::Output
 
     void FlushEverything()
     {
-        assert(gp_mainLogger != nullptr);
-        gp_mainLogger->ForceFlush();
+        if (gp_mainLogger)
+            gp_mainLogger->Flush();
     }
 
 #if defined(MILAN_BUILD_LOGINTERNAL) && MILAN_BUILD_LOGINTERNAL

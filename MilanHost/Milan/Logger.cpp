@@ -101,9 +101,8 @@ void BasicConsoleLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity 
     MILAN_UNUSED_4(Place, Size, OpenSeq, CloseSeq);
 }
 
-void BasicConsoleLoggerOutput::Flush(bool const bError)
+void BasicConsoleLoggerOutput::Flush()
 {
-    MILAN_UNUSED(bError);
     std::fflush(stdout);
     std::fflush(stderr);
 }
@@ -139,9 +138,8 @@ void ConsoleLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const
     MILAN_UNUSED_2(Place, Size);
 }
 
-void ConsoleLoggerOutput::Flush(bool const bError)
+void ConsoleLoggerOutput::Flush()
 {
-    MILAN_UNUSED(bError);
     std::fflush(stdout);
     std::fflush(stderr);
 }
@@ -224,9 +222,8 @@ void FileLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Se
     MILAN_UNUSED_3(Place, Size, Seconds);
 }
 
-void FileLoggerOutput::Flush(bool const bError)
+void FileLoggerOutput::Flush()
 {
-    MILAN_UNUSED(bError);
     if (OutputFile != nullptr)
         std::fflush(OutputFile);
 }
@@ -240,27 +237,24 @@ MilanLogger::MilanLogger()
     Sinks.reserve(8);
 }
 
-void MilanLogger::ForceFlush()
-{
-    for (auto& [Sink, Tag] : Sinks)
-    {
-        MILAN_UNUSED(Tag);
-        Sink->Flush(true);
-    }
-}
-
 MilanLogger::~MilanLogger() noexcept
 {
     // It should clean up Sinks automatically...
+}
+
+void MilanLogger::Flush()
+{
+    for (auto& Sink : Sinks)
+        Sink->Flush();
 }
 
 void MilanLogger::WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view const Message)
 {
     auto const Seconds = MessageTimer.GetSeconds();
     std::lock_guard<std::mutex> _(WriteMutex);
-    for (auto& [Sink, Tag] : Sinks)
+
+    for (SinkPointer& Sink : Sinks)
     {
-        MILAN_UNUSED(Tag);
         Sink->AcceptAnsi(Place, Severity, Message.data(), Message.size(), Seconds);
     }
 }
@@ -269,22 +263,16 @@ void MilanLogger::WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std:
 {
     auto const Seconds = MessageTimer.GetSeconds();
     std::lock_guard<std::mutex> _(WriteMutex);
-    for (auto& [Sink, Tag] : Sinks)
+
+    for (SinkPointer& Sink : Sinks)
     {
-        MILAN_UNUSED(Tag);
         Sink->AcceptUnicode(Place, Severity, Message.data(), Message.size(), Seconds);
     }
 }
 
-void MilanLogger::RegisterOutput(int const Tag, ILoggerOutput* const Output)
+void MilanLogger::RegisterOutput(ILoggerOutput* const Output)
 {
     assert(Output != nullptr);
     std::lock_guard<std::mutex> _(WriteMutex);
-    Sinks.emplace_back(std::unique_ptr<ILoggerOutput>(Output), Tag);
-}
-
-void MilanLogger::UnregisterOutput(int const Tag)
-{
-    std::lock_guard<std::mutex> _(WriteMutex);
-    std::erase_if(Sinks, [Tag](auto& Pair) { return Pair.second == Tag; });
+    Sinks.emplace_back(std::unique_ptr<ILoggerOutput>(Output));
 }

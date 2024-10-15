@@ -363,7 +363,7 @@ public:
     virtual void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds) = 0;
     virtual void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds) = 0;
 
-    virtual void Flush(bool bError) = 0;
+    virtual void Flush() = 0;
 };
 
 /**
@@ -379,6 +379,7 @@ class ILogger : public AllocateThroughEngine
 public:
 
     virtual ~ILogger() noexcept {}
+    virtual void Flush() {};
 
     virtual void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view Message) = 0;
     virtual void WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Message) = 0;
