@@ -121,6 +121,10 @@ public:
 
 private:
 
+    template<typename CodePlaceType, typename ViewType>
+        requires (std::same_as<ViewType, std::string_view> || std::same_as<ViewType, std::wstring_view>)
+    void WriteInternal(CodePlaceType const& Place, ESeverity Severity, ViewType Message);
+
     void ProcessThreadInternal();
     void FlushInternal(std::unique_lock<std::mutex>& Lock);
 
@@ -130,9 +134,10 @@ private:
         ESeverity               Severity;
         float                   WriteSeconds;
         std::int32_t            LocationLine;
-        wchar_t const*          LocationFile;
-        wchar_t const*          LocationFunc;
+        void const*             LocationFile;
+        void const*             LocationFunc;
         std::uint16_t           ContentLength;
+        std::uint16_t           bWideChars;
     };
 #pragma pack(pop)
 

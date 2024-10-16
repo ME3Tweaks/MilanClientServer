@@ -301,16 +301,12 @@ AsyncMilanLogger::~AsyncMilanLogger() noexcept
     delete[] ProcessBuffer;
 }
 
-void AsyncMilanLogger::WriteAnsi(CodePlaceA const& Place, ESeverity const Severity, std::string_view const Message)
-{
-    MILAN_UNUSED_3(Place, Severity, Message);
-    MILAN_FATALW(__FUNCTIONW__ " not implemented");
-}
-
-void AsyncMilanLogger::WriteUnicode(CodePlaceW const& Place, ESeverity const Severity, std::wstring_view const Message)
+template<typename CodePlaceType, typename ViewType>
+    requires (std::same_as<ViewType, std::string_view> || std::same_as<ViewType, std::wstring_view>)
+void AsyncMilanLogger::WriteInternal(CodePlaceType const& Place, ESeverity const Severity, ViewType const Message)
 {
     std::unique_lock<std::mutex> Lock{ WriteMutex };
-    std::size_t const RecordLength = sizeof(RecordHeader) + (Message.length() + 1) * sizeof(wchar_t);
+    std::size_t const RecordLength = sizeof(RecordHeader) + (Message.length() + 1) * sizeof(ViewType::value_type);
 
     if (BufferCompletion + RecordLength >= BufferCapacity)  [[unlikely]]
     {
@@ -327,20 +323,21 @@ void AsyncMilanLogger::WriteUnicode(CodePlaceW const& Place, ESeverity const Sev
     }
 
     auto* const HeaderAllocation = reinterpret_cast<RecordHeader*>(WriteBuffer + BufferCompletion);
-    auto* const ContentAllocation = reinterpret_cast<wchar_t*>(WriteBuffer + BufferCompletion + sizeof(RecordHeader));
+    auto* const ContentAllocation = reinterpret_cast<void*>(WriteBuffer + BufferCompletion + sizeof(RecordHeader));
 
     HeaderAllocation->Severity = Severity;
     HeaderAllocation->WriteSeconds = MessageTimer.GetSeconds();
     HeaderAllocation->LocationLine = Place.Line;
-    HeaderAllocation->LocationFile = Place.File;
-    HeaderAllocation->LocationFunc = Place.Func;
+    HeaderAllocation->LocationFile = reinterpret_cast<void const*>(Place.File);
+    HeaderAllocation->LocationFunc = reinterpret_cast<void const*>(Place.Func);
     HeaderAllocation->ContentLength = static_cast<std::uint16_t>(Message.length());
+    HeaderAllocation->bWideChars = static_cast<std::uint16_t>(sizeof(ViewType::value_type) > 1u);
 
-    auto* const ContentTermination = std::copy(Message.begin(), Message.end(), ContentAllocation);
+    auto* const ContentTermination = std::copy(Message.begin(), Message.end(), (ViewType::pointer)ContentAllocation);
     *ContentTermination = L'\0';
 
     // We want to check this, but don't want to touch global logging system from within.
-    assert((char*)ContentTermination + sizeof(wchar_t) - (char*)HeaderAllocation == (std::ptrdiff_t)RecordLength);
+    assert((char*)ContentTermination + sizeof(ViewType::value_type) - (char*)HeaderAllocation == (std::ptrdiff_t)RecordLength);
 
     BufferCompletion += RecordLength;
     BufferCondvar.notify_all();
@@ -350,6 +347,16 @@ void AsyncMilanLogger::WriteUnicode(CodePlaceW const& Place, ESeverity const Sev
         // Flush all queued messages on error.
         FlushInternal(Lock);
     }
+}
+
+void AsyncMilanLogger::WriteAnsi(CodePlaceA const& Place, ESeverity const Severity, std::string_view const Message)
+{
+    WriteInternal<CodePlaceA, std::string_view>(Place, Severity, Message);
+}
+
+void AsyncMilanLogger::WriteUnicode(CodePlaceW const& Place, ESeverity const Severity, std::wstring_view const Message)
+{
+    WriteInternal<CodePlaceW, std::wstring_view>(Place, Severity, Message);
 }
 
 void AsyncMilanLogger::Flush()
@@ -409,18 +416,35 @@ void AsyncMilanLogger::ProcessThreadInternal()
         while (Position < ProcessCompletion)
         {
             auto* const HeaderPointer = reinterpret_cast<RecordHeader*>(ProcessBuffer + Position);
-            auto* const ContentsPointer = reinterpret_cast<wchar_t*>(ProcessBuffer + Position + sizeof(RecordHeader));
+            auto* const ContentsPointer = reinterpret_cast<void*>(ProcessBuffer + Position + sizeof(RecordHeader));
 
-            CodePlaceW const Location{ HeaderPointer->LocationFunc, HeaderPointer->LocationFile, HeaderPointer->LocationLine };
-            std::wstring_view const Contents{ ContentsPointer, static_cast<std::size_t>(HeaderPointer->ContentLength) };
+            if (!!HeaderPointer->bWideChars)
+            {
+                CodePlaceW const Location{ (wchar_t const*)HeaderPointer->LocationFunc, (wchar_t const*)HeaderPointer->LocationFile, HeaderPointer->LocationLine };
+                std::wstring_view const Contents{ (wchar_t const*)(ContentsPointer), static_cast<std::size_t>(HeaderPointer->ContentLength) };
 
-            std::ranges::for_each(Sinks, [&](SinkPointer& Sink)
-                {
-                    Sink->AcceptUnicode(Location, HeaderPointer->Severity,
-                        Contents.data(), Contents.size(), HeaderPointer->WriteSeconds);
-                });
+                std::ranges::for_each(Sinks, [&](SinkPointer& Sink)
+                    {
+                        Sink->AcceptUnicode(Location, HeaderPointer->Severity,
+                            Contents.data(), Contents.size(), HeaderPointer->WriteSeconds);
+                    });
 
-            Position += sizeof RecordHeader + (HeaderPointer->ContentLength + 1) * sizeof(wchar_t);
+                Position += sizeof RecordHeader + (static_cast<std::size_t>(HeaderPointer->ContentLength) + 1) * sizeof(wchar_t);
+            }
+            else
+            {
+                CodePlaceA const Location{ (char const*)HeaderPointer->LocationFunc, (char const*)HeaderPointer->LocationFile, HeaderPointer->LocationLine };
+                std::string_view const Contents{ (char const*)(ContentsPointer), static_cast<std::size_t>(HeaderPointer->ContentLength) };
+
+                std::ranges::for_each(Sinks, [&](SinkPointer& Sink)
+                    {
+                        Sink->AcceptAnsi(Location, HeaderPointer->Severity,
+                            Contents.data(), Contents.size(), HeaderPointer->WriteSeconds);
+                    });
+
+                Position += sizeof RecordHeader + (static_cast<std::size_t>(HeaderPointer->ContentLength) + 1) * sizeof(char);
+            }
+
         }
 
         if (bWaitingForFlush.test())
