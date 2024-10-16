@@ -121,7 +121,9 @@ namespace Milan::Output
         }
 #endif
 
-        gp_mainLogger = new MilanLogger{};
+        bool const bAsyncLogger = !FString{ Globals::GetCmdArgs() }.Contains(L"-synclogger", true);
+
+        MilanLogger* MainLogger = bAsyncLogger ? new AsyncMilanLogger{} : new MilanLogger{};
         std::string LogFileName = "MilanHost.log";
 
         int const OrdinalInstance = ::GetGameInstanceOrdinal();
@@ -133,12 +135,15 @@ namespace Milan::Output
 
 #if defined(_MLN_DEBUG) || !defined(_FINAL_RELEASE)
         // In DEBUG and RELEASE builds keep both sinks, and set file to overwrite previous log.
-        gp_mainLogger->RegisterOutput(bEnableVirtualTerminal ? (ILoggerOutput*)(new ConsoleLoggerOutput) : new BasicConsoleLoggerOutput);
-        gp_mainLogger->RegisterOutput(new FileLoggerOutput{ LogFileName, false });
+        MainLogger->AddSink(bEnableVirtualTerminal ? (ILoggerOutput*)(new ConsoleLoggerOutput) : new BasicConsoleLoggerOutput);
+        MainLogger->AddSink(new FileLoggerOutput{ LogFileName, false });
 #else
         // In FINAL_RELEASE builds only enable file sink, and set it to append.
-        gp_mainLogger->RegisterOutput(new FileLoggerOutput{ LogFileName, true });
+        MainLogger->AddSink(new FileLoggerOutput{ LogFileName, true });
 #endif
+
+        MainLogger->Initialize();
+        gp_mainLogger = std::exchange(MainLogger, nullptr);
 
         if (gp_activeLogger == nullptr)
             gp_activeLogger = gp_mainLogger;
@@ -147,6 +152,10 @@ namespace Milan::Output
 
         gb_initialized = true;
         MILAN_INFOW(L"output system initialized");
+
+        bAsyncLogger
+            ? MILAN_INFOW(L"using asynchronous logger")
+            : MILAN_WARNW(L"forced using synchronous logger via -synclogger");
     }
 
     void DeferredInitialize(::LESDK::Initializer& Context)
@@ -179,6 +188,8 @@ namespace Milan::Output
     {
         MILAN_INFOW(L"output system terminating");
         gb_initialized = false;
+
+        gp_mainLogger->Cleanup();
 
         if (gp_activeLogger != gp_mainLogger)
             delete gp_activeLogger;

@@ -5,8 +5,12 @@
 
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
 #include <cstdio>
 #include <mutex>
+#include <thread>
+#include <tuple>
 
 #include "Containers/vector.hpp"
 #include "Milan/Base.hpp"
@@ -40,9 +44,6 @@ public:
 
 class FileLoggerOutput final : public ILoggerOutput
 {
-    std::FILE* OutputFile{ nullptr };
-    std::mutex AnsiConvMutex;
-
 public:
 
     bool Initialized() const noexcept;
@@ -52,6 +53,11 @@ public:
     void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds) override;
     void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds) override;
     void Flush() override;
+
+private:
+
+    std::FILE* OutputFile{ nullptr };
+    std::mutex AnsiConvMutex;
 };
 
 
@@ -60,28 +66,89 @@ public:
 
 /**
  * @brief
- * The ILogger implementation for MilanHost main logger.
+ * Primary logger implementation.
  */
-class MilanLogger final : public ILogger, public NonCopyable
+class MilanLogger : public ILogger, public NonCopyable
 {
-    // ILoggerOutput specifies these will allocate via GMalloc.
-    using SinkPointer = std::unique_ptr<ILoggerOutput>;
-
-    game::vector<SinkPointer>   Sinks{};
-    std::mutex                  WriteMutex;
-    RelativeTimer               MessageTimer{};
-
 public:
 
     MilanLogger();
 
     ~MilanLogger() noexcept override;
-    void Flush() override;
-
     void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view Message) override;
     void WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Message) override;
+    void Flush() override;
 
-    void RegisterOutput(ILoggerOutput* Output);
+    virtual void Initialize() {}
+    virtual void Cleanup() noexcept {}
+    virtual void AddSink(ILoggerOutput* Output);
+
+protected:
+
+    // ILoggerOutput specifies these will allocate via GMalloc.
+    using SinkPointer = std::unique_ptr<ILoggerOutput>;
+
+    game::vector<SinkPointer>   Sinks{};                    /* Registered output devices. */
+    std::mutex                  WriteMutex;                 /* Synchronization primitive for protecting writes. */
+    RelativeTimer               MessageTimer{};             /* Timer used for stamping log messages. */
+};
+
+
+/**
+ * @brief
+ * Primary logger implementation which dispatches logging
+ * events for processing by configurable sinks on a separate thread.
+ */
+class AsyncMilanLogger final : public MilanLogger
+{
+public:
+
+    static constexpr std::size_t k_defaultBuffer = 1024 * 1024;
+    explicit AsyncMilanLogger(std::size_t InBufferSize = k_defaultBuffer);
+
+    // ILogger implementation:
+
+    ~AsyncMilanLogger() noexcept override;
+    void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view Message) override;
+    void WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Message) override;
+    void Flush() override;
+
+    // MilanLogger implementation:
+
+    void Initialize() override;
+    void Cleanup() noexcept override;
+    void AddSink(ILoggerOutput* Output) override;
+
+private:
+
+    void ProcessThreadInternal();
+    void FlushInternal(std::unique_lock<std::mutex>& Lock);
+
+#pragma pack(push, 1)
+    struct RecordHeader final
+    {
+        ESeverity               Severity;
+        float                   WriteSeconds;
+        std::int32_t            LocationLine;
+        wchar_t const*          LocationFile;
+        wchar_t const*          LocationFunc;
+        std::uint16_t           ContentLength;
+    };
+#pragma pack(pop)
+
+    std::atomic_flag            bInitialized{};             /* Flag set when processing loop has started. */
+    std::atomic_flag            bWaitingForExit{};          /* Flag set when processing thread should terminate. */
+    std::atomic_flag            bWaitingForFlush{};         /* Flag set when a flush is requested. */
+
+    std::condition_variable     FlushCondvar;               /* Condition variable used by callers to wait for a record flush. */
+    std::condition_variable     BufferCondvar;              /* Condition variable used by processing thread to wait for new entries. */
+    std::thread                 ProcessThread;              /* Handle to the processing thread. */
+
+    unsigned char*              WriteBuffer{ nullptr };     /* Buffer to which new log entries are written. */
+    unsigned char*              ProcessBuffer{ nullptr };   /* Buffer from which processing loop picks records. */
+
+    std::size_t                 BufferCapacity{ 0 };        /* Number of bytes allocated for each buffer. */
+    std::size_t                 BufferCompletion{ 0 };      /* Number of bytes used up by write buffer. */
 };
 
 

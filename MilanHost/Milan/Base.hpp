@@ -379,10 +379,11 @@ class ILogger : public AllocateThroughEngine
 public:
 
     virtual ~ILogger() noexcept {}
-    virtual void Flush() {};
 
     virtual void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view Message) = 0;
     virtual void WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Message) = 0;
+
+    virtual void Flush() {};
 
     void WriteFormatAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view Format, ...);
     void WriteFormatUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Format, ...);

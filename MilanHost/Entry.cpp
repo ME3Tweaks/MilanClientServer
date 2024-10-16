@@ -131,11 +131,18 @@ void SingleDetachImpl()
 void RegisterNonshipCommands()
 {
 #ifndef _FINAL_RELEASE
+    ::Milan::Console::RegisterCommand(L"dbg", L"assertme",
+        [](wchar_t const*)
+        {
+            MILAN_ERRORW(L"ASSERTING THIS PLANE");  // what
+            MILAN_CHECKW(4 % 2 == 1, L"some assertion message");
+            return true;
+        });
 
     ::Milan::Console::RegisterCommand(L"dbg", L"breakme",
         [](wchar_t const*)
         {
-            MILAN_INFOW(L"BREAKING THIS PLANE");
+            MILAN_ERRORW(L"BREAKING THIS PLANE");
             MILAN_BREAK_ATTACHED();
             return true;
         });
@@ -143,7 +150,7 @@ void RegisterNonshipCommands()
     ::Milan::Console::RegisterCommand(L"dbg", L"crashme",
         [](wchar_t const*)
         {
-            MILAN_INFOW(L"CRASHING THIS PLANE");
+            MILAN_ERRORW(L"CRASHING THIS PLANE");
             ::RaiseException(1, 0, 0, nullptr);
             return true;
         });

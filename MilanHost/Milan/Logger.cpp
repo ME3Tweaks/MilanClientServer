@@ -145,7 +145,7 @@ void ConsoleLoggerOutput::Flush()
 }
 
 
-// ! FileLoggerOutput impl.
+// ! FileLoggerOutput implementation.
 // ========================================
 
 bool FileLoggerOutput::Initialized() const noexcept
@@ -229,7 +229,7 @@ void FileLoggerOutput::Flush()
 }
 
 
-// ! MilanLogger impl.
+// ! MilanLogger implementation.
 // ========================================
 
 MilanLogger::MilanLogger()
@@ -240,12 +240,6 @@ MilanLogger::MilanLogger()
 MilanLogger::~MilanLogger() noexcept
 {
     // It should clean up Sinks automatically...
-}
-
-void MilanLogger::Flush()
-{
-    for (auto& Sink : Sinks)
-        Sink->Flush();
 }
 
 void MilanLogger::WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view const Message)
@@ -270,9 +264,184 @@ void MilanLogger::WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std:
     }
 }
 
-void MilanLogger::RegisterOutput(ILoggerOutput* const Output)
+void MilanLogger::Flush()
 {
-    assert(Output != nullptr);
+    for (auto& Sink : Sinks)
+        Sink->Flush();
+}
+
+void MilanLogger::AddSink(ILoggerOutput* const Output)
+{
+    MILAN_CHECKW(Output != nullptr, L"");
     std::lock_guard<std::mutex> _(WriteMutex);
     Sinks.emplace_back(std::unique_ptr<ILoggerOutput>(Output));
+}
+
+
+// ! AsyncMilanLogger implementation.
+// ========================================
+
+AsyncMilanLogger::AsyncMilanLogger(std::size_t const InBufferSize)
+    : MilanLogger{}
+{
+    MILAN_CHECKW(InBufferSize > 0, L"");
+    BufferCapacity = InBufferSize;
+    BufferCompletion = 0u;
+
+    WriteBuffer = new (std::nothrow) unsigned char[BufferCapacity];
+    ProcessBuffer = new (std::nothrow) unsigned char[BufferCapacity];
+
+    MILAN_CHECKW(WriteBuffer != nullptr, L"");
+    MILAN_CHECKW(ProcessBuffer != nullptr, L"");
+}
+
+AsyncMilanLogger::~AsyncMilanLogger() noexcept
+{
+    delete[] WriteBuffer;
+    delete[] ProcessBuffer;
+}
+
+void AsyncMilanLogger::WriteAnsi(CodePlaceA const& Place, ESeverity const Severity, std::string_view const Message)
+{
+    MILAN_UNUSED_3(Place, Severity, Message);
+    MILAN_FATALW(__FUNCTIONW__ " not implemented");
+}
+
+void AsyncMilanLogger::WriteUnicode(CodePlaceW const& Place, ESeverity const Severity, std::wstring_view const Message)
+{
+    std::unique_lock<std::mutex> Lock{ WriteMutex };
+    std::size_t const RecordLength = sizeof(RecordHeader) + (Message.length() + 1) * sizeof(wchar_t);
+
+    if (BufferCompletion + RecordLength >= BufferCapacity)  [[unlikely]]
+    {
+        // Discard the message if we can't write it to the buffer...
+        MILAN_BREAK_ATTACHED();
+        return;
+    }
+
+    if (Message.length() >= UINT16_MAX - 1) [[unlikely]]
+    {
+        // Discard the message if it is too long for record header...
+        MILAN_BREAK_ATTACHED();
+        return;
+    }
+
+    auto* const HeaderAllocation = reinterpret_cast<RecordHeader*>(WriteBuffer + BufferCompletion);
+    auto* const ContentAllocation = reinterpret_cast<wchar_t*>(WriteBuffer + BufferCompletion + sizeof(RecordHeader));
+
+    HeaderAllocation->Severity = Severity;
+    HeaderAllocation->WriteSeconds = MessageTimer.GetSeconds();
+    HeaderAllocation->LocationLine = Place.Line;
+    HeaderAllocation->LocationFile = Place.File;
+    HeaderAllocation->LocationFunc = Place.Func;
+    HeaderAllocation->ContentLength = static_cast<std::uint16_t>(Message.length());
+
+    auto* const ContentTermination = std::copy(Message.begin(), Message.end(), ContentAllocation);
+    *ContentTermination = L'\0';
+
+    // We want to check this, but don't want to touch global logging system from within.
+    assert((char*)ContentTermination + sizeof(wchar_t) - (char*)HeaderAllocation == (std::ptrdiff_t)RecordLength);
+
+    BufferCompletion += RecordLength;
+    BufferCondvar.notify_all();
+
+    if (Severity >= ESeverity::Warn) [[unlikely]]
+    {
+        // Flush all queued messages on error.
+        FlushInternal(Lock);
+    }
+}
+
+void AsyncMilanLogger::Flush()
+{
+    std::unique_lock Lock{ WriteMutex };
+    FlushInternal(Lock);
+}
+
+void AsyncMilanLogger::Initialize()
+{
+    // Prevent repeated initialization.
+    if (bInitialized.test_and_set())
+    {
+        MILAN_BREAK_ATTACHED();
+        return;
+    }
+
+    bWaitingForExit.clear();
+    bWaitingForFlush.clear();
+
+    ProcessThread = std::thread(&AsyncMilanLogger::ProcessThreadInternal, this);
+}
+
+void AsyncMilanLogger::Cleanup() noexcept
+{
+    Flush();
+
+    bInitialized.clear();
+    bWaitingForExit.test_and_set();
+
+    BufferCondvar.notify_all();
+
+    if (ProcessThread.joinable())
+        ProcessThread.join();
+}
+
+void AsyncMilanLogger::AddSink(ILoggerOutput* const Output)
+{
+    MILAN_CHECKW(!bInitialized.test(), L"can't add sinks to initialized logger");
+    MilanLogger::AddSink(Output);
+}
+
+void AsyncMilanLogger::ProcessThreadInternal()
+{
+    while (!bWaitingForExit.test())
+    {
+        std::size_t ProcessCompletion = 0;
+
+        {
+            std::unique_lock Lock{ WriteMutex };
+            BufferCondvar.wait(Lock, [this]() { return BufferCompletion != 0 || bWaitingForExit.test() || bWaitingForFlush.test(); });
+            std::swap(BufferCompletion, ProcessCompletion);
+            std::swap(WriteBuffer, ProcessBuffer);
+        }
+
+        std::size_t Position = 0;
+        while (Position < ProcessCompletion)
+        {
+            auto* const HeaderPointer = reinterpret_cast<RecordHeader*>(ProcessBuffer + Position);
+            auto* const ContentsPointer = reinterpret_cast<wchar_t*>(ProcessBuffer + Position + sizeof(RecordHeader));
+
+            CodePlaceW const Location{ HeaderPointer->LocationFunc, HeaderPointer->LocationFile, HeaderPointer->LocationLine };
+            std::wstring_view const Contents{ ContentsPointer, static_cast<std::size_t>(HeaderPointer->ContentLength) };
+
+            std::ranges::for_each(Sinks, [&](SinkPointer& Sink)
+                {
+                    Sink->AcceptUnicode(Location, HeaderPointer->Severity,
+                        Contents.data(), Contents.size(), HeaderPointer->WriteSeconds);
+                });
+
+            Position += sizeof RecordHeader + (HeaderPointer->ContentLength + 1) * sizeof(wchar_t);
+        }
+
+        if (bWaitingForFlush.test())
+        {
+            std::unique_lock Lock{ WriteMutex };
+            bWaitingForFlush.clear();
+            FlushCondvar.notify_all();
+        }
+    }
+}
+
+void AsyncMilanLogger::FlushInternal(std::unique_lock<std::mutex>& Lock)
+{
+    bWaitingForFlush.test_and_set();
+    BufferCondvar.notify_all();
+
+    if (bInitialized.test())
+    {
+        // Checking for initialization here prevents deadlocks in outer initialization code.
+        FlushCondvar.wait(Lock, [this]() { return !bWaitingForFlush.test(); });
+    }
+
+    std::ranges::for_each(Sinks, [](SinkPointer& Sink) { Sink->Flush(); });
 }
