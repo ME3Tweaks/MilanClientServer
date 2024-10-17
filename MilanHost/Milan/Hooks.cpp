@@ -216,7 +216,7 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
         Context->AppendName(ObjectName, SFXName::k_formatBasic);
         Function->AppendName(FunctionName, SFXName::k_formatBasic);
 
-        MILAN_TRACEW(L"UObject::ProcessEvent: %s.%s", *ObjectName, *FunctionName);
+        MILAN_DEBUGW(L"UObject::ProcessEvent: %s.%s", *ObjectName, *FunctionName);
     }
 #endif
 
@@ -275,7 +275,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
         Context->AppendName(ObjectName, SFXName::k_formatBasic);
         Stack->Node->AppendName(FunctionName, SFXName::k_formatBasic);
 
-        MILAN_TRACEW(L"UObject::ProcessInternal: %s.%s", *ObjectName, *FunctionName);
+        MILAN_DEBUGW(L"UObject::ProcessInternal: %s.%s", *ObjectName, *FunctionName);
     }
 #endif
 

@@ -1,12 +1,17 @@
 #include <algorithm>
 #include <array>
 
+#include <locale.h>
+
 #include "Containers/string.hpp"
 #include "Milan/Logger.hpp"
 
 
 // ! Shared internal logic.
 // ========================================
+
+bool s_sinkLocaleInitialized = false;
+_locale_t s_sinkLocale = nullptr;
 
 struct FormatStyleA final
 {
@@ -74,31 +79,17 @@ BasicConsoleLoggerOutput::BasicConsoleLoggerOutput() = default;
 BasicConsoleLoggerOutput::~BasicConsoleLoggerOutput() noexcept {}
 
 void BasicConsoleLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Severity,
-    char const* const Data, size_t const Size, float const Seconds)
+    char const* const Data, size_t const Size, float const Seconds, FormatStyleA const& Style)
 {
-    assert(Data != nullptr && Size != 0);
-
-    auto const& [Stream, bFlush, SevToken, OpenSeq, CloseSeq] = GetFormatStyleShortA(Severity);
-    std::fprintf(Stream, "[%07.3f] [%s] %s\n", Seconds, SevToken, Data);
-
-    if (Severity >= ESeverity::Warn)
-        std::fflush(Stream);
-
-    MILAN_UNUSED_4(Place, Size, OpenSeq, CloseSeq);
+    std::fprintf(Style.OutStream, "[%07.3f] [%s] %s\n", Seconds, Style.SevToken, Data);
+    MILAN_UNUSED_3(Place, Severity, Size);
 }
 
 void BasicConsoleLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Severity,
-    wchar_t const* const Data, size_t const Size, float const Seconds)
+    wchar_t const* const Data, size_t const Size, float const Seconds, FormatStyleW const& Style)
 {
-    assert(Data != nullptr && Size != 0);
-
-    auto const& [Stream, bFlush, SevToken, OpenSeq, CloseSeq] = GetFormatStyleShortW(Severity);
-    std::fwprintf(Stream, L"[%07.3f] [%s] %s\n", Seconds, SevToken, Data);
-
-    if (Severity >= ESeverity::Warn)
-        std::fflush(Stream);
-
-    MILAN_UNUSED_4(Place, Size, OpenSeq, CloseSeq);
+    std::fwprintf(Style.OutStream, L"[%07.3f] [%s] %s\n", Seconds, Style.SevToken, Data);
+    MILAN_UNUSED_3(Place, Severity, Size);
 }
 
 void BasicConsoleLoggerOutput::Flush()
@@ -115,27 +106,19 @@ ConsoleLoggerOutput::ConsoleLoggerOutput() = default;
 ConsoleLoggerOutput::~ConsoleLoggerOutput() noexcept {}
 
 void ConsoleLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Severity,
-    char const* const Data, size_t const Size, float const Seconds)
+    char const* const Data, size_t const Size, float const Seconds, FormatStyleA const& Style)
 {
-    assert(Data != nullptr && Size != 0);
-
-    auto const& [Stream, bFlush, SevToken, OpenSeq, CloseSeq] = GetFormatStyleShortA(Severity);
-    std::fprintf(Stream, "%s[%07.3f] [%s] %s%s\n", OpenSeq, Seconds, SevToken, Data, CloseSeq);
-    if (bFlush) std::fflush(Stream);
-
-    MILAN_UNUSED_2(Place, Size);
+    _fprintf_l(Style.OutStream, "%s[%07.3f] [%s] %s%s\n", s_sinkLocale,
+        Style.OpenSeq, Seconds, Style.SevToken, Data, Style.CloseSeq);
+    MILAN_UNUSED_3(Place, Severity, Size);
 }
 
 void ConsoleLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Severity,
-    wchar_t const* const Data, size_t const Size, float const Seconds)
+    wchar_t const* const Data, size_t const Size, float const Seconds, FormatStyleW const& Style)
 {
-    assert(Data != nullptr && Size != 0);
-
-    auto const& [Stream, bFlush, SevToken, OpenSeq, CloseSeq] = GetFormatStyleShortW(Severity);
-    std::fwprintf(Stream, L"%s[%07.3f] [%s] %s%s\n", OpenSeq, Seconds, SevToken, Data, CloseSeq);
-    if (bFlush) std::fflush(Stream);
-
-    MILAN_UNUSED_2(Place, Size);
+    _fwprintf_l(Style.OutStream, L"%s[%07.3f] [%s] %s%s\n", s_sinkLocale,
+        Style.OpenSeq, Seconds, Style.SevToken, Data, Style.CloseSeq);
+    MILAN_UNUSED_3(Place, Severity, Size);
 }
 
 void ConsoleLoggerOutput::Flush()
@@ -179,11 +162,8 @@ FileLoggerOutput::~FileLoggerOutput() noexcept
 }
 
 void FileLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Severity,
-    char const* const Data, size_t const Size, float const Seconds)
+    char const* const Data, size_t const Size, float const Seconds, FormatStyleA const& Style)
 {
-    assert(Data != nullptr && Size != 0);
-    assert(OutputFile != nullptr);
-
     if (Data != nullptr && Size != 0)
     {
         assert(Size < 8192);
@@ -197,29 +177,20 @@ void FileLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Sever
 
         assert(UnicodeLength > 0 && UnicodeLength < UnicodeBuffer.size());
 
+        // Can't use the style here, but this should be a corner case anyway...
         auto const Token = GetFormatStyleShortW(Severity).SevToken;
-        std::fwprintf(OutputFile, L"[%07.3f] [%s] %s\n", Seconds, Token, UnicodeBuffer.data());
+
+        _fwprintf_l(OutputFile, L"[%07.3f] [%s] %s\n", s_sinkLocale, Seconds, Token, UnicodeBuffer.data());
     }
 
-    if (Severity >= ESeverity::Warn)
-        std::fflush(OutputFile);
-
-    MILAN_UNUSED_2(Place, Seconds);
+    MILAN_UNUSED_2(Place, Style);
 }
 
 void FileLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Severity,
-    wchar_t const* const Data, size_t const Size, float const Seconds)
+    wchar_t const* const Data, size_t const Size, float const Seconds, FormatStyleW const& Style)
 {
-    assert(Data != nullptr && Size != 0);
-    assert(OutputFile != nullptr);
-
-    auto const Token = GetFormatStyleShortW(Severity).SevToken;
-    std::fwprintf(OutputFile, L"[%07.3f] [%s] %s\n", Seconds, Token, Data);
-
-    if (Severity >= ESeverity::Warn)
-        std::fflush(OutputFile);
-
-    MILAN_UNUSED_3(Place, Size, Seconds);
+    _fwprintf_l(OutputFile, L"[%07.3f] [%s] %s\n", s_sinkLocale, Seconds, Style.SevToken, Data);
+    MILAN_UNUSED_4(Place, Severity, Size, Seconds);
 }
 
 void FileLoggerOutput::Flush()
@@ -235,6 +206,9 @@ void FileLoggerOutput::Flush()
 MilanLogger::MilanLogger()
 {
     Sinks.reserve(8);
+
+    s_sinkLocale = _get_current_locale();
+    s_sinkLocaleInitialized = true;
 }
 
 MilanLogger::~MilanLogger() noexcept
@@ -242,25 +216,27 @@ MilanLogger::~MilanLogger() noexcept
     // It should clean up Sinks automatically...
 }
 
-void MilanLogger::WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view const Message)
+void MilanLogger::WriteAnsi(CodePlaceA const& Place, ESeverity const Severity, std::string_view const Message)
 {
     auto const Seconds = MessageTimer.GetSeconds();
     std::lock_guard<std::mutex> _(WriteMutex);
 
     for (SinkPointer& Sink : Sinks)
     {
-        Sink->AcceptAnsi(Place, Severity, Message.data(), Message.size(), Seconds);
+        auto const& Style = GetFormatStyleShortA(Severity);
+        Sink->AcceptAnsi(Place, Severity, Message.data(), Message.size(), Seconds, Style);
     }
 }
 
-void MilanLogger::WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view const Message)
+void MilanLogger::WriteUnicode(CodePlaceW const& Place, ESeverity const Severity, std::wstring_view const Message)
 {
     auto const Seconds = MessageTimer.GetSeconds();
     std::lock_guard<std::mutex> _(WriteMutex);
 
     for (SinkPointer& Sink : Sinks)
     {
-        Sink->AcceptUnicode(Place, Severity, Message.data(), Message.size(), Seconds);
+        auto const& Style = GetFormatStyleShortW(Severity);
+        Sink->AcceptUnicode(Place, Severity, Message.data(), Message.size(), Seconds, Style);
     }
 }
 
@@ -308,28 +284,26 @@ void AsyncMilanLogger::WriteInternal(CodePlaceType const& Place, ESeverity const
     std::unique_lock<std::mutex> Lock{ WriteMutex };
     std::size_t const RecordLength = sizeof(RecordHeader) + (Message.length() + 1) * sizeof(ViewType::value_type);
 
-    if (BufferCompletion + RecordLength >= BufferCapacity)  [[unlikely]]
-    {
-        // Discard the message if we can't write it to the buffer...
-        MILAN_BREAK_ATTACHED();
-        return;
-    }
-
-    if (Message.length() >= UINT16_MAX - 1) [[unlikely]]
+    if (Message.length() >= 0x7FFF) [[unlikely]]
     {
         // Discard the message if it is too long for record header...
         MILAN_BREAK_ATTACHED();
         return;
     }
 
+    if (BufferCompletion + RecordLength >= BufferCapacity)  [[unlikely]]
+    {
+        // Force current buffer out to have space for the message...
+        FlushInternal(Lock);
+    }
+
     auto* const HeaderAllocation = reinterpret_cast<RecordHeader*>(WriteBuffer + BufferCompletion);
     auto* const ContentAllocation = reinterpret_cast<void*>(WriteBuffer + BufferCompletion + sizeof(RecordHeader));
 
-    HeaderAllocation->Severity = Severity;
     HeaderAllocation->WriteSeconds = MessageTimer.GetSeconds();
-    HeaderAllocation->LocationLine = Place.Line;
+    HeaderAllocation->Severity = static_cast<std::int32_t>(Severity);
+    HeaderAllocation->LocationLine = static_cast<std::int32_t>(Place.Line);
     HeaderAllocation->LocationFile = reinterpret_cast<void const*>(Place.File);
-    HeaderAllocation->LocationFunc = reinterpret_cast<void const*>(Place.Func);
     HeaderAllocation->ContentLength = static_cast<std::uint16_t>(Message.length());
     HeaderAllocation->bWideChars = static_cast<std::uint16_t>(sizeof(ViewType::value_type) > 1u);
 
@@ -420,26 +394,28 @@ void AsyncMilanLogger::ProcessThreadInternal()
 
             if (!!HeaderPointer->bWideChars)
             {
-                CodePlaceW const Location{ (wchar_t const*)HeaderPointer->LocationFunc, (wchar_t const*)HeaderPointer->LocationFile, HeaderPointer->LocationLine };
+                CodePlaceW const Location{ (wchar_t const*)nullptr, (wchar_t const*)HeaderPointer->LocationFile, HeaderPointer->LocationLine };
                 std::wstring_view const Contents{ (wchar_t const*)(ContentsPointer), static_cast<std::size_t>(HeaderPointer->ContentLength) };
+                FormatStyleW const& Style = GetFormatStyleShortW(static_cast<ESeverity>(HeaderPointer->Severity));
 
                 std::ranges::for_each(Sinks, [&](SinkPointer& Sink)
                     {
-                        Sink->AcceptUnicode(Location, HeaderPointer->Severity,
-                            Contents.data(), Contents.size(), HeaderPointer->WriteSeconds);
+                        Sink->AcceptUnicode(Location, static_cast<ESeverity>(HeaderPointer->Severity),
+                            Contents.data(), Contents.size(), HeaderPointer->WriteSeconds, Style);
                     });
 
                 Position += sizeof RecordHeader + (static_cast<std::size_t>(HeaderPointer->ContentLength) + 1) * sizeof(wchar_t);
             }
             else
             {
-                CodePlaceA const Location{ (char const*)HeaderPointer->LocationFunc, (char const*)HeaderPointer->LocationFile, HeaderPointer->LocationLine };
+                CodePlaceA const Location{ (char const*)nullptr, (char const*)HeaderPointer->LocationFile, HeaderPointer->LocationLine };
                 std::string_view const Contents{ (char const*)(ContentsPointer), static_cast<std::size_t>(HeaderPointer->ContentLength) };
+                FormatStyleA const& Style = GetFormatStyleShortA(static_cast<ESeverity>(HeaderPointer->Severity));
 
                 std::ranges::for_each(Sinks, [&](SinkPointer& Sink)
                     {
-                        Sink->AcceptAnsi(Location, HeaderPointer->Severity,
-                            Contents.data(), Contents.size(), HeaderPointer->WriteSeconds);
+                        Sink->AcceptAnsi(Location, static_cast<ESeverity>(HeaderPointer->Severity),
+                            Contents.data(), Contents.size(), HeaderPointer->WriteSeconds, Style);
                     });
 
                 Position += sizeof RecordHeader + (static_cast<std::size_t>(HeaderPointer->ContentLength) + 1) * sizeof(char);
@@ -449,7 +425,7 @@ void AsyncMilanLogger::ProcessThreadInternal()
 
         if (bWaitingForFlush.test())
         {
-            std::unique_lock Lock{ WriteMutex };
+            //std::unique_lock Lock{ WriteMutex };
             bWaitingForFlush.clear();
             FlushCondvar.notify_all();
         }

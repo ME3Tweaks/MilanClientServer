@@ -83,6 +83,7 @@ SPI_IMPLEMENT_ATTACH
         Config = ClientConfig{};
     }
 
+
     MILAN_INFOW(L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
     MILAN_INFOW(L"ordinal instance = %d", ::GetGameInstanceOrdinal());
 

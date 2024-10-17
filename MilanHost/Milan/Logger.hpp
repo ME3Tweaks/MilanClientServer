@@ -17,6 +17,31 @@
 #include "Milan/Misc.hpp"
 
 
+struct FormatStyleA;
+struct FormatStyleW;
+
+
+/**
+ * @brief
+ * Interface for a type that persists pre-formatted logging output,
+ * for example by printing it to console or writing to a file.
+ *
+ * @details
+ * Both @c Accept* methods expect @c Size argument to exclude null termination!
+ */
+class ILoggerOutput : public AllocateThroughEngine
+{
+public:
+
+    virtual ~ILoggerOutput() noexcept {}
+
+    virtual void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) = 0;
+    virtual void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) = 0;
+
+    virtual void Flush() = 0;
+};
+
+
 // ! Output devices.
 // ========================================
 
@@ -26,8 +51,8 @@ public:
 
     BasicConsoleLoggerOutput();
     ~BasicConsoleLoggerOutput() noexcept override;
-    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds) override;
-    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds) override;
+    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) override;
+    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) override;
     void Flush() override;
 };
 
@@ -37,8 +62,8 @@ public:
 
     ConsoleLoggerOutput();
     ~ConsoleLoggerOutput() noexcept override;
-    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds) override;
-    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds) override;
+    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) override;
+    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) override;
     void Flush() override;
 };
 
@@ -50,8 +75,8 @@ public:
 
     FileLoggerOutput(std::string_view OutputPath, bool bAppend);
     ~FileLoggerOutput() noexcept override;
-    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds) override;
-    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds) override;
+    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) override;
+    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) override;
     void Flush() override;
 
 private:
@@ -103,7 +128,7 @@ class AsyncMilanLogger final : public MilanLogger
 {
 public:
 
-    static constexpr std::size_t k_defaultBuffer = 1024 * 1024;
+    static constexpr std::size_t k_defaultBuffer = 10 * 1024 * 1024;
     explicit AsyncMilanLogger(std::size_t InBufferSize = k_defaultBuffer);
 
     // ILogger implementation:
@@ -131,13 +156,12 @@ private:
 #pragma pack(push, 1)
     struct RecordHeader final
     {
-        ESeverity               Severity;
         float                   WriteSeconds;
-        std::int32_t            LocationLine;
+        std::int32_t            Severity        : 8;
+        std::int32_t            LocationLine    : 24;
         void const*             LocationFile;
-        void const*             LocationFunc;
-        std::uint16_t           ContentLength;
-        std::uint16_t           bWideChars;
+        std::uint16_t           ContentLength   : 15;
+        std::uint16_t           bWideChars      : 1;
     };
 #pragma pack(pop)
 
