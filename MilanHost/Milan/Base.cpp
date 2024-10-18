@@ -2,16 +2,21 @@
 #include <cstdio>
 #include <cwchar>
 
+#include "Components/COutput.hpp"
+
 #include "Milan/Base.hpp"
 #include "Milan/Hooks.hpp"
-#include "Systems/Output.hpp"
+
+
+bool                        gb_disableSafeBreak = false;
+ILogger*                    gp_mainLogger = nullptr;
+ComponentContainer*         gp_componentContainer = nullptr;
 
 
 // ! ILogger implementation.
 // ========================================
 
-void ILogger::WriteFormatAnsi(CodePlaceA const& Place, ESeverity const Severity,
-    std::string_view const Format, ...)
+void ILogger::WriteFormatAnsi(CodePlaceA const& Place, ESeverity const Severity, std::string_view const Format, ...)
 {
     std::va_list Args;
     va_start(Args, Format);
@@ -19,8 +24,7 @@ void ILogger::WriteFormatAnsi(CodePlaceA const& Place, ESeverity const Severity,
     va_end(Args);
 }
 
-void ILogger::WriteFormatUnicode(CodePlaceW const& Place, ESeverity const Severity,
-    std::wstring_view const Format, ...)
+void ILogger::WriteFormatUnicode(CodePlaceW const& Place, ESeverity const Severity, std::wstring_view const Format, ...)
 {
     std::va_list Args;
     va_start(Args, Format);
@@ -28,8 +32,7 @@ void ILogger::WriteFormatUnicode(CodePlaceW const& Place, ESeverity const Severi
     va_end(Args);
 }
 
-void ILogger::WriteFormatAnsiVararg(CodePlaceA const& Place, ESeverity Severity,
-    std::string_view const Format, std::va_list Args)
+void ILogger::WriteFormatAnsiVararg(CodePlaceA const& Place, ESeverity Severity, std::string_view const Format, std::va_list Args)
 {
     thread_local std::array<char, 4096> FormatBuffer{ '\0' };
     int Result = _vsnprintf(FormatBuffer.data(), FormatBuffer.size() - 1, Format.data(), Args);
@@ -46,8 +49,7 @@ void ILogger::WriteFormatAnsiVararg(CodePlaceA const& Place, ESeverity Severity,
     WriteAnsi(Place, Severity, Message);
 }
 
-void ILogger::WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity Severity,
-    std::wstring_view const Format, std::va_list Args)
+void ILogger::WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity Severity, std::wstring_view const Format, std::va_list Args)
 {
     thread_local std::array<wchar_t, 4096> FormatBuffer{ L'\0' };
     int Result = _vsnwprintf(FormatBuffer.data(), FormatBuffer.size() - 1, Format.data(), Args);
@@ -71,23 +73,21 @@ void ILogger::WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity Severi
 void Details::OnFatalErrorW(CodePlaceW const& Place,
     wchar_t const* const Expression, wchar_t const* const Format, ...)
 {
-    if (::Milan::Output::HasInitialized())
+    if (ILogger* const Logger = gp_mainLogger; Logger != nullptr)
     {
-        auto& Logger = ::Milan::Output::GetMainLogger();
-
         std::va_list Args;
         va_start(Args, Format);
 
         bool const bWithExpression = Expression != nullptr && std::wcslen(Expression) > 0;
-        Logger.WriteFormatUnicode(Place, ESeverity::Error, L"fatal error: %s", bWithExpression ? Expression : L"???");
-        Logger.WriteFormatUnicodeVararg(Place, ESeverity::Error, Format, Args);
+        Logger->WriteFormatUnicode(Place, ESeverity::Error, L"fatal error: %s", bWithExpression ? Expression : L"???");
+        Logger->WriteFormatUnicodeVararg(Place, ESeverity::Error, Format, Args);
 
         va_end(Args);
 
         // TODO: Pop up a MessageBox of our own.
 
         // Flush stuff just to be sure.
-        ::Milan::Output::FlushEverything();
+        COMPONENT(COutput).FlushEverything();
     }
     else
     {
@@ -125,7 +125,5 @@ void Details::OnFatalErrorW(CodePlaceW const& Place,
 
 bool Details::ShouldBreak() noexcept
 {
-    return !bDisableSafeBreak && ::IsDebuggerPresent();
+    return !gb_disableSafeBreak && ::IsDebuggerPresent();
 }
-
-bool Details::bDisableSafeBreak = false;

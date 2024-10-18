@@ -2,7 +2,6 @@
 #include "Milan/Canvas.hpp"
 #include "Milan/Hooks.hpp"
 #include "Milan/Misc.hpp"
-#include "Systems/Output.hpp"
 
 
 // ! CanvasDrawer implementation.
@@ -321,6 +320,13 @@ void ProfilePendingPackages(MilanCanvasDrawer& Drawer, UObject* Target)
 
     auto const World = reinterpret_cast<UWorld_Proxy*>(*GWorld);
     auto const NetDriver = reinterpret_cast<UNetDriver_Proxy*>(World->NetDriver);
+
+    if (NetDriver == nullptr)
+    {
+        // This is quite weird...
+        return;
+    }
+
     auto const ServerConnection = reinterpret_cast<UNetConnection_Proxy*>(NetDriver->ServerConnection);
 
     for (FPackageInfo const& Pending : ServerConnection->PendingPackageInfos)

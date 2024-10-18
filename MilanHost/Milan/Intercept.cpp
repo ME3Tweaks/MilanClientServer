@@ -2,7 +2,6 @@
 
 #include "Milan/Base.hpp"
 #include "Milan/Intercept.hpp"
-#include "Systems/Output.hpp"
 
 
 // ! FunctionInterceptLegacy implementation.
@@ -170,7 +169,7 @@ void MiddleIntercept::Install(wchar_t const* const InLabel, int const InRVA, voi
 {
     auto* const MainBase = reinterpret_cast<unsigned char*>(GetMainBase());
     MiddleIntercept Instance{ InLabel, MainBase + InRVA, InStubFunction, &InCaveIndexer };
-    MILAN_DEBUGW(L"installed mid-function intercept '%s' at 0x%p", InLabel, (void*)Instance.Address);
+    MILAN_TRACEW(L"installed mid-function intercept '%s' at 0x%p", InLabel, (void*)Instance.Address);
     MILAN_UNUSED(Instance);
 }
 

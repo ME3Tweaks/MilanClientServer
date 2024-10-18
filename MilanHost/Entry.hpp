@@ -5,9 +5,17 @@
 
 #pragma once
 
+#include <LESDK/Init.hpp>
+#include <SPI.h>
 
-extern void SingleDetachImpl();
 
+// ! Initialization and cleanup.
+// ========================================
+
+::LESDK::Initializer* gp_sdkContext = nullptr;
+
+void InitAllocators(::LESDK::Initializer& Context);
+void LoadInitialConfig();
 void RegisterNonshipCommands();
 void RegisterVectoredExceptions();
 void SpawnLocalClients();

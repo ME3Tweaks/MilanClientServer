@@ -1,5 +1,4 @@
 #include "Milan/Streams.hpp"
-#include "Systems/Output.hpp"
 
 
 // ! IInputStream implementation.

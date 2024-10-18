@@ -3,25 +3,29 @@
 #include <fstream>
 #include <unordered_set>
 
-#include <LESDK/Init.hpp>
-#include <SPI.h>
+#include <LESDK/Headers.hpp>
 
 #include "Entry.hpp"
+
 #include "Milan/Base.hpp"
-#include "Milan/ClientConfig.hpp"
+#include "Milan/CmdArgs.hpp"
 #include "Milan/GuidCacheUtils.hpp"
 #include "Milan/Logger.hpp"
 #include "Milan/Misc.hpp"
+
+#include "Components/CConfig.hpp"
+#include "Components/CCommands.hpp"
+#include "Components/CGlobals.hpp"
+#include "Components/CImgui.hpp"
+#include "Components/CNetworkProfiler.hpp"
+#include "Components/COutput.hpp"
+#include "Components/CProfilers.hpp"
+#include "Components/CState.hpp"
+#include "Components/CRenderdoc.hpp"
+
 #include "Proxies/Core.hpp"
 #include "Proxies/Engine.hpp"
 #include "Proxies/SFXGame.hpp"
-#include "Systems/Console.hpp"
-#include "Systems/Globals.hpp"
-#include "Systems/Imgui.hpp"
-#include "Systems/Output.hpp"
-#include "Systems/Profilers.hpp"
-#include "Systems/Renderdoc.hpp"
-#include "Systems/State.hpp"
 
 
 SPI_PLUGINSIDE_SUPPORT(L"MilanHost", L"Project Milan Team", L"0.1.0", SPI_GAME_LE3, SPI_VERSION_ANY);
@@ -31,63 +35,52 @@ SPI_PLUGINSIDE_SEQATTACH;
 SPI_IMPLEMENT_ATTACH
 {
     ::RelativeTimer AttachTimer{};
-    ::LESDK::Initializer Context{ InterfacePtr, "MilanHost" };
 
-
-    // Disable safe breaking.
+    // Things that component initialization depends on.
     // ----------------------------------------
 
-    // Can't use FString here because global allocator has not yet been initialized.
-    ::Details::bDisableSafeBreak = ::wcsstr(::Milan::Globals::GetCmdArgs(), L"-nobreak") != nullptr;
+    gp_sdkContext = new ::LESDK::Initializer{ InterfacePtr, "MilanHost" };
+
+    gb_disableSafeBreak = CmdArgs::Contain(L"-nobreak");
+    gp_componentContainer = new ComponentContainer;
+
+    InitAllocators(*gp_sdkContext);
 
 
-    // Initialize subsystems.
+    // Initialize subsystems / compontents.
     // ----------------------------------------
 
-    ::Milan::Allocator::Initialize(Context);
-    ::Milan::Output::Initialize(Context);
-    ::Milan::Globals::Initialize(Context);
-    ::Milan::Console::Initialize(Context);
-    ::Milan::Profilers::Initialize(Context);
-    ::Milan::Imgui::Initialize(Context);
-    ::Milan::State::Initialize(Context);
+    gp_componentContainer->Initialize<COutput>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CGlobals>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CCommands>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CProfilers>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CImgui>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CState>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CConfig>(*gp_sdkContext);
 
 #ifndef _FINAL_RELEASE
-    ::Milan::Renderdoc::Initialize(Context);
+    gp_componentContainer->Initialize<CNetworkProfiler>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CRenderdoc>(*gp_sdkContext);
 #endif
 
-    // This needs to run after globals.
-    ::Milan::Output::DeferredInitialize(Context);
+    // These need to run after globals.
+    COMPONENT(CGlobals).PostInitialize(*gp_sdkContext);
+    COMPONENT(COutput).PostInitialize(*gp_sdkContext);
 
 
     // Run additional startup logic.
     // ----------------------------------------
 
+    LoadInitialConfig();
     RegisterNonshipCommands();
     RegisterVectoredExceptions();
     SpawnLocalClients();
 
 
-    // Load client-side config.
-    // ----------------------------------------
-
-    static constexpr wchar_t const* k_configFilename = L"./MilanHost.toml";
-
-    ClientConfig    Config{};
-    FString         ConfigError{};
-
-    if (!Config.TryRead(k_configFilename, ConfigError)) [[unlikely]]
-    {
-        MILAN_ERRORW(L"failed to load config '%s': %s", k_configFilename, * ConfigError);
-        MILAN_WARNW(L"default configuration will be used, which is probably not what you want");
-        Config = ClientConfig{};
-    }
-
-
     MILAN_INFOW(L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
-    MILAN_INFOW(L"ordinal instance = %d", ::GetGameInstanceOrdinal());
+    MILAN_INFOW(L"game ordinal instance = %d", ::GetGameInstanceOrdinal());
 
-    ::Milan::Output::FlushEverything();
+    COMPONENT(COutput).FlushEverything();
 
     return true;
 }
@@ -109,30 +102,57 @@ void SingleDetachImpl()
     if (s_detachCalled.exchange(true))
         return;
 
-    MILAN_INFOW(L"detach starting");
-    ::Milan::Output::FlushEverything();
+    MILAN_INFOW(L"single detach starting");
+    COMPONENT(COutput).FlushEverything();
 
 
     // Terminate subsystems in reverse.
     // ----------------------------------------
 
 #ifndef _FINAL_RELEASE
-    ::Milan::Renderdoc::Terminate();
+    gp_componentContainer->Terminate<CRenderdoc>(*gp_sdkContext);
+    gp_componentContainer->Terminate<CNetworkProfiler>(*gp_sdkContext);
 #endif
 
-    ::Milan::State::Terminate();
-    ::Milan::Imgui::Terminate();
-    ::Milan::Profilers::Terminate();
-    ::Milan::Console::Terminate();
-    ::Milan::Globals::Terminate();
-    ::Milan::Output::Terminate();
-    ::Milan::Allocator::Terminate();
+    gp_componentContainer->Terminate<CConfig>(*gp_sdkContext);
+    gp_componentContainer->Terminate<CState>(*gp_sdkContext);
+    gp_componentContainer->Terminate<CImgui>(*gp_sdkContext);
+    gp_componentContainer->Terminate<CProfilers>(*gp_sdkContext);
+    gp_componentContainer->Terminate<CCommands>(*gp_sdkContext);
+    gp_componentContainer->Terminate<CGlobals>(*gp_sdkContext);
+    gp_componentContainer->Terminate<COutput>(*gp_sdkContext);
+
+    delete gp_componentContainer;
+    gp_componentContainer = nullptr;
+
+    delete gp_sdkContext;
+    gp_sdkContext = nullptr;
+}
+
+void InitAllocators(::LESDK::Initializer& Context)
+{
+    // Cannot use logging here because that is dependent on GMalloc.
+    GMalloc = Context.ResolveTyped<FMallocLike*>(BUILTIN_GMALLOC_RIP);
+    assert(GMalloc != nullptr && *GMalloc != nullptr);
+
+    // If this doesn't hard crash we should be good to go...
+    void* const BogusAllocation = (*GMalloc)->Malloc(4, UN_DEFAULT_ALIGNMENT);
+    void* const BogusReallocation = (*GMalloc)->Realloc(BogusAllocation, 128, UN_DEFAULT_ALIGNMENT);
+    (*GMalloc)->Free(BogusReallocation);
+}
+
+void LoadInitialConfig()
+{
+    COMPONENT(CConfig).LoadConfig();
+    // TODO: Apply logging configuration via COutput.
 }
 
 void RegisterNonshipCommands()
 {
+    auto& Commands = COMPONENT(CCommands);
+
 #ifndef _FINAL_RELEASE
-    ::Milan::Console::RegisterCommand(L"dbg", L"assertme",
+    Commands.RegisterCommand(L"dbg", L"assertme",
         [](wchar_t const*)
         {
             MILAN_ERRORW(L"ASSERTING THIS PLANE");  // what
@@ -140,7 +160,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"dbg", L"breakme",
+    Commands.RegisterCommand(L"dbg", L"breakme",
         [](wchar_t const*)
         {
             MILAN_ERRORW(L"BREAKING THIS PLANE");
@@ -148,7 +168,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"dbg", L"crashme",
+    Commands.RegisterCommand(L"dbg", L"crashme",
         [](wchar_t const*)
         {
             MILAN_ERRORW(L"CRASHING THIS PLANE");
@@ -156,7 +176,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"dump", L"guidcaches",
+    Commands.RegisterCommand(L"dump", L"guidcaches",
         [](wchar_t const*)
         {
             MILAN_INFOW(L"dumping guid caches (to log !!!)");
@@ -174,7 +194,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"dump", L"nativeops",
+    Commands.RegisterCommand(L"dump", L"nativeops",
         [](wchar_t const*)
         {
             MILAN_INFOW(L"dumping native ops");
@@ -195,7 +215,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"dump", L"nativefuncs",
+    Commands.RegisterCommand(L"dump", L"nativefuncs",
         [](wchar_t const*)
         {
             MILAN_INFOW(L"dumping native ufuncs");
@@ -220,7 +240,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"dump", L"sfxuid",
+    Commands.RegisterCommand(L"dump", L"sfxuid",
         [](wchar_t const*)
         {
             MILAN_INFOW(L"dumping SFXUniqueID map");
@@ -245,7 +265,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"dump", L"replistcalc",
+    Commands.RegisterCommand(L"dump", L"replistcalc",
         [](wchar_t const*)
         {
             MILAN_INFOW(L"dumping replist calculation addresses");
@@ -287,7 +307,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"dump", L"onlinevers",
+    Commands.RegisterCommand(L"dump", L"onlinevers",
         [](wchar_t const*)
         {
             for (TypedObjectIterator<UOnlineSubsystem, true, false> Iter{}; Iter; ++Iter)
@@ -303,25 +323,25 @@ void RegisterNonshipCommands()
 
 #if defined(MILAN_BUILD_LOGINTERNAL) && MILAN_BUILD_LOGINTERNAL
 
-    ::Milan::Console::RegisterCommand(L"log", L"loginternal",
+    Commands.RegisterCommand(L"log", L"loginternal",
         [](wchar_t const*)
         {
-            bool const Enabled = ::Milan::Output::ToggleLogInternal();
+            bool const Enabled = COMPONENT(COutput).ToggleLogInternal();
             MILAN_INFOW(L"loginternal: %s", Enabled ? L"enabled" : L"disabled");
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"log", L"warninternal",
+    Commands.RegisterCommand(L"log", L"warninternal",
         [](wchar_t const*)
         {
-            bool const Enabled = ::Milan::Output::ToggleWarnInternal();
+            bool const Enabled = COMPONENT(COutput).ToggleWarnInternal();
             MILAN_INFOW(L"warninternal: %s", Enabled ? L"enabled" : L"disabled");
             return true;
         });
 
 #endif
 
-    ::Milan::Console::RegisterCommand(L"log", L"processinternal",
+    Commands.RegisterCommand(L"log", L"processinternal",
         [](wchar_t const*)
         {
             gb_logProcessInternal = !gb_logProcessInternal;
@@ -330,7 +350,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"log", L"lookuppackageguids",
+    Commands.RegisterCommand(L"log", L"lookuppackageguids",
         [](wchar_t const*)
         {
             gb_logLookupPackageGuid = !gb_logLookupPackageGuid;
@@ -339,7 +359,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"log", L"pendingpackages",
+    Commands.RegisterCommand(L"log", L"pendingpackages",
         [](wchar_t const*)
         {
             gb_logPendingPackages = !gb_logPendingPackages;
@@ -348,11 +368,10 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    ::Milan::Console::RegisterCommand(L"util", L"updateguidcacheoverride",
+    Commands.RegisterCommand(L"util", L"updateguidcacheoverride",
         [](wchar_t const*)
         {
-            if (gp_guidCacheOverride)
-                gp_guidCacheOverride->UpdateLookup();
+            COMPONENT(CGlobals).UpdateGuidCacheOverride();
             return true;
         });
 
@@ -380,10 +399,13 @@ void RegisterVectoredExceptions()
 
             if (bDispatchHandler)
             {
-                // Actual handlers must be filtered, so call them within this branch.
-                ::Milan::Profilers::On_VectoredException(Address, Code, Exceptions);
-                ::Milan::Output::On_VectoredException(Address, Code, Exceptions);
-                ::Milan::Renderdoc::On_VectoredException(Address, Code, Exceptions);
+                COMPONENT(CProfilers).On_VectoredException(Address, Code, Exceptions);
+                COMPONENT(COutput).On_VectoredException(Address, Code, Exceptions);
+                COMPONENT(CRenderdoc).On_VectoredException(Address, Code, Exceptions);
+
+            #ifndef _FINAL_RELEASE
+                COMPONENT(CNetworkProfiler).On_VectoredException(Address, Code, Exceptions);
+            #endif // !_FINAL_RELEASE
             }
 
             return EXCEPTION_CONTINUE_SEARCH;
@@ -396,8 +418,8 @@ void SpawnLocalClients()
 
     int const Instance = ::GetGameInstanceOrdinal();
 
-    FString const Command{ ::Milan::Globals::GetCmdString() };
-    FString const Arguments{ ::Milan::Globals::GetCmdArgs() };
+    FString const Command{ CmdArgs::GetWithExec() };
+    FString const Arguments{ CmdArgs::Get() };
 
     if (Instance == 0)
     {

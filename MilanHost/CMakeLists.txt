@@ -6,6 +6,24 @@ set (PROJ_TARGET MilanHost)
 set (PROJ_FOLDER ${CMAKE_CURRENT_SOURCE_DIR})
 
 set (PROJ_SOURCES
+  ${PROJ_FOLDER}/Components/CConfig.cpp
+  ${PROJ_FOLDER}/Components/CConfig.hpp
+  ${PROJ_FOLDER}/Components/CCommands.cpp
+  ${PROJ_FOLDER}/Components/CCommands.hpp
+  ${PROJ_FOLDER}/Components/CGlobals.cpp
+  ${PROJ_FOLDER}/Components/CGlobals.hpp
+  ${PROJ_FOLDER}/Components/CImgui.cpp
+  ${PROJ_FOLDER}/Components/CImgui.hpp
+  ${PROJ_FOLDER}/Components/CNetworkProfiler.cpp
+  ${PROJ_FOLDER}/Components/CNetworkProfiler.hpp
+  ${PROJ_FOLDER}/Components/COutput.cpp
+  ${PROJ_FOLDER}/Components/COutput.hpp
+  ${PROJ_FOLDER}/Components/CProfilers.cpp
+  ${PROJ_FOLDER}/Components/CProfilers.hpp
+  ${PROJ_FOLDER}/Components/CRenderdoc.cpp
+  ${PROJ_FOLDER}/Components/CRenderdoc.hpp
+  ${PROJ_FOLDER}/Components/CState.cpp
+  ${PROJ_FOLDER}/Components/CState.hpp
   ${PROJ_FOLDER}/Containers/string.hpp
   ${PROJ_FOLDER}/Containers/unordered_map.hpp
   ${PROJ_FOLDER}/Containers/vector.hpp
@@ -17,6 +35,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Milan/Canvas.hpp
   ${PROJ_FOLDER}/Milan/ClientConfig.cpp
   ${PROJ_FOLDER}/Milan/ClientConfig.hpp
+  ${PROJ_FOLDER}/Milan/CmdArgs.cpp
+  ${PROJ_FOLDER}/Milan/CmdArgs.hpp
   ${PROJ_FOLDER}/Milan/GuidCacheUtils.cpp
   ${PROJ_FOLDER}/Milan/GuidCacheUtils.hpp
   ${PROJ_FOLDER}/Milan/Hooks.cpp
@@ -39,28 +59,14 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Proxies/Core.hpp
   ${PROJ_FOLDER}/Proxies/Engine.hpp
   ${PROJ_FOLDER}/Proxies/SFXGame.hpp
-  ${PROJ_FOLDER}/Systems/Console.cpp
-  ${PROJ_FOLDER}/Systems/Console.hpp
-  ${PROJ_FOLDER}/Systems/Globals.cpp
-  ${PROJ_FOLDER}/Systems/Globals.hpp
-  ${PROJ_FOLDER}/Systems/Output.cpp
-  ${PROJ_FOLDER}/Systems/Output.hpp
-  ${PROJ_FOLDER}/Systems/Imgui.cpp
-  ${PROJ_FOLDER}/Systems/Imgui.hpp
-  ${PROJ_FOLDER}/Systems/Profilers.cpp
-  ${PROJ_FOLDER}/Systems/Profilers.hpp
-  ${PROJ_FOLDER}/Systems/Renderdoc.cpp
-  ${PROJ_FOLDER}/Systems/Renderdoc.hpp
-  ${PROJ_FOLDER}/Systems/State.cpp
-  ${PROJ_FOLDER}/Systems/State.hpp
   ${PROJ_FOLDER}/Entry.cpp
   ${PROJ_FOLDER}/Entry.hpp
 )
 
 set (PROJ_LINKS
   MilanCore
-  ImGui ImPlot LESDK-LE3 Zydis
-  renderdoc-api tomlplusplus
+  LESDK-LE3
+  ImGui ImPlot renderdoc-api tomlplusplus Zydis
   d3d11.lib dxgi.lib dxguid.lib
   Ws2_32.lib
 )
@@ -69,6 +75,7 @@ add_library (${PROJ_TARGET} SHARED ${PROJ_SOURCES})
 source_group (TREE "${PROJ_FOLDER}" FILES ${PROJ_SOURCES})
 
 set_target_properties (${PROJ_TARGET} PROPERTIES SUFFIX ".asi")
+set_property (DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJ_TARGET})
 
 target_compile_definitions (${PROJ_TARGET} PUBLIC ${MILAN_COMPILE_DEFINITIONS})
 target_compile_options (${PROJ_TARGET} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${MILAN_COMPILE_OPTIONS}>)
@@ -92,7 +99,8 @@ if (DEFINED ENV{MILAN_GAME_WIN64})
   set (COPY_SOURCE $<TARGET_FILE:${PROJ_TARGET}>)
   set (COPY_DEST ${MILAN_GAME_WIN64}/ASI/$<TARGET_FILE_NAME:${PROJ_TARGET}>)
 
-  add_custom_command (TARGET ${PROJ_TARGET} POST_BUILD
+  add_custom_command (
+    TARGET ${PROJ_TARGET} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy ${COPY_SOURCE} ${COPY_DEST}
   )
 
@@ -101,7 +109,5 @@ if (DEFINED ENV{MILAN_GAME_WIN64})
     VS_DEBUGGER_COMMAND_ARGUMENTS "-enableminidumps -nosplash -nomovie"
     VS_DEBUGGER_WORKING_DIRECTORY "${MILAN_GAME_WIN64}"
   )
-
-  set_property (DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJ_TARGET})
 
 endif ()

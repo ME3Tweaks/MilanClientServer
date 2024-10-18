@@ -1,18 +1,20 @@
 #include <array>
 
+#include "Components/CCommands.hpp"
+#include "Components/CGlobals.hpp"
+#include "Components/CImgui.hpp"
+#include "Components/COutput.hpp"
+#include "Components/CProfilers.hpp"
+#include "Components/CState.hpp"
+#include "Components/CRenderdoc.hpp"
+
+#include "Milan/CmdArgs.hpp"
 #include "Milan/GuidCacheUtils.hpp"
 #include "Milan/Hooks.hpp"
 #include "Milan/Intercept.hpp"
 #include "Milan/Logger.hpp"
 #include "Milan/Misc.hpp"
 #include "Milan/NetProfStream.hpp"
-#include "Systems/Console.hpp"
-#include "Systems/Globals.hpp"
-#include "Systems/Imgui.hpp"
-#include "Systems/Output.hpp"
-#include "Systems/Profilers.hpp"
-#include "Systems/Renderdoc.hpp"
-#include "Systems/State.hpp"
 
 
 bool gb_logCallFunction = false;
@@ -32,22 +34,14 @@ unsigned int*       pGRuntimeUCFlags = nullptr;
 t_WndProc* WndProc_orig = nullptr;
 LRESULT CALLBACK WndProc_hook(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
 {
-    if (::Milan::Imgui::OnWndProc(hWnd, uMsg, wParam, lParam))
-        return TRUE;
-
-    //if (WndProc_orig == nullptr)
-    //    return TRUE;
-
+    if (COMPONENT(CImgui).On_WndProc(hWnd, uMsg, wParam, lParam)) return TRUE;
     return (*WndProc_orig)(hWnd, uMsg, wParam, lParam);
 }
 
 t_IDXGISwapChain_Present* IDXGISwapChain_Present_orig = nullptr;
 HRESULT IDXGISwapChain_Present_hook(IDXGISwapChain* const pChain, UINT const SyncInterval, UINT const Flags)
 {
-    // This should never return true.
-    if (::Milan::Imgui::OnSwapChainPresent(pChain, SyncInterval, Flags))
-        return S_OK;
-
+    if (COMPONENT(CImgui).On_SwapChainPresent(pChain, SyncInterval, Flags)) return S_OK;
     return IDXGISwapChain_Present_orig(pChain, SyncInterval, Flags);
 }
 
@@ -55,7 +49,7 @@ t_BioRequestExit* BioRequestExit_orig = nullptr;
 void BioRequestExit_hook(UBOOL const bForce, INT const ExitCode, INT const Unused)
 {
 #ifndef _FINAL_RELEASE
-    if (::Milan::Output::HasInitialized())
+    if (gp_mainLogger != nullptr)
     {
         if (bForce)
         {
@@ -101,11 +95,7 @@ void UFunction_Bind_hook(UFunction* const Context)
 t_UGameEngine_Exec* UGameEngine_Exec_orig = nullptr;
 UBOOL UGameEngine_Exec_hook(UGameEngine* const Context, WCHAR const* const Command, void* const Output)
 {
-    //MILAN_TRACEW(L"UGameEngine::Exec: %s", Command);
-
-    if (::Milan::Console::OnUGameEngineExec(Context, Command, Output))
-        return TRUE;
-
+    if (COMPONENT(CCommands).On_UGameEngineExec(Context, Command, Output)) return TRUE;
     return (*UGameEngine_Exec_orig)(Context, Command, Output);
 }
 
@@ -220,14 +210,8 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     }
 #endif
 
-    //if (Function->StaticFullName().Contains(L"NotifyConnectionError"))
-    //{
-    //    auto const CastParms = reinterpret_cast<USFXGameViewportClient_execNotifyConnectionError_Parms*>(Parms);
-    //    MILAN_ERRORW(L"NotifyConnectionError: Message = %s, Title = %s", *CastParms->Message, *CastParms->Title);
-    //}
-
-    ::Milan::Profilers::On_UObject_ProcessEvent(Context, Function, Parms, Result);
-    ::Milan::Renderdoc::On_UObject_ProcessEvent(Context, Function, Parms, Result);
+    COMPONENT(CProfilers).On_UObject_ProcessEvent(Context, Function, Parms, Result);
+    COMPONENT(CRenderdoc).On_UObject_ProcessEvent(Context, Function, Parms, Result);
 
     (*UObject_ProcessEvent_orig)(Context, Function, Parms, Result);
 
@@ -286,7 +270,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     //        Manager->AccomplishmentProgressData.Count(), reinterpret_cast<void*>(Stack->Code));
     //}
 
-    if (!::Milan::State::On_UObject_ProcessInternal_Pre(Context, Stack, Result))
+    if (!COMPONENT(CState).On_UObject_ProcessInternal_Pre(Context, Stack, Result))
     {
         bCallOriginal = false;
     }
@@ -294,7 +278,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     if (bCallOriginal)
     {
         (*UObject_ProcessInternal_orig)(Context, Stack, Result);
-        ::Milan::State::On_UObject_ProcessInternal_Post(Context, Stack, Result);
+        COMPONENT(CState).On_UObject_ProcessInternal_Post(Context, Stack, Result);
     }
 
 #ifndef _FINAL_RELEASE
@@ -307,7 +291,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     if (!s_skipMainMenuChecked)
     {
         s_skipMainMenuChecked = true;
-        s_skipMainMenu = ::wcsstr(::Milan::Globals::GetCmdString(), L"-skiptomp") != nullptr;
+        s_skipMainMenu = CmdArgs::Contain(L"-skiptomp");
     }
 
     if (s_skipMainMenu)
@@ -429,7 +413,7 @@ t_UWorld_Tick* UWorld_Tick_orig = nullptr;
 void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delta)
 {
     (*UWorld_Tick_orig)(Context, Unknown, Delta);
-    ::Milan::State::On_UWorld_Tick(Context, Unknown, Delta);
+    COMPONENT(CState).On_UWorld_Tick(Context, Unknown, Delta);
 
 #ifndef _FINAL_RELEASE
     if (gb_logPendingPackages)

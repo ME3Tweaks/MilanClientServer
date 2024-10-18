@@ -6,7 +6,6 @@
 #include "Milan/NetProfDecls.hpp"
 #include "Milan/NetProfStream.hpp"
 #include "Proxies/Engine.hpp"
-#include "Systems/Output.hpp"
 
 
 namespace

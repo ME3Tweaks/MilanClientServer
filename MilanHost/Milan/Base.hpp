@@ -13,6 +13,7 @@
 #include <type_traits>
 
 #include <LESDK/Headers.hpp>
+#include <LESDK/Init.hpp>
 
 
 // ! Utility for stripping project root from __FILE__ at compile time.
@@ -328,6 +329,17 @@ inline void AllocateThroughEngine::operator delete[](void* const p)
 }
 
 
+/** The _FINAL_RELEASE macro in function form. */
+constexpr bool IsFinalBuild() noexcept
+{
+#ifdef _FINAL_RELEASE
+    return true;
+#else
+    return false;
+#endif
+}
+
+
 // ! Core logging interfaces.
 // ========================================
 
@@ -374,6 +386,10 @@ public:
 };
 
 
+/** Global logger instance, used e.g. by macros below. */
+extern ILogger* gp_mainLogger;
+
+
 #define _MILAN_LOGW_INTO(Instance, Severity, Message) \
     (Instance).WriteUnicode(MILAN_HEREW, Severity, Message)
 
@@ -387,11 +403,11 @@ public:
 #define MILAN_WARNW_INTO(Instance, Format, ...)         _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Warn,  Format, __VA_ARGS__)
 #define MILAN_ERRORW_INTO(Instance, Format, ...)        _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Error, Format, __VA_ARGS__)
 
-#define MILAN_TRACEW(Format, ...)                       _MILAN_LOGW_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Trace, Format, __VA_ARGS__)
-#define MILAN_DEBUGW(Format, ...)                       _MILAN_LOGW_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Debug, Format, __VA_ARGS__)
-#define MILAN_INFOW(Format, ...)                        _MILAN_LOGW_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Info,  Format, __VA_ARGS__)
-#define MILAN_WARNW(Format, ...)                        _MILAN_LOGW_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Warn,  Format, __VA_ARGS__)
-#define MILAN_ERRORW(Format, ...)                       _MILAN_LOGW_FMT_INTO(::Milan::Output::GetMainLogger(), ESeverity::Error, Format, __VA_ARGS__)
+#define MILAN_TRACEW(Format, ...)                       _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Trace, Format, __VA_ARGS__)
+#define MILAN_DEBUGW(Format, ...)                       _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Debug, Format, __VA_ARGS__)
+#define MILAN_INFOW(Format, ...)                        _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Info,  Format, __VA_ARGS__)
+#define MILAN_WARNW(Format, ...)                        _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Warn,  Format, __VA_ARGS__)
+#define MILAN_ERRORW(Format, ...)                       _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Error, Format, __VA_ARGS__)
 
 
 #ifndef _MLN_DEBUG
@@ -425,12 +441,12 @@ public:
 #endif // _MLN_DEBUG
 
 
+extern bool gb_disableSafeBreak;
+
 namespace Details
 {
     void OnFatalErrorW(::CodePlaceW const& Place, wchar_t const* Expression, wchar_t const* Format, ...);
     bool ShouldBreak() noexcept;
-
-    extern bool bDisableSafeBreak;
 }
 
 #define _MILAN_FATALW_IMPL(Expression, Format, ...)                                 \
@@ -474,6 +490,82 @@ namespace Details
         do { } while (false)
 
 #endif
+
+
+// ! Component registration.
+// ========================================
+
+class ComponentContainer;
+
+template<typename T>
+concept ComponentType = requires (::LESDK::Initializer& Context, T* Component)
+{
+    { T::k_typeName } -> std::convertible_to <wchar_t const*>;
+    { Component->Initialize(Context) } -> std::same_as<bool>;
+    { Component->Terminate(Context) };
+};
+
+class ComponentContainer final
+{
+private:
+
+    template<ComponentType CT>
+    __forceinline CT** GetAlloc() noexcept
+    {
+        static CT* Allocation = nullptr;
+        return &Allocation;
+    }
+
+public:
+
+    template<ComponentType CT>
+    __forceinline CT& Get()
+    {
+        CT* const Alloc = *GetAlloc<CT>();
+    #ifdef _MLN_DEBUG
+        MILAN_CHECKW(Alloc != nullptr, L"can't retrieve %s (uninitialized)", CT::k_typeName);
+    #endif // _MLN_DEBUG
+        return *Alloc;
+    }
+
+    template<ComponentType CT>
+    __forceinline CT const& Get() const
+    {
+        CT* const Alloc = *GetAlloc<CT>();
+    #ifdef _MLN_DEBUG
+        MILAN_CHECKW(Alloc != nullptr, L"can't retrieve %s (uninitialized)", CT::k_typeName);
+    #endif // _MLN_DEBUG
+        return *Alloc;
+    }
+
+    template<ComponentType CT>
+    __declspec(noinline) void Initialize(::LESDK::Initializer& Context)
+    {
+        CT** const Alloc = GetAlloc<CT>();
+        MILAN_CHECKW(*Alloc == nullptr, L"can't re-initialize %s", CT::k_typeName);
+
+        *Alloc = new (std::nothrow) CT{};
+        MILAN_CHECKW(*Alloc != nullptr, L"failed to allocate %s", CT::k_typeName);
+
+        bool const Success = (*Alloc)->Initialize(Context);
+        MILAN_CHECKW(Success, L"failed to initialize %s", CT::k_typeName);
+    }
+
+    template<ComponentType CT>
+    __declspec(noinline) void Terminate(::LESDK::Initializer& Context)
+    {
+        CT** const Alloc = GetAlloc<CT>();
+        MILAN_CHECKW(*Alloc != nullptr, L"can't terminate %s (uninitialized)", CT::k_typeName);
+        std::exchange(*Alloc, nullptr)->Terminate(Context);
+    }
+};
+
+#ifdef COMPONENT
+#error Can't redefine "COMPONENT"!
+#endif
+
+#define COMPONENT(ty) gp_componentContainer->Get<ty>()
+extern ComponentContainer* gp_componentContainer;
 
 
 // ! Input/output definitions.

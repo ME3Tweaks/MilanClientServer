@@ -5,7 +5,6 @@
 #include <fstream>
 
 #include "Milan/Misc.hpp"
-#include "Systems/Output.hpp"
 
 
 
@@ -97,12 +96,13 @@ void WriteCallstackLog(CodePlaceW&& Place, ESeverity const Severity, int const S
     auto const Count = ::CaptureStackBackTrace(1 + Skip, (DWORD)StackTrace.size(), StackTrace.data(), nullptr);
     auto const BaseAddress = (unsigned char*)::LESDK::GetMainModuleBase();
 
-    ILogger& Logger = ::Milan::Output::GetMainLogger();
-
-    MILAN_CHECKW(Count <= StackTrace.size(), L"");
-    for (unsigned short i = 0; i < Count; ++i)
+    if (ILogger* const Logger = gp_mainLogger; gp_mainLogger != nullptr)
     {
-        auto const RelativeVirtualAddress = (unsigned char*)StackTrace[i] - BaseAddress;
-        Logger.WriteFormatUnicode(Place, Severity, L"%02d. %p", i + 1, (void*)RelativeVirtualAddress);
+        MILAN_CHECKW(Count <= StackTrace.size(), L"");
+        for (unsigned short i = 0; i < Count; ++i)
+        {
+            auto const RelativeVirtualAddress = (unsigned char*)StackTrace[i] - BaseAddress;
+            Logger->WriteFormatUnicode(Place, Severity, L"%02d. %p", i + 1, (void*)RelativeVirtualAddress);
+        }
     }
 }
