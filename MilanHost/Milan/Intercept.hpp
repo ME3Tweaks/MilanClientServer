@@ -86,6 +86,8 @@ private:
 };
 
 
+#ifndef _FINAL_RELEASE
+
 /**
  * @brief       Primitive for setting interception of a native function at an arbitrary place.
  * @remarks     This basically handles most of the dirty work for setting up code caves.
@@ -124,6 +126,8 @@ private:
     static size_t GetPageSize() noexcept;
     static std::intptr_t GetMainBase() noexcept;
 };
+
+#endif // !_FINAL_RELEASE
 
 
 // ! UScript VM macros to write custom native functions.

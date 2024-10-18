@@ -376,6 +376,8 @@ void RegisterNonshipCommands()
         });
 
 #endif
+
+    MILAN_UNUSED(Commands);
 }
 
 void RegisterVectoredExceptions()

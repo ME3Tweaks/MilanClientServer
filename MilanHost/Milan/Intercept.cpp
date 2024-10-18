@@ -147,6 +147,8 @@ std::span<unsigned char> CaveIndexer::ViewMainModule()
 // ! MiddleIntercept implementation.
 // ========================================
 
+#ifndef _FINAL_RELEASE
+
 MiddleIntercept::MiddleIntercept(wchar_t const* const InLabel, void* const InAddress,
     void* const InStubFunction, CaveIndexer* const InCaveIndexer)
 {
@@ -463,3 +465,5 @@ std::intptr_t MiddleIntercept::GetMainBase() noexcept
 
     return MainBase;
 }
+
+#endif // !_FINAL_RELEASE

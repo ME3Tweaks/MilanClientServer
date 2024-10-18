@@ -417,8 +417,8 @@ extern ILogger* gp_mainLogger;
     #undef MILAN_TRACEW_INTO
     #undef MILAN_TRACEW
 
-    #define MILAN_TRACEW_INTO(Instance, Format, ...)    do { } while (false)
-    #define MILAN_TRACEW(Format, ...)                   do { } while (false)
+    #define MILAN_TRACEW_INTO(Instance, Format, ...)    (void)0
+    #define MILAN_TRACEW(Format, ...)                   (void)0
 
 #ifdef _FINAL_RELEASE
 
@@ -427,14 +427,14 @@ extern ILogger* gp_mainLogger;
     #undef MILAN_DEBUGW_INTO
     #undef MILAN_DEBUGW
 
-    #define MILAN_DEBUGW_INTO(Instance, Format, ...)    do { } while (false)
-    #define MILAN_DEBUGW(Format, ...)                   do { } while (false)
+    #define MILAN_DEBUGW_INTO(Instance, Format, ...)    (void)0
+    #define MILAN_DEBUGW(Format, ...)                   (void)0
 
     #undef MILAN_INFOW_INTO
     #undef MILAN_INFOW
 
-    #define MILAN_INFOW_INTO(Instance, Format, ...)     do { } while (false)
-    #define MILAN_INFOW(Format, ...)                    do { } while (false)
+    #define MILAN_INFOW_INTO(Instance, Format, ...)     (void)0
+    #define MILAN_INFOW(Format, ...)                    (void)0
 
 #endif // _FINAL_RELEASE
 
@@ -549,6 +549,8 @@ public:
 
         bool const Success = (*Alloc)->Initialize(Context);
         MILAN_CHECKW(Success, L"failed to initialize %s", CT::k_typeName);
+
+        MILAN_UNUSED(Success);
     }
 
     template<ComponentType CT>

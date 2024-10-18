@@ -157,6 +157,8 @@ void CGlobals::InitWindowProc(::LESDK::Initializer& Context)
 
 void CGlobals::InitNetworkHooks(::LESDK::Initializer& Context)
 {
+    MILAN_UNUSED(Context);
+
 #ifndef _FINAL_RELEASE
 
     INSTALL_HOOK_TWO(UActorChannel, ReplicateActor, GLOBAL_UACTORCHANNEL_REPLICATEACTOR_PHOOK);
