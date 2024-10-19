@@ -11,7 +11,7 @@
  * @def     MILAN_BUILD_LOGINTERNAL
  * @brief   Controls whether LogInternal/WarnInternal hooks are enabled.
  */
-#define MILAN_BUILD_LOGINTERNAL 1
+#define MILAN_BUILD_LOGINTERNAL 0
 
 
 class COutput final : public NonCopyable

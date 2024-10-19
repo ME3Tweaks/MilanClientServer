@@ -33,10 +33,17 @@ public:
     {
     public:
         virtual ~IInterface() noexcept = default;
+
+        /** Unique name which can be used to locate this instance. */
         virtual SFXName GetName() const noexcept = 0;
-        virtual bool IsActive() const noexcept = 0;
+        /** Checks if this interface should be rendering. */
+        virtual bool IsRendering() const noexcept = 0;
+        /** Checks if this interface should be receiving window events. */
         virtual bool IsIntercepting() const noexcept = 0;
+
+        /** Callback invoked in the WndProc hook. */
         virtual void OnWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) = 0;
+        /** Callback invoked in the SwapChainPresent hook. */
         virtual void OnRender() = 0;
     };
 
@@ -91,7 +98,7 @@ public:
     ~DemoInterface() noexcept override = default;
 
     SFXName GetName() const noexcept override { return SFXName(L"im-debug", 0); }
-    bool IsActive() const noexcept { return mb_active; }
+    bool IsRendering() const noexcept { return mb_active; }
     bool IsIntercepting() const noexcept { return true; }
 
     void OnWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);

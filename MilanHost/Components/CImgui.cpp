@@ -89,7 +89,7 @@ bool CImgui::On_WndProc(HWND const hWnd, UINT const uMsg, WPARAM const wParam, L
     for (InterfacePtr_t& Interface : m_activeInterfaces)
     {
         Interface->OnWndProc(hWnd, uMsg, wParam, lParam);
-        if (Interface->IsActive())
+        if (Interface->IsRendering())
         {
             if (Interface->IsIntercepting())
                 bInterfaceIntercepting = true;
@@ -150,7 +150,7 @@ bool CImgui::On_SwapChainPresent(IDXGISwapChain* const pChain, UINT const SyncIn
 
         for (InterfacePtr_t& Interface : m_activeInterfaces)
         {
-            if (Interface->IsActive())
+            if (Interface->IsRendering())
                 Interface->OnRender();
         }
 

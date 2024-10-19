@@ -45,7 +45,7 @@ void CRenderdoc::LoadAPI()
     if (ModuleHandle == nullptr)
     {
         // This is not a hard error because RenderDoc is likely not to be attached.
-        MILAN_INFOW(L"failed to load renderdoc.dll, multi-frame capture will be disabled");
+        MILAN_WARNW(L"failed to load renderdoc.dll, multi-frame capture will be disabled");
         MILAN_INFOW(L"if you expect multi-frame capture to work, launch the game from under renderdoc");
         mb_disableRenderdoc = true;
         return;

@@ -400,7 +400,7 @@ AActor* UWorld_SpawnActor_hook(
         Owner, Instigator,
         Unknown4);
 
-    if (Spawned == nullptr)
+    if (Spawned == nullptr)  [[unlikely]]
     {
         MILAN_WARNW(L"UWorld::SpawnActor: failed, class = %s, template = %s, name = %s",
             Class ? *Class->GetName() : L"n/a", Template ? *Template->GetName() : L"n/a", *Name.ToString());

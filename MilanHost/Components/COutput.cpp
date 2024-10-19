@@ -28,6 +28,8 @@ UFunction* FindRequiredFunction(short const iNative)
     //return nullptr;
 }
 
+#if defined(MILAN_BUILD_LOGINTERNAL) && MILAN_BUILD_LOGINTERNAL
+
 void UObject_LogInternal(UObject* const Context, FFrame* const Stack, [[maybe_unused]] void* const Result)
 {
     NATIVE_GET_STRING(Str);
@@ -67,6 +69,7 @@ void UObject_WarnInternal(UObject* const Context, FFrame* const Stack, [[maybe_u
     MILAN_WARNW(L"WarnInternal (%s.%s): %s", *ObjectName, *FunctionName, *Str);
 }
 
+#endif
 #endif
 
 

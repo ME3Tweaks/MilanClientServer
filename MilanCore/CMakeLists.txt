@@ -23,7 +23,7 @@ corrosion_import_crate (
 )
 
 corrosion_add_target_local_rustflags ("${FFI_CRATE}" "-Cpanic=abort")
-corrosion_set_cargo_flags ("${FFI_CRATE}" "--verbose")
+# corrosion_set_cargo_flags ("${FFI_CRATE}" "--verbose")
 
 add_library (${PROJ_TARGET} INTERFACE ${FFI_HEADER})
 
