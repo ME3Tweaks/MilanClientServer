@@ -8,12 +8,12 @@
 #include "Entry.hpp"
 
 #include "Milan/Base.hpp"
+#include "Milan/ClientConfig.hpp"
 #include "Milan/CmdArgs.hpp"
 #include "Milan/GuidCacheUtils.hpp"
 #include "Milan/Logger.hpp"
 #include "Milan/Misc.hpp"
 
-#include "Components/CConfig.hpp"
 #include "Components/CCommands.hpp"
 #include "Components/CGlobals.hpp"
 #include "Components/CImgui.hpp"
@@ -36,15 +36,16 @@ SPI_IMPLEMENT_ATTACH
 {
     ::RelativeTimer AttachTimer{};
 
+
     // Things that component initialization depends on.
     // ----------------------------------------
 
     gp_sdkContext = new ::LESDK::Initializer{ InterfacePtr, "MilanHost" };
-
-    gb_disableSafeBreak = CmdArgs::Contain(L"-nobreak");
     gp_componentContainer = new ComponentContainer;
+    gb_disableSafeBreak = CmdArgs::Contain(L"-nobreak");
 
-    InitAllocators(*gp_sdkContext);
+    InitSDKBasics(*gp_sdkContext);
+    InitGlobalConfig(k_configFilename);
 
 
     // Initialize subsystems / compontents.
@@ -56,7 +57,6 @@ SPI_IMPLEMENT_ATTACH
     gp_componentContainer->Initialize<CProfilers>(*gp_sdkContext);
     gp_componentContainer->Initialize<CImgui>(*gp_sdkContext);
     gp_componentContainer->Initialize<CState>(*gp_sdkContext);
-    gp_componentContainer->Initialize<CConfig>(*gp_sdkContext);
 
 #ifndef _FINAL_RELEASE
     gp_componentContainer->Initialize<CNetworkProfiler>(*gp_sdkContext);
@@ -64,22 +64,22 @@ SPI_IMPLEMENT_ATTACH
 #endif
 
     // These need to run after globals.
-    COMPONENT(CGlobals).PostInitialize(*gp_sdkContext);
     COMPONENT(COutput).PostInitialize(*gp_sdkContext);
+    COMPONENT(CGlobals).PostInitialize(*gp_sdkContext);
 
 
     // Run additional startup logic.
     // ----------------------------------------
 
-    LoadInitialConfig();
+    ReportConfigError();
     SetupImguiInterfaces();
     RegisterNonshipCommands();
     RegisterVectoredExceptions();
     SpawnLocalClients();
 
 
-    MILAN_INFOW(L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
-    MILAN_INFOW(L"game ordinal instance = %d", ::GetGameInstanceOrdinal());
+    MILAN_INFOW(ELOG_Startup, L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
+    MILAN_INFOW(ELOG_Startup, L"game ordinal instance = %d", ::GetGameInstanceOrdinal());
 
     COMPONENT(COutput).FlushEverything();
 
@@ -103,7 +103,7 @@ void SingleDetachImpl()
     if (s_detachCalled.exchange(true))
         return;
 
-    MILAN_INFOW(L"single detach starting");
+    MILAN_INFOW(ELOG_Teardown, L"single detach starting");
     COMPONENT(COutput).FlushEverything();
 
 
@@ -115,13 +115,14 @@ void SingleDetachImpl()
     gp_componentContainer->Terminate<CNetworkProfiler>(*gp_sdkContext);
 #endif
 
-    gp_componentContainer->Terminate<CConfig>(*gp_sdkContext);
     gp_componentContainer->Terminate<CState>(*gp_sdkContext);
     gp_componentContainer->Terminate<CImgui>(*gp_sdkContext);
     gp_componentContainer->Terminate<CProfilers>(*gp_sdkContext);
     gp_componentContainer->Terminate<CCommands>(*gp_sdkContext);
     gp_componentContainer->Terminate<CGlobals>(*gp_sdkContext);
     gp_componentContainer->Terminate<COutput>(*gp_sdkContext);
+
+    CleanupGlobalConfig();
 
     delete gp_componentContainer;
     gp_componentContainer = nullptr;
@@ -130,7 +131,7 @@ void SingleDetachImpl()
     gp_sdkContext = nullptr;
 }
 
-void InitAllocators(::LESDK::Initializer& Context)
+void InitSDKBasics(::LESDK::Initializer& Context)
 {
     // Cannot use logging here because that is dependent on GMalloc.
     GMalloc = Context.ResolveTyped<FMallocLike*>(BUILTIN_GMALLOC_RIP);
@@ -140,12 +141,17 @@ void InitAllocators(::LESDK::Initializer& Context)
     void* const BogusAllocation = (*GMalloc)->Malloc(4, UN_DEFAULT_ALIGNMENT);
     void* const BogusReallocation = (*GMalloc)->Realloc(BogusAllocation, 128, UN_DEFAULT_ALIGNMENT);
     (*GMalloc)->Free(BogusReallocation);
+
+    // Initialize SFXName addresses here too because logging is going to need them.
+    SFXName::GBioNamePools = Context.ResolveTyped<SFXNameEntry const*>(BUILTIN_SFXNAMEPOOLS_RIP);
+    SFXName::GInitMethod = Context.ResolveTyped<SFXName::tInitMethod>(BUILTIN_SFXNAMEINIT_PHOOK);
+    assert(SFXName::GBioNamePools != nullptr && SFXName::GInitMethod != nullptr);
 }
 
-void LoadInitialConfig()
+void ReportConfigError()
 {
-    COMPONENT(CConfig).LoadConfig();
-    // TODO: Apply logging configuration via COutput.
+    if (gp_clientConfig == nullptr && gp_clientConfigError != nullptr) [[unlikely]]
+        MILAN_ERRORW(ELOG_Startup, L"failed to read config: %S", gp_clientConfigError->c_str());
 }
 
 void SetupImguiInterfaces()
@@ -459,10 +465,10 @@ void SpawnLocalClients()
         while (ExecutableFilename != EndCursor && *ExecutableFilename != L'\0' && (*ExecutableFilename == L'\"'))
             ExecutableFilename++;
 
-        MILAN_DEBUGW(L"spawning %d additional client(s)", Count);
-        MILAN_TRACEW(L"command arguments: %s", *Arguments);
-        MILAN_TRACEW(L"working directory: %s", WorkingDirectory.data());
-        MILAN_TRACEW(L"executable filename: %s", ExecutableFilename);
+        MILAN_DEBUGW(ELOG_Startup, L"spawning %d additional client(s)", Count);
+        MILAN_TRACEW(ELOG_Startup, L"command arguments: %s", *Arguments);
+        MILAN_TRACEW(ELOG_Startup, L"working directory: %s", WorkingDirectory.data());
+        MILAN_TRACEW(ELOG_Startup, L"executable filename: %s", ExecutableFilename);
 
         for (int i = 0; i < Count; ++i)
         {
@@ -480,14 +486,14 @@ void SpawnLocalClients()
 
             if (Ret != 0)
             {
-                MILAN_TRACEW(L"spawned additional client %d / %d, pid = %d", i + 1, Count, ProcessInfo.dwProcessId);
+                MILAN_TRACEW(ELOG_Startup, L"spawned additional client %d / %d, pid = %d", i + 1, Count, ProcessInfo.dwProcessId);
                 ::CloseHandle(ProcessInfo.hProcess);
                 ::CloseHandle(ProcessInfo.hThread);
             }
             else
             {
-                MILAN_ERRORW(L"failed to spawn additional client %d / %d", i + 1, Count);
-                MILAN_ERRORW(L"  last error code = %d", ::GetLastError());
+                MILAN_ERRORW(ELOG_Startup, L"failed to spawn additional client %d / %d", i + 1, Count);
+                MILAN_ERRORW(ELOG_Startup, L"  last error code = %d", ::GetLastError());
                 break;
             }
         }

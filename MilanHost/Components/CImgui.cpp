@@ -40,14 +40,14 @@ bool CImgui::Initialize(::LESDK::Initializer& Context)
     mp_dxgiSwapChainPresent = FindSwapChainPresent();
     MILAN_CHECKW(mp_dxgiSwapChainPresent != nullptr, L"couldn't find IDXGISwapChain::Present");
 
-    MILAN_DEBUGW(L"component '%s' initialized", k_typeName);
+    MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
 }
 
 void CImgui::Terminate(::LESDK::Initializer& Context)
 {
     MILAN_UNUSED(Context);
-    MILAN_DEBUGW(L"component '%s' terminating", k_typeName);
+    MILAN_DEBUGW(ELOG_Teardown, L"component '%s' terminating", k_typeName);
 
     if (m_activeWindow)
     {
@@ -120,7 +120,7 @@ bool CImgui::On_SwapChainPresent(IDXGISwapChain* const pChain, UINT const SyncIn
             if (FAILED(GetDeviceAndContext(pChain, &mp_d3d11Device, &mp_d3d11DeviceContext)))
             {
                 bFailedInternal = true;
-                MILAN_ERRORW(L"GetDeviceAndContext failed");
+                MILAN_ERRORW(ELOG_Startup, L"GetDeviceAndContext failed");
                 return false;
             }
 
@@ -179,7 +179,7 @@ HRESULT CImgui::GetDeviceAndContext(IDXGISwapChain* const pChain, ID3D11Device**
 
 void CImgui::RegisterInterface(InterfacePtr_t Interface)
 {
-    MILAN_DEBUGW(L"registering imgui-based interface '%S'", Interface->GetName().GetName());
+    MILAN_DEBUGW(ELOG_Startup, L"registering imgui-based interface '%S'", Interface->GetName().GetName());
     m_activeInterfaces.emplace_back(std::move(Interface));
 }
 

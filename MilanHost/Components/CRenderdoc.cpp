@@ -12,14 +12,14 @@ bool CRenderdoc::Initialize(::LESDK::Initializer& Context)
     RegisterCommands();
 
     MILAN_UNUSED(Context);
-    MILAN_DEBUGW(L"component '%s' initialized", k_typeName);
+    MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
 }
 
 void CRenderdoc::Terminate(::LESDK::Initializer& Context)
 {
     MILAN_UNUSED(Context);
-    MILAN_DEBUGW(L"component '%s' terminating", k_typeName);
+    MILAN_DEBUGW(ELOG_Teardown, L"component '%s' terminating", k_typeName);
 }
 
 void CRenderdoc::On_VectoredException(void* const Address, DWORD const Code, _EXCEPTION_POINTERS* const Exceptions)
@@ -28,9 +28,9 @@ void CRenderdoc::On_VectoredException(void* const Address, DWORD const Code, _EX
 
     if (mp_apiHandle && mp_apiHandle->IsFrameCapturing() == 1)
     {
-        MILAN_DEBUGW(L"renderdoc: terminating capture");
+        MILAN_DEBUGW(L"terminating renderdoc capture");
         if (mp_apiHandle->EndFrameCapture(nullptr, nullptr) != 1)
-            MILAN_WARNW(L"renderdoc: failed to terminate capture");
+            MILAN_WARNW(L"failed to terminate renderdoc capture");
     }
 }
 
@@ -45,8 +45,8 @@ void CRenderdoc::LoadAPI()
     if (ModuleHandle == nullptr)
     {
         // This is not a hard error because RenderDoc is likely not to be attached.
-        MILAN_WARNW(L"failed to load renderdoc.dll, multi-frame capture will be disabled");
-        MILAN_INFOW(L"if you expect multi-frame capture to work, launch the game from under renderdoc");
+        MILAN_WARNW(ELOG_StartupRenderdoc, L"failed to load renderdoc.dll, multi-frame capture will be disabled");
+        MILAN_INFOW(ELOG_StartupRenderdoc, L"if you expect multi-frame capture to work, launch the game from under renderdoc");
         mb_disableRenderdoc = true;
         return;
     }
@@ -54,22 +54,22 @@ void CRenderdoc::LoadAPI()
     auto const pGetApi = reinterpret_cast<pRENDERDOC_GetAPI>(GetProcAddress(ModuleHandle, "RENDERDOC_GetAPI"));
     if (pGetApi == nullptr)
     {
-        MILAN_ERRORW(L"failed to get RENDERDOC_GetAPI pointer");
+        MILAN_ERRORW(ELOG_StartupRenderdoc, L"failed to get RENDERDOC_GetAPI pointer");
         mb_disableRenderdoc = true;
         return;
     }
 
     if (pGetApi(eRENDERDOC_API_Version_1_3_0, (void**)&mp_apiHandle) != 1)
     {
-        MILAN_ERRORW(L"failed to get initialize gp_apiHandle");
+        MILAN_ERRORW(ELOG_StartupRenderdoc, L"failed to get initialize gp_apiHandle");
         mb_disableRenderdoc = true;
         return;
     }
 
     if (!CmdArgs::Contain(L"-ONETHREAD"))
     {
-        MILAN_ERRORW(L"renderdoc is attached with a multithreaded renderer, commands will not be enabled");
-        MILAN_ERRORW(L"launch game with -ONETHREAD to fix this problem");
+        MILAN_ERRORW(ELOG_StartupRenderdoc, L"renderdoc is attached with a multithreaded renderer, commands will not be enabled");
+        MILAN_ERRORW(ELOG_StartupRenderdoc, L"launch game with -ONETHREAD to fix this problem");
         mb_disableRenderdoc = true;
         return;
     }

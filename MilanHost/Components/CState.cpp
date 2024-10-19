@@ -30,7 +30,7 @@ void ecsm_log(const char* const file, unsigned int const line, int const sev, co
 {
     MILAN_CHECKW(gp_mainLogger != nullptr, L"");
     ::CodePlaceA const Place{ .Func = "", .File = file, .Line = (int)line };
-    gp_mainLogger->WriteAnsi(Place, static_cast<ESeverity>(sev), msg);
+    gp_mainLogger->WriteAnsi(Place, static_cast<ESeverity>(sev), ELOG_Client, msg);
 }
 
 
@@ -58,14 +58,14 @@ bool CState::Initialize(::LESDK::Initializer& Context)
 #endif
 
     MILAN_UNUSED(Context);
-    MILAN_DEBUGW(L"component '%s' initialized", k_typeName);
+    MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
 }
 
 void CState::Terminate(::LESDK::Initializer& Context)
 {
     MILAN_UNUSED(Context);
-    MILAN_DEBUGW(L"component '%s' terminating", k_typeName);
+    MILAN_DEBUGW(ELOG_Teardown, L"component '%s' terminating", k_typeName);
 
     FunctionInterceptLegacy::CleanupRegistered();
     ::ecsm::uninit_state();
@@ -83,7 +83,7 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
     static FunctionInterceptLegacy SFXSaveManagerMP_SaveRecordsImpl{};
     if (SFXSaveManagerMP_SaveRecordsImpl.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.SaveRecordsImpl"))
     {
-        MILAN_TRACEW(L"intercepted SFXGame.SFXSaveManagerMP.SaveRecordsImpl:");
+        MILAN_TRACEW(ELOG_MultiProfile, L"intercepted SFXGame.SFXSaveManagerMP.SaveRecordsImpl:");
 
         MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
         ::RelativeTimer ProfileTimer{};
@@ -91,7 +91,7 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
         MemoryOutputStream ProfileStream{ 204800 };  // reserve 200kb
         Profile.Serialize(ProfileStream);
 
-        MILAN_TRACEW(L"profile serialized in %.3f ms.", ProfileTimer.GetMilliseconds());
+        MILAN_TRACEW(ELOG_MultiProfile, L"profile serialized in %.3f ms.", ProfileTimer.GetMilliseconds());
 
         ::WriteFileFull(static_cast<std::wstring_view>(Profile.GetProfilePath()), ProfileStream.View());
     }
@@ -107,7 +107,7 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
     static FunctionInterceptLegacy SFXSaveManagerMP_Initialize{};
     if (SFXSaveManagerMP_Initialize.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.Initialize"))
     {
-        MILAN_TRACEW(L"intercepted SFXGame.SFXSaveManagerMP.Initialize:");
+        MILAN_TRACEW(ELOG_MultiProfile, L"intercepted SFXGame.SFXSaveManagerMP.Initialize:");
 
         MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
 
@@ -119,7 +119,7 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
         MemoryInputStream ProfileStream{ std::move(ProfileBuffer) };
         Profile.Deserialize(ProfileStream);
 
-        MILAN_TRACEW(L"profile deserialized in %.3f ms.", ProfileTimer.GetMilliseconds());
+        MILAN_TRACEW(ELOG_MultiProfile, L"profile deserialized in %.3f ms.", ProfileTimer.GetMilliseconds());
     }
 }
 

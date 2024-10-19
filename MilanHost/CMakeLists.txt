@@ -6,8 +6,6 @@ set (PROJ_TARGET MilanHost)
 set (PROJ_FOLDER ${CMAKE_CURRENT_SOURCE_DIR})
 
 set (PROJ_SOURCES
-  ${PROJ_FOLDER}/Components/CConfig.cpp
-  ${PROJ_FOLDER}/Components/CConfig.hpp
   ${PROJ_FOLDER}/Components/CCommands.cpp
   ${PROJ_FOLDER}/Components/CCommands.hpp
   ${PROJ_FOLDER}/Components/CGlobals.cpp
@@ -45,6 +43,7 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Milan/Intercept.hpp
   ${PROJ_FOLDER}/Milan/Logger.cpp
   ${PROJ_FOLDER}/Milan/Logger.hpp
+  ${PROJ_FOLDER}/Milan/LoggingCategories.inl
   ${PROJ_FOLDER}/Milan/Misc.cpp
   ${PROJ_FOLDER}/Milan/Misc.hpp
   ${PROJ_FOLDER}/Milan/MPProfile.cpp

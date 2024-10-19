@@ -13,10 +13,16 @@ ILogger*                    gp_mainLogger = nullptr;
 ComponentContainer*         gp_componentContainer = nullptr;
 
 
+#define _CG_LOGCAT(a) SFXName MILAN_CONCAT(ELOG_, a){};
+    #include "Milan/LoggingCategories.inl"
+#undef _CG_LOGCAT
+
+
 // ! ILogger implementation.
 // ========================================
 
-void ILogger::WriteFormatAnsi(CodePlaceA const& Place, ESeverity const Severity, std::string_view const Format, ...)
+void ILogger::WriteFormatAnsi(CodePlaceA const& Place, ESeverity const Severity,
+    std::string_view const Format, ...)
 {
     std::va_list Args;
     va_start(Args, Format);
@@ -24,7 +30,17 @@ void ILogger::WriteFormatAnsi(CodePlaceA const& Place, ESeverity const Severity,
     va_end(Args);
 }
 
-void ILogger::WriteFormatUnicode(CodePlaceW const& Place, ESeverity const Severity, std::wstring_view const Format, ...)
+void ILogger::WriteFormatAnsi(CodePlaceA const& Place, ESeverity const Severity,
+    SFXName const Category, std::string_view const Format, ...)
+{
+    std::va_list Args;
+    va_start(Args, Format);
+    WriteFormatAnsiVararg(Place, Severity, Category, Format, Args);
+    va_end(Args);
+}
+
+void ILogger::WriteFormatUnicode(CodePlaceW const& Place, ESeverity const Severity,
+    std::wstring_view const Format, ...)
 {
     std::va_list Args;
     va_start(Args, Format);
@@ -32,7 +48,23 @@ void ILogger::WriteFormatUnicode(CodePlaceW const& Place, ESeverity const Severi
     va_end(Args);
 }
 
-void ILogger::WriteFormatAnsiVararg(CodePlaceA const& Place, ESeverity Severity, std::string_view const Format, std::va_list Args)
+void ILogger::WriteFormatUnicode(CodePlaceW const& Place, ESeverity const Severity,
+    SFXName const Category, std::wstring_view const Format, ...)
+{
+    std::va_list Args;
+    va_start(Args, Format);
+    WriteFormatUnicodeVararg(Place, Severity, Category, Format, Args);
+    va_end(Args);
+}
+
+void ILogger::WriteFormatAnsiVararg(CodePlaceA const& Place, ESeverity Severity,
+    std::string_view const Format, std::va_list Args)
+{
+    WriteFormatAnsiVararg(Place, Severity, ELOG_General, Format, Args);
+}
+
+void ILogger::WriteFormatAnsiVararg(CodePlaceA const& Place, ESeverity Severity,
+    SFXName const Category, std::string_view const Format, std::va_list Args)
 {
     thread_local std::array<char, 4096> FormatBuffer{ '\0' };
     int Result = _vsnprintf(FormatBuffer.data(), FormatBuffer.size() - 1, Format.data(), Args);
@@ -46,10 +78,17 @@ void ILogger::WriteFormatAnsiVararg(CodePlaceA const& Place, ESeverity Severity,
     }
 
     std::string_view const Message(FormatBuffer.data(), static_cast<size_t>(Result));
-    WriteAnsi(Place, Severity, Message);
+    WriteAnsi(Place, Severity, Category, Message);
 }
 
-void ILogger::WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity Severity, std::wstring_view const Format, std::va_list Args)
+void ILogger::WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity const Severity,
+    std::wstring_view const Format, std::va_list Args)
+{
+    WriteFormatUnicodeVararg(Place, Severity, ELOG_General, Format, Args);
+}
+
+void ILogger::WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity Severity,
+    SFXName const Category, std::wstring_view const Format, std::va_list Args)
 {
     thread_local std::array<wchar_t, 4096> FormatBuffer{ L'\0' };
     int Result = _vsnwprintf(FormatBuffer.data(), FormatBuffer.size() - 1, Format.data(), Args);
@@ -63,7 +102,7 @@ void ILogger::WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity Severi
     }
 
     std::wstring_view const Message(FormatBuffer.data(), static_cast<size_t>(Result));
-    WriteUnicode(Place, Severity, Message);
+    WriteUnicode(Place, Severity, Category, Message);
 }
 
 
@@ -79,8 +118,8 @@ void Details::OnFatalErrorW(CodePlaceW const& Place,
         va_start(Args, Format);
 
         bool const bWithExpression = Expression != nullptr && std::wcslen(Expression) > 0;
-        Logger->WriteFormatUnicode(Place, ESeverity::Error, L"fatal error: %s", bWithExpression ? Expression : L"???");
-        Logger->WriteFormatUnicodeVararg(Place, ESeverity::Error, Format, Args);
+        Logger->WriteFormatUnicode(Place, ESeverity::Error, ELOG_Assert, L"fatal error: %s", bWithExpression ? Expression : L"???");
+        Logger->WriteFormatUnicodeVararg(Place, ESeverity::Error, ELOG_Assert, Format, Args);
 
         va_end(Args);
 

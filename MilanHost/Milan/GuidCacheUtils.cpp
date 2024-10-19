@@ -28,17 +28,17 @@ void GuidCacheOverride::UpdateLookup()
     MILAN_UNUSED(Lock);
 
     RelativeTimer const Timer{};
-    MILAN_DEBUGW(L"GuidCacheOverride: updating from file %S", Source.c_str());
+    MILAN_DEBUGW(ELOG_DevelUtils, L"GuidCacheOverride: updating from file %S", Source.c_str());
 
     auto const File = std::fopen(Source.c_str(), "r");
     if (File == nullptr && errno == ENOENT)
     {
-        MILAN_TRACEW(L"GuidCacheOverride: file %S doesn't exist", Source.c_str());
+        MILAN_TRACEW(ELOG_DevelUtils, L"GuidCacheOverride: file %S doesn't exist", Source.c_str());
         return;
     }
     else if (File == nullptr)
     {
-        MILAN_WARNW(L"GuidCacheOverride: failed to open file %S: %S", Source.c_str(), std::strerror(errno));
+        MILAN_WARNW(ELOG_DevelUtils, L"GuidCacheOverride: failed to open file %S: %S", Source.c_str(), std::strerror(errno));
         return;
     }
 
@@ -64,7 +64,7 @@ void GuidCacheOverride::UpdateLookup()
         MILAN_CHECKW(Count == 5, L"");
 
         SFXName const Package(Name, 0);
-        MILAN_TRACEW(L"GuidCacheOverride: adding %s => %s override", *Package.ToString(), *FormatGuid(Guid));
+        MILAN_TRACEW(ELOG_DevelUtils, L"GuidCacheOverride: adding %s => %s override", *Package.ToString(), *FormatGuid(Guid));
 
         Temp.insert({ Package, Guid });
     }
@@ -72,7 +72,7 @@ void GuidCacheOverride::UpdateLookup()
     auto const EntryCount = Temp.size();
     Lookup = std::move(Temp);
 
-    MILAN_DEBUGW(L"GuidCacheOverride: total %llu package(s) overriden in %f ms.", EntryCount, Timer.GetMilliseconds());
+    MILAN_DEBUGW(ELOG_DevelUtils, L"GuidCacheOverride: total %llu package(s) overriden in %f ms.", EntryCount, Timer.GetMilliseconds());
     MILAN_UNUSED(EntryCount);
 }
 

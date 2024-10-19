@@ -135,6 +135,7 @@ namespace Detail
 #define MILAN_UNUSED_2(v1, v2)              do { MILAN_UNUSED(v1); MILAN_UNUSED(v2); } while (false)
 #define MILAN_UNUSED_3(v1, v2, v3)          do { MILAN_UNUSED(v1); MILAN_UNUSED(v2); MILAN_UNUSED(v3); } while (false)
 #define MILAN_UNUSED_4(v1, v2, v3, v4)      do { MILAN_UNUSED(v1); MILAN_UNUSED(v2); MILAN_UNUSED(v3); MILAN_UNUSED(v4); } while (false)
+#define MILAN_UNUSED_5(v1, v2, v3, v4, v5)  do { MILAN_UNUSED(v1); MILAN_UNUSED(v2); MILAN_UNUSED(v3); MILAN_UNUSED(v4); MILAN_UNUSED(v5); } while (false)
 
 #define MILAN_FUNCA                         __FUNCSIG__
 #define MILAN_FILEA                         ::Detail::FileSourcePathA(__FILE__)
@@ -172,6 +173,10 @@ struct CodePlaceW final
  * @brief       Generates a @ref CodePlace value at the place of invocation.
  */
 #define MILAN_HEREW  ::CodePlaceW { .Func = MILAN_FUNCW, .File = MILAN_FILEW, .Line = MILAN_LINEW }
+
+
+#define MILAN_CONCAT(a, b) _MILAN_CONCAT(a, b)
+#define _MILAN_CONCAT(a, b) a##b
 
 
 // ! Core type traits.
@@ -359,6 +364,11 @@ static constexpr ESeverity k_logWarn = ESeverity::Warn;
 static constexpr ESeverity k_logError = ESeverity::Error;
 
 
+#define _CG_LOGCAT(a) extern SFXName MILAN_CONCAT(ELOG_, a);
+    #include "Milan/LoggingCategories.inl"
+#undef _CG_LOGCAT
+
+
 /**
  * @brief
  * Interface for a type that implements common logging output.
@@ -373,16 +383,20 @@ public:
 
     virtual ~ILogger() noexcept {}
 
-    virtual void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view Message) = 0;
-    virtual void WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Message) = 0;
+    virtual void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, SFXName Category, std::string_view Message) = 0;
+    virtual void WriteUnicode(CodePlaceW const& Place, ESeverity Severity, SFXName Category, std::wstring_view Message) = 0;
 
     virtual void Flush() {};
 
     void WriteFormatAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view Format, ...);
+    void WriteFormatAnsi(CodePlaceA const& Place, ESeverity Severity, SFXName Category, std::string_view Format, ...);
     void WriteFormatUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Format, ...);
+    void WriteFormatUnicode(CodePlaceW const& Place, ESeverity Severity, SFXName Category, std::wstring_view Format, ...);
 
     void WriteFormatAnsiVararg(CodePlaceA const& Place, ESeverity Severity, std::string_view Format, std::va_list Args);
+    void WriteFormatAnsiVararg(CodePlaceA const& Place, ESeverity Severity, SFXName Category, std::string_view Format, std::va_list Args);
     void WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Message, std::va_list Args);
+    void WriteFormatUnicodeVararg(CodePlaceW const& Place, ESeverity Severity, SFXName Category, std::wstring_view Message, std::va_list Args);
 };
 
 
@@ -390,24 +404,21 @@ public:
 extern ILogger* gp_mainLogger;
 
 
-#define _MILAN_LOGW_INTO(Instance, Severity, Message) \
-    (Instance).WriteUnicode(MILAN_HEREW, Severity, Message)
-
-#define _MILAN_LOGW_FMT_INTO(Instance, Severity, Format, ...) \
-    (Instance).WriteFormatUnicode(MILAN_HEREW, Severity, Format, __VA_ARGS__)
+#define _MILAN_LOGW_FMT_INTO(Instance, Severity, ...) \
+    (Instance).WriteFormatUnicode(MILAN_HEREW, Severity, __VA_ARGS__)
 
 
-#define MILAN_TRACEW_INTO(Instance, Format, ...)        _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Trace, Format, __VA_ARGS__)
-#define MILAN_DEBUGW_INTO(Instance, Format, ...)        _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Debug, Format, __VA_ARGS__)
-#define MILAN_INFOW_INTO(Instance, Format, ...)         _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Info,  Format, __VA_ARGS__)
-#define MILAN_WARNW_INTO(Instance, Format, ...)         _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Warn,  Format, __VA_ARGS__)
-#define MILAN_ERRORW_INTO(Instance, Format, ...)        _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Error, Format, __VA_ARGS__)
+#define MILAN_TRACEW_INTO(Instance, ...)                _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Trace, __VA_ARGS__)
+#define MILAN_DEBUGW_INTO(Instance, ...)                _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Debug, __VA_ARGS__)
+#define MILAN_INFOW_INTO(Instance, ...)                 _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Info,  __VA_ARGS__)
+#define MILAN_WARNW_INTO(Instance, ...)                 _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Warn,  __VA_ARGS__)
+#define MILAN_ERRORW_INTO(Instance, ...)                _MILAN_LOGW_FMT_INTO(Instance, ESeverity::Error, __VA_ARGS__)
 
-#define MILAN_TRACEW(Format, ...)                       _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Trace, Format, __VA_ARGS__)
-#define MILAN_DEBUGW(Format, ...)                       _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Debug, Format, __VA_ARGS__)
-#define MILAN_INFOW(Format, ...)                        _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Info,  Format, __VA_ARGS__)
-#define MILAN_WARNW(Format, ...)                        _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Warn,  Format, __VA_ARGS__)
-#define MILAN_ERRORW(Format, ...)                       _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Error, Format, __VA_ARGS__)
+#define MILAN_TRACEW(...)                               _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Trace, __VA_ARGS__)
+#define MILAN_DEBUGW(...)                               _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Debug, __VA_ARGS__)
+#define MILAN_INFOW(...)                                _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Info,  __VA_ARGS__)
+#define MILAN_WARNW(...)                                _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Warn,  __VA_ARGS__)
+#define MILAN_ERRORW(...)                               _MILAN_LOGW_FMT_INTO(*gp_mainLogger, ESeverity::Error, __VA_ARGS__)
 
 
 #ifndef _MLN_DEBUG
@@ -417,8 +428,8 @@ extern ILogger* gp_mainLogger;
     #undef MILAN_TRACEW_INTO
     #undef MILAN_TRACEW
 
-    #define MILAN_TRACEW_INTO(Instance, Format, ...)    (void)0
-    #define MILAN_TRACEW(Format, ...)                   (void)0
+    #define MILAN_TRACEW_INTO(Instance, ...)            (void)0
+    #define MILAN_TRACEW(...)                           (void)0
 
 #ifdef _FINAL_RELEASE
 
@@ -427,14 +438,14 @@ extern ILogger* gp_mainLogger;
     #undef MILAN_DEBUGW_INTO
     #undef MILAN_DEBUGW
 
-    #define MILAN_DEBUGW_INTO(Instance, Format, ...)    (void)0
-    #define MILAN_DEBUGW(Format, ...)                   (void)0
+    #define MILAN_DEBUGW_INTO(Instance,  ...)           (void)0
+    #define MILAN_DEBUGW(...)                           (void)0
 
     #undef MILAN_INFOW_INTO
     #undef MILAN_INFOW
 
-    #define MILAN_INFOW_INTO(Instance, Format, ...)     (void)0
-    #define MILAN_INFOW(Format, ...)                    (void)0
+    #define MILAN_INFOW_INTO(Instance, ...)             (void)0
+    #define MILAN_INFOW(...)                            (void)0
 
 #endif // _FINAL_RELEASE
 

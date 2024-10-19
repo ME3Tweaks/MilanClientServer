@@ -1,0 +1,30 @@
+## ================================================================= ##
+##  Project Milan client-side configuration                          ##
+##  Initial version: 0.1.0                                           ##
+## ================================================================= ##
+##  Refer to the project's documentation to for a detailed           ##
+##  explanation of all available configuration keys and values.      ##
+## ================================================================= ##
+##  https://github.com/d00telemental/MilanClientServer               ##
+## ================================================================= ##
+
+[milan.connect]
+host = "localhost"
+port = 11111
+
+[milan.logging]
+suppressed = [
+  # "General",
+  # "Assert",
+  # "Startup",
+  # "StartupCommands",
+  # "StartupGlobals",
+  # "StartupRenderdoc",
+  # "Teardown",
+
+  # "Client",
+  # "DevelUtils",
+  # "MultiProfile",
+  # "NetHooks",
+  # "NetProf",
+]

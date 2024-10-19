@@ -19,14 +19,14 @@ bool CCommands::Initialize(::LESDK::Initializer& Context)
 
     m_commands.reserve(16);
 
-    MILAN_DEBUGW(L"component '%s' initialized", k_typeName);
+    MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
 }
 
 void CCommands::Terminate(::LESDK::Initializer& Context)
 {
     MILAN_UNUSED(Context);
-    MILAN_DEBUGW(L"component '%s' terminating", k_typeName);
+    MILAN_DEBUGW(ELOG_Teardown, L"component '%s' terminating", k_typeName);
 }
 
 void CCommands::RegisterCommand(wchar_t const* const Namespace, wchar_t const* const Command,
@@ -49,7 +49,7 @@ void CCommands::RegisterCommand(wchar_t const* const Namespace, wchar_t const* c
     ::StringToLower(NSCommand);
     m_commands.push_back({ NSCommand, Callback });
 
-    MILAN_TRACEW(L"registered command %s", NSCommand.c_str());
+    MILAN_TRACEW(ELOG_StartupCommands, L"registered command %s", NSCommand.c_str());
 }
 
 bool CCommands::On_UGameEngineExec(UGameEngine* const Context, WCHAR const* const Command, void* const Output)

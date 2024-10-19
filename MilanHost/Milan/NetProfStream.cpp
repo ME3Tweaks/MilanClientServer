@@ -14,7 +14,7 @@ std::mutex NetworkCapture::GlobalMutex;
 NetworkCapture::NetworkCapture()
     : StringTable{}, StringLookup{}, StringTierOffset{}
 {
-    MILAN_INFOW(L"netprof: starting capture");
+    MILAN_INFOW(ELOG_NetProf, L"netprof: starting capture");
 
     SYSTEMTIME Time{};
     GetLocalTime(&Time);
@@ -26,7 +26,7 @@ NetworkCapture::NetworkCapture()
         Time.wYear, Time.wMonth, Time.wDay, Time.wHour, Time.wMinute, Time.wSecond, Instance);
     auto const* FileName = FileNameBuffer.data();
 
-    MILAN_TRACEW(L"netprof: opening database, path = %S", FileName);
+    MILAN_TRACEW(ELOG_NetProf, L"netprof: opening database, path = %S", FileName);
     Stream = new BufferedFileOutputStream(FileName);
 
     StringTable.reserve(500);
@@ -47,7 +47,7 @@ NetworkCapture::NetworkCapture()
 
 NetworkCapture::~NetworkCapture()
 {
-    MILAN_INFOW(L"netprof: terminating capture");
+    MILAN_INFOW(ELOG_NetProf, L"netprof: terminating capture");
     FlushRecords();
     delete Stream;
 }
@@ -137,7 +137,7 @@ void NetworkCapture::CaptureSendBunch(UChannel* const Channel, INT const Bits)
 
 void NetworkCapture::RecordStringTable_NoLock()
 {
-    MILAN_DEBUGW(L"netprof: writing tiered string table, offset = %llu, size = %llu",
+    MILAN_DEBUGW(ELOG_NetProf, L"netprof: writing tiered string table, offset = %llu, size = %llu",
         StringTierOffset, StringTable.size());
 
     if (StringTierOffset >= StringTable.size())
@@ -167,7 +167,7 @@ void NetworkCapture::RecordStringTable_NoLock()
 
     StringTierOffset = StringTable.size();
 
-    MILAN_TRACEW(L"netprof: last serialized index = %d, new offset = %llu", i, StringTable.size());
+    MILAN_TRACEW(ELOG_NetProf, L"netprof: last serialized index = %d, new offset = %llu", i, StringTable.size());
 }
 
 NetworkCapture& NetworkCapture::operator<<(NPRecord const Type)

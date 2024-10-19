@@ -13,7 +13,7 @@ bool CNetworkProfiler::Initialize(::LESDK::Initializer& Context)
         {
             if (NetworkCapture::Global() != nullptr)
             {
-                MILAN_WARNW(L"netprof: global instance already started");
+                MILAN_WARNW(L"global instance already started");
                 return true;
             }
 
@@ -26,7 +26,7 @@ bool CNetworkProfiler::Initialize(::LESDK::Initializer& Context)
         {
             if (NetworkCapture::Global() == nullptr)
             {
-                MILAN_WARNW(L"netprof: global instance not started");
+                MILAN_WARNW(L"global instance not started");
                 return true;
             }
 
@@ -35,14 +35,14 @@ bool CNetworkProfiler::Initialize(::LESDK::Initializer& Context)
         });
 
     MILAN_UNUSED(Context);
-    MILAN_DEBUGW(L"component '%s' initialized", k_typeName);
+    MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
 }
 
 void CNetworkProfiler::Terminate(::LESDK::Initializer& Context)
 {
     MILAN_UNUSED(Context);
-    MILAN_DEBUGW(L"component '%s' terminating", k_typeName);
+    MILAN_DEBUGW(ELOG_Teardown, L"component '%s' terminating", k_typeName);
 
     if (NetworkCapture::Global() != nullptr)
         NetworkCapture::GlobalClose();

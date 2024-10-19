@@ -35,8 +35,8 @@ public:
 
     virtual ~ILoggerOutput() noexcept {}
 
-    virtual void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) = 0;
-    virtual void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) = 0;
+    virtual void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, SFXName Category, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) = 0;
+    virtual void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, SFXName Category, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) = 0;
 
     virtual void Flush() = 0;
 };
@@ -51,8 +51,8 @@ public:
 
     BasicConsoleLoggerOutput();
     ~BasicConsoleLoggerOutput() noexcept override;
-    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) override;
-    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) override;
+    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, SFXName Category, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) override;
+    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, SFXName Category, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) override;
     void Flush() override;
 };
 
@@ -62,8 +62,8 @@ public:
 
     ConsoleLoggerOutput();
     ~ConsoleLoggerOutput() noexcept override;
-    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) override;
-    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) override;
+    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, SFXName Category, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) override;
+    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, SFXName Category, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) override;
     void Flush() override;
 };
 
@@ -75,8 +75,8 @@ public:
 
     FileLoggerOutput(std::string_view OutputPath, bool bAppend);
     ~FileLoggerOutput() noexcept override;
-    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) override;
-    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) override;
+    void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, SFXName Category, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) override;
+    void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, SFXName Category, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) override;
     void Flush() override;
 
 private:
@@ -100,8 +100,8 @@ public:
     MilanLogger();
 
     ~MilanLogger() noexcept override;
-    void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view Message) override;
-    void WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Message) override;
+    void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, SFXName Category, std::string_view Message) override;
+    void WriteUnicode(CodePlaceW const& Place, ESeverity Severity, SFXName Category, std::wstring_view Message) override;
     void Flush() override;
 
     virtual void Initialize() {}
@@ -109,6 +109,17 @@ public:
     virtual void AddSink(ILoggerOutput* Output);
 
 protected:
+
+    /** Checks if a logging message with given category should go through the logger. */
+    inline static bool FilterCategory(SFXName const Category) noexcept
+    {
+    #ifndef _FINAL_RELEASE
+        return !Category.GetEntry()->IsSuppressed();
+    #else
+        MILAN_UNUSED(Category);
+        return true;
+    #endif
+    }
 
     // ILoggerOutput specifies these will allocate via GMalloc.
     using SinkPointer = std::unique_ptr<ILoggerOutput>;
@@ -134,8 +145,8 @@ public:
     // ILogger implementation:
 
     ~AsyncMilanLogger() noexcept override;
-    void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, std::string_view Message) override;
-    void WriteUnicode(CodePlaceW const& Place, ESeverity Severity, std::wstring_view Message) override;
+    void WriteAnsi(CodePlaceA const& Place, ESeverity Severity, SFXName Category, std::string_view Message) override;
+    void WriteUnicode(CodePlaceW const& Place, ESeverity Severity, SFXName Category, std::wstring_view Message) override;
     void Flush() override;
 
     // MilanLogger implementation:
@@ -148,7 +159,7 @@ private:
 
     template<typename CodePlaceType, typename ViewType>
         requires (std::same_as<ViewType, std::string_view> || std::same_as<ViewType, std::wstring_view>)
-    void WriteInternal(CodePlaceType const& Place, ESeverity Severity, ViewType Message);
+    void WriteInternal(CodePlaceType const& Place, ESeverity Severity, SFXName Category, ViewType Message);
 
     void ProcessThreadInternal();
     void FlushInternal(std::unique_lock<std::mutex>& Lock);
@@ -160,6 +171,7 @@ private:
         std::int32_t            Severity        : 8;
         std::int32_t            LocationLine    : 24;
         void const*             LocationFile;
+        SFXName                 Category;
         std::uint16_t           ContentLength   : 15;
         std::uint16_t           bWideChars      : 1;
     };
@@ -223,16 +235,16 @@ public:
         assert(InMin < InMax && "can't heave empty or reverse filter range");
     }
 
-    void WriteAnsi(CodePlaceA const& Place, ESeverity const Severity, std::string_view const Message) override
+    void WriteAnsi(CodePlaceA const& Place, ESeverity const Severity, SFXName const Category, std::string_view const Message) override
     {
-        if (Severity >= Accepted.Min && Severity <= Accepted.Max)
-            Inner->WriteAnsi(Place, Severity, Message);
+        if (Severity >= Accepted.Min && Severity <= Accepted.Max) [[likely]]
+            Inner->WriteAnsi(Place, Severity, Category, Message);
     }
 
-    void WriteUnicode(CodePlaceW const& Place, ESeverity const Severity, std::wstring_view const Message) override
+    void WriteUnicode(CodePlaceW const& Place, ESeverity const Severity, SFXName const Category, std::wstring_view const Message) override
     {
-        if (Severity >= Accepted.Min && Severity <= Accepted.Max)
-            Inner->WriteUnicode(Place, Severity, Message);
+        if (Severity >= Accepted.Min && Severity <= Accepted.Max) [[likely]]
+            Inner->WriteUnicode(Place, Severity, Category, Message);
     }
 };
 
@@ -247,6 +259,6 @@ public:
 
     ~NopLogger() noexcept override {}
     void Flush() override {}
-    void WriteAnsi(CodePlaceA const&, ESeverity, std::string_view) override {}
-    void WriteUnicode(CodePlaceW const&, ESeverity, std::wstring_view) override {}
+    void WriteAnsi(CodePlaceA const&, ESeverity, SFXName, std::string_view) override {}
+    void WriteUnicode(CodePlaceW const&, ESeverity, SFXName, std::wstring_view) override {}
 };

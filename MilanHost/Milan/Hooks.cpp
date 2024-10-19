@@ -53,12 +53,12 @@ void BioRequestExit_hook(UBOOL const bForce, INT const ExitCode, INT const Unuse
     {
         if (bForce)
         {
-            MILAN_WARNW(L"BioRequestExit: bForce = TRUE, ExitCode = %d", ExitCode);
+            MILAN_WARNW(ELOG_Teardown, L"BioRequestExit: bForce = TRUE, ExitCode = %d", ExitCode);
             ::Sleep(1000);
         }
         else
         {
-            MILAN_DEBUGW(L"BioRequestExit: bForce = FALSE, ExitCode = %d", ExitCode);
+            MILAN_DEBUGW(ELOG_Teardown, L"BioRequestExit: bForce = FALSE, ExitCode = %d", ExitCode);
         }
     }
 #endif
@@ -81,11 +81,6 @@ t_UFunction_Bind* UFunction_Bind_orig = nullptr;
 void UFunction_Bind_hook(UFunction* const Context)
 {
     (*UFunction_Bind_orig)(Context);
-
-    if (Context->Func == nullptr)
-    {
-        MILAN_WARNW(L"UFunction::Bind failed to bind %s", *Context->StaticFullName());
-    }
 }
 
 
@@ -316,7 +311,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
             auto const Window = reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
             auto const Name = reinterpret_cast<FString*>(reinterpret_cast<unsigned char*>(Viewport) + 0xD4);
 
-            MILAN_TRACEW(L"Updating title for %s, FViewport* = %p, HWND = %p", *(*Iter)->StaticName(), Viewport, (void*)*Window);
+            MILAN_TRACEW(ELOG_Startup, L"Updating title for %s, FViewport* = %p", *(*Iter)->StaticName(), Viewport);
 
             *Name = FString::Printf(L"Mass Effect 3 (INST = %d) PID = %d", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
             DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
@@ -336,19 +331,7 @@ t_UObject_SkipFunction* UObject_SkipFunction = nullptr;
 t_USFXEngine_UpdateDynamicLoadMappingFindHash* USFXEngine_UpdateDynamicLoadMappingFindHash_orig = nullptr;
 int USFXEngine_UpdateDynamicLoadMappingFindHash_hook(USFXEngine* const Context, int const ObjectNetID)
 {
-    int const Result = (*USFXEngine_UpdateDynamicLoadMappingFindHash_orig)(Context, ObjectNetID);
-#ifndef _FINAL_RELEASE
-    if (Result >= 0)
-    {
-        auto const& Resolved = Context->DynamicLoadMapping(Result);
-        MILAN_DEBUGW(L"USFXEngine::UpdateDynamicLoadMappingFindHash: %u => %s", (UINT)ObjectNetID, *Resolved.ObjectName);
-    }
-    else
-    {
-        MILAN_WARNW(L"USFXEngine::UpdateDynamicLoadMappingFindHash: %u => failed", (UINT)ObjectNetID);
-    }
-#endif
-    return Result;
+    return (*USFXEngine_UpdateDynamicLoadMappingFindHash_orig)(Context, ObjectNetID);
 }
 
 
@@ -457,11 +440,11 @@ void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delt
                 break;
 
             if (ServerConnection->PendingPackageInfos.Any())
-                MILAN_DEBUGW(L"pending packages on active netdriver (one tick):");
+                MILAN_DEBUGW(ELOG_NetHooks, L"pending packages on active netdriver (one tick):");
             
             for (FPackageInfo const& Pending : ServerConnection->PendingPackageInfos)
             {
-                MILAN_TRACEW(L"- %s, Guid = %s, Parent = %s",
+                MILAN_TRACEW(ELOG_NetHooks, L"- %s, Guid = %s, Parent = %s",
                     *Pending.PackageName.ToString(), *FormatGuid(Pending.Guid),
                     Pending.Parent ? *Pending.Parent->GetFullName() : L"n/a");
                 MILAN_UNUSED(Pending);
@@ -489,22 +472,22 @@ void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
 
     if (false)
     {
-        MILAN_DEBUGW(L"UActorChannel::ReplicateActor:");
-        MILAN_DEBUGW(L"  Channel: %s", *Channel->StaticFullName());
-        MILAN_DEBUGW(L"    Props: OpenedLocally=%d, OpenPacketId=%d, NumInRec=%d, NumOutRec=%d, NegotiatedVer=%d",
+        MILAN_DEBUGW(ELOG_NetHooks, L"UActorChannel::ReplicateActor:");
+        MILAN_DEBUGW(ELOG_NetHooks, L"  Channel: %s", *Channel->StaticFullName());
+        MILAN_DEBUGW(ELOG_NetHooks, L"    Props: OpenedLocally=%d, OpenPacketId=%d, NumInRec=%d, NumOutRec=%d, NegotiatedVer=%d",
             Channel->OpenedLocally, Channel->OpenPacketId, Channel->NumInRec, Channel->NumOutRec, Channel->NegotiatedVer);
-        MILAN_DEBUGW(L"  Actor: %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
+        MILAN_DEBUGW(ELOG_NetHooks, L"  Actor: %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
         if (Channel->Actor != nullptr)
         {
             auto* const Actor = Channel->Actor;
-            MILAN_DEBUGW(L"    Props: bNetOwner=%d, bNetInitial=%d Top=%s",
+            MILAN_DEBUGW(ELOG_NetHooks, L"    Props: bNetOwner=%d, bNetInitial=%d Top=%s",
                 !!Actor->bNetOwner, !!Actor->bNetInitial, *Actor->StaticName());
         }
     }
     else if (gb_logReplicateActor)
     {
-        MILAN_DEBUGW(L"UActorChannel::ReplicateActor: %s",
-            Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
+        MILAN_DEBUGW(ELOG_NetHooks, L"UActorChannel::ReplicateActor: %s",
+                Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
     }
 
     (*UActorChannel_ReplicateActor_orig)(Context);
@@ -561,12 +544,12 @@ int UNetConnection_ClientSupportsLevel_hook(UNetConnection* const Context, UObje
 
         if (Return != 0)
         {
-            //MILAN_TRACEW(L"UNetConnection::ClientSupportsLevel: %s (%s) => TRUE",
+            //MILAN_TRACEW(ELOG_NetHooks, L"UNetConnection::ClientSupportsLevel: %s (%s) => TRUE",
             //    Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
         }
         else
         {
-            MILAN_WARNW(L"UNetConnection::ClientSupportsLevel: %s (%s) => FALSE",
+            MILAN_WARNW(ELOG_NetHooks, L"UNetConnection::ClientSupportsLevel: %s (%s) => FALSE",
                 Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
         }
     }
@@ -589,9 +572,7 @@ void UNetConnection_Close_hook(UNetConnection* const Context)
             RemoteAddress = FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
         }
 
-        MILAN_TRACEW(L"UNetConnection::Close, remote = %s, callstack:", *RemoteAddress);
-        ::WriteCallstackLog(MILAN_HEREW, k_logTrace, 1);
-
+        MILAN_TRACEW(ELOG_NetHooks, L"UNetConnection::Close, remote = %s", *RemoteAddress);
         NETPROF(CaptureSessionEvent(Context, L"CLOSE", L""));
     }
 
@@ -614,9 +595,9 @@ UChannel* UNetConnection_CreateChannel_hook(UNetConnection* const Context, EChan
     //        return FString::Printf(L"%d", (int)T);
     //    };
 
-    //MILAN_TRACEW(L"UNetConnection::CreateChannel: type = %s, local = %s, index = %d", *DescType(Type), bLocal ? L"true" : L"false", Index);
+    //MILAN_TRACEW(ELOG_NetHooks, L"UNetConnection::CreateChannel: type = %s, local = %s, index = %d", *DescType(Type), bLocal ? L"true" : L"false", Index);
     UChannel* const Return = (*UNetConnection_CreateChannel_orig)(Context, Type, bLocal, Index);
-    //if (Return == nullptr) MILAN_WARNW(L"UNetConnection::CreateChannel:   failed, returning nullptr");
+    //if (Return == nullptr) MILAN_WARNW(ELOG_NetHooks, L"UNetConnection::CreateChannel:   failed, returning nullptr");
     return Return;
 }
 
@@ -647,7 +628,7 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
             UPackage* const OutermostPackage = ObjectOutermost(Object);
             if (OutermostPackage == nullptr)
             {
-                MILAN_WARNW(L"UPackageMap::SupportsObject: %s => FALSE (outermost is NULL)",
+                MILAN_WARNW(ELOG_NetHooks, L"UPackageMap::SupportsObject: %s => FALSE (outermost is NULL)",
                     Object ? *Object->GetFullName() : L"???");
                 return Return;
             }
@@ -658,7 +639,7 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
                 // Uncomment this variable to see available packages in Visual Studio debugger.
                 //[[maybe_unused]] auto const DebugPackageMapList = CollectMapKeys(PackageMap->PackageMapList);
 
-                MILAN_WARNW(L"UPackageMap::SupportsObject: %s => FALSE (package=%s not found)",
+                MILAN_WARNW(ELOG_NetHooks, L"UPackageMap::SupportsObject: %s => FALSE (package=%s not found)",
                     Object ? *Object->GetFullName() : L"???", *OutermostPackage->Name.ToString());
                 return Return;
             }
@@ -666,14 +647,14 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
             FPackageInfo const& PackageInfo = PackageMap->List((UINT)*ListIndex);
             if (Object->NetIndex >= PackageInfo.ObjectCount)
             {
-                MILAN_WARNW(L"UPackageMap::SupportsObject: %s => FALSE (NetIndex=%d >= PackageInfo.ObjectCount=%d)",
+                MILAN_WARNW(ELOG_NetHooks, L"UPackageMap::SupportsObject: %s => FALSE (NetIndex=%d >= PackageInfo.ObjectCount=%d)",
                     Object ? *Object->GetFullName() : L"???", Object->NetIndex, PackageInfo.ObjectCount);
-                MILAN_WARNW(L"  PackageInfo.PackageName = %s, PackageInfo.ObjectBase = %d",
+                MILAN_WARNW(ELOG_NetHooks, L"  PackageInfo.PackageName = %s, PackageInfo.ObjectBase = %d",
                     *PackageInfo.PackageName.ToString(), PackageInfo.ObjectBase);
                 return Return;
             }
 
-            MILAN_WARNW(L"UPackageMap::SupportsObject: %s => FALSE (NetIndex=%d)",
+            MILAN_WARNW(ELOG_NetHooks, L"UPackageMap::SupportsObject: %s => FALSE (NetIndex=%d)",
                 Object ? *Object->GetFullName() : L"???", Object->NetIndex);
         }
     }
@@ -686,7 +667,7 @@ int UPackageMap_SerializeObject_hook(UPackageMap* const Context, FArchive* const
 {
     if (Archive->ArIsSaving && gb_logSerializeObject)
     {
-        MILAN_DEBUGW(L"UPackageMap::SerializeObject: class = %s, in = %s",
+        MILAN_DEBUGW(ELOG_NetHooks, L"UPackageMap::SerializeObject: class = %s, in = %s",
             Class ? *Class->GetName() : L"n/a", *Object ? *(*Object)->GetName() : L"n/a");
 
         // default or archetype objects
@@ -700,7 +681,7 @@ int UPackageMap_SerializeObject_hook(UPackageMap* const Context, FArchive* const
             if (Index != nullptr)
                 Info = &PackageMap->List(*Index);
 
-            MILAN_DEBUGW(L"  NetIndex = %d, Outermost = %s, Index = %s, ObjBase = %s, ObjCount = %s",
+            MILAN_DEBUGW(ELOG_NetHooks, L"  NetIndex = %d, Outermost = %s, Index = %s, ObjBase = %s, ObjCount = %s",
                 (*Object)->NetIndex,
                 Outermost ? *Outermost->GetName() : L"n/a",
                 Index ? *FString::Printf(L"%d", *Index) : L"n/a",
@@ -731,13 +712,13 @@ int UPackageMap_SerializeObject_hook(UPackageMap* const Context, FArchive* const
         {
             if (*Object != nullptr)
             {
-                MILAN_DEBUGW(L"UPackageMap::SerializeObject: class = %s, out = %s  ( => %d )",
+                MILAN_DEBUGW(ELOG_NetHooks, L"UPackageMap::SerializeObject: class = %s, out = %s  ( => %d )",
                     Class ? *Class->GetName() : L"n/a", *Object ? *(*Object)->GetName() : L"n/a", Return);
             }
             else
             {
                 // We want to log these failures.
-                MILAN_WARNW(L"UPackageMap::SerializeObject: class = %s, out = %s  ( => %d )",
+                MILAN_WARNW(ELOG_NetHooks, L"UPackageMap::SerializeObject: class = %s, out = %s  ( => %d )",
                     Class ? *Class->GetName() : L"n/a", *Object ? *(*Object)->GetName() : L"n/a", Return);
             }
             
@@ -749,7 +730,7 @@ int UPackageMap_SerializeObject_hook(UPackageMap* const Context, FArchive* const
     //{
     //    // Let's assume that this type only ever gets FInBunch as Archive.
     //    auto const InBunch = reinterpret_cast<FInBunch*>(Archive);
-    //    MILAN_DEBUGW(L"  Pos => %d, Bytes:", InBunch->BunchPos);
+    //    MILAN_DEBUGW(ELOG_NetHooks, L"  Pos => %d, Bytes:", InBunch->BunchPos);
     //    PrintHex(stdout, InBunch->Buffer.GetData(), 16, "");
     //}
 
@@ -795,9 +776,9 @@ void UNetPendingLevel_NotifyControlMessage_hook(UNetPendingLevel* const Context,
     static std::array<unsigned char, 4> HandledTypes{ 1u, 3u, 7u, 11u };
 
     if (Type == 6u)  // if failure
-        MILAN_ERRORW(L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
+        MILAN_ERRORW(ELOG_NetHooks, L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
     else if (std::find(HandledTypes.begin(), HandledTypes.end(), Type) == HandledTypes.end())  // if not handled
-        MILAN_WARNW(L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
+        MILAN_WARNW(ELOG_NetHooks, L"UNetPendingLevel::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
 
     (*UNetPendingLevel_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
 }
@@ -809,9 +790,9 @@ void UWorld_NotifyControlMessage_hook(UWorld* const Context, UNetConnection* con
     static std::array<unsigned char, 10> HandledTypes{ 0u, 4u, 5u, 7u, 8u, 9u, 13u, 14u, 19u, 21u };
 
     if (Type == 6u)  // if failure
-        MILAN_ERRORW(L"UWorld::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
+        MILAN_ERRORW(ELOG_NetHooks, L"UWorld::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
     else if (std::find(HandledTypes.begin(), HandledTypes.end(), Type) == HandledTypes.end())  // if not handled
-        MILAN_WARNW(L"UWorld::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
+        MILAN_WARNW(ELOG_NetHooks, L"UWorld::NotifyControlMessage: Type = %d (%s)", Type, MessageTypeDesc(Type));
 
     (*UWorld_NotifyControlMessage_orig)(Context, Connection, Type, InBunch);
 }
@@ -824,16 +805,16 @@ int UWorld_ServerTickClients_hook(UWorld* const Context, float const Delta)
         auto* const World = reinterpret_cast<UWorld_Proxy*>(Context);
         auto* const WorldInfo = (*GEngine)->GetCurrentWorldInfo();
 
-        MILAN_WARNW(L"UWorld::ServerTickClients: delta = %f", Delta);
-        MILAN_WARNW(L"--------------------------------------");
+        MILAN_WARNW(ELOG_NetHooks, L"UWorld::ServerTickClients: delta = %f", Delta);
+        MILAN_WARNW(ELOG_NetHooks, L"--------------------------------------");
 
         for (int LevelIndex = 0; LevelIndex < (int)World->Levels.Count(); ++LevelIndex)
         {
             auto* const Level = reinterpret_cast<ULevel_Proxy*>(World->Levels(LevelIndex));
             if (Level == nullptr) continue;
 
-            MILAN_DEBUGW(L" Level(%d): %s", LevelIndex, *Level->StaticFullName());
-            MILAN_DEBUGW(L" Level(%d): actor count = %d, first net index = %d", LevelIndex, Level->Actors.Count(), Level->FirstNetRelevantActor);
+            MILAN_DEBUGW(ELOG_NetHooks, L" Level(%d): %s", LevelIndex, *Level->StaticFullName());
+            MILAN_DEBUGW(ELOG_NetHooks, L" Level(%d): actor count = %d, first net index = %d", LevelIndex, Level->Actors.Count(), Level->FirstNetRelevantActor);
 
             for (int ActorIndex = Level->FirstNetRelevantActor; ActorIndex < (int)Level->Actors.Count(); ++ActorIndex)
             {
@@ -844,7 +825,7 @@ int UWorld_ServerTickClients_hook(UWorld* const Context, float const Delta)
                 if ((Actor->RemoteRole != ROLE_None) && (Actor->bPendingNetUpdate || Actor->bForceNetUpdate || TimeSeconds > Actor->NetUpdateTime))
                 {
                     // Plenty of actors here are still irrelevant...
-                    MILAN_TRACEW(L" Level(%d).Actor(%d): %s", LevelIndex, ActorIndex, *Actor->StaticFullName());
+                    MILAN_TRACEW(ELOG_NetHooks, L" Level(%d).Actor(%d): %s", LevelIndex, ActorIndex, *Actor->StaticFullName());
                 }
             }
         }
@@ -860,13 +841,13 @@ void SortReplicatedActors_hook(CReplicatedActorRecord** const Actors, int const 
 
     if (false)
     {
-        MILAN_WARNW(L"SortReplicatedActors");
-        MILAN_WARNW(L"----------------------");
+        MILAN_WARNW(ELOG_NetHooks, L"SortReplicatedActors");
+        MILAN_WARNW(ELOG_NetHooks, L"----------------------");
 
         for (int Index = 0; Index < Count; ++Index)
         {
             auto const* const Record = Actors[Index];
-            MILAN_DEBUGW(L" %d. actor = %s, channel = %s, key = %d",
+            MILAN_DEBUGW(ELOG_NetHooks, L" %d. actor = %s, channel = %s, key = %d",
                 Index,
                 Record->Actor ? *Record->Actor->GetName() : L"???",
                 Record->Channel ? *Record->Channel->GetName() : L"???",
@@ -894,7 +875,7 @@ UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, 
     if (Count > 0)
     {
         //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Destination->sin_addr), ntohs(Destination->sin_port));
-        //MILAN_TRACEW(L"FSocketWin::SendTo: type=%d, desc=%s, count=%d, sent=%d, dest=%s", Context->Type, *Context->Description, Count, *Sent, *Remote);
+        //MILAN_TRACEW(ELOG_NetHooks, L"FSocketWin::SendTo: type=%d, desc=%s, count=%d, sent=%d, dest=%s", Context->Type, *Context->Description, Count, *Sent, *Remote);
         NETPROF(CaptureSocketCall(Destination, true, *Sent * 8));
     }
     return Ret;
@@ -907,7 +888,7 @@ UINT FSocketWin_Send_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent)
     if (Count > 0)
     {
         // This remains uncommented because I haven't managed to trigger a call to this function yet...
-        MILAN_WARNW(L"FSocketWin::Send: type=%d, desc=%s, count=%d, sent=%d", Context->Type, *Context->Description, Count, *Sent);
+        MILAN_WARNW(ELOG_NetHooks, L"FSocketWin::Send: type=%d, desc=%s, count=%d, sent=%d", Context->Type, *Context->Description, Count, *Sent);
     }
     return Ret;
 }
@@ -919,7 +900,7 @@ UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read
     if (*Read > 0)
     {
         //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Source->sin_addr), ntohs(Source->sin_port));
-        //MILAN_TRACEW(L"FSocketWin::RecvFrom: type=%d, desc=%s, read=%d, source=%s", Context->Type, *Context->Description, *Read, *Remote);
+        //MILAN_TRACEW(ELOG_NetHooks, L"FSocketWin::RecvFrom: type=%d, desc=%s, read=%d, source=%s", Context->Type, *Context->Description, *Read, *Remote);
         NETPROF(CaptureSocketCall(Source, false, *Read * 8));
     }
     return Ret;
@@ -932,7 +913,7 @@ UINT FSocketWin_Recv_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read)
     if (*Read > 0)
     {
         // This remains uncommented because I haven't managed to trigger a call to this function yet...
-        MILAN_WARNW(L"FSocketWin::Recv: type=%d, desc=%s, read=%d", Context->Type, *Context->Description, *Read);
+        MILAN_WARNW(ELOG_NetHooks, L"FSocketWin::Recv: type=%d, desc=%s, read=%d", Context->Type, *Context->Description, *Read);
     }
     return Ret;
 }

@@ -124,7 +124,7 @@ MPProfile::MPProfile(USFXEngine* const Engine)
     if (!bLoggedProfilePath)
     {
         bLoggedProfilePath = true;
-        MILAN_DEBUGW(L"MPProfile resolved path = %s", *ProfilePath);
+        MILAN_DEBUGW(ELOG_MultiProfile, L"MPProfile resolved path = %s", *ProfilePath);
     }
 }
 
@@ -213,7 +213,7 @@ void MPProfile::Deserialize(IInputStream& Stream)
         }
         else
         {
-            MILAN_WARNW(L"unknown profile setting id = %d", Setting.Id);
+            MILAN_WARNW(ELOG_MultiProfile, L"unknown profile setting id = %d", Setting.Id);
         }
     }
 
@@ -324,7 +324,7 @@ void MPProfile::Serialize(IOutputStream& Stream) const
         else
         {
             // This should never be hit I think.
-            MILAN_WARNW(L"invalid profile setting id = %d", i);
+            MILAN_WARNW(ELOG_MultiProfile, L"invalid profile setting id = %d", i);
         }
     }
 

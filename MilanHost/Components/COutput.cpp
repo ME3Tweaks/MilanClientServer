@@ -1,5 +1,6 @@
 #include "Components/COutput.hpp"
 
+#include "Milan/ClientConfig.hpp"
 #include "Milan/CmdArgs.hpp"
 #include "Milan/Hooks.hpp"
 #include "Milan/Intercept.hpp"
@@ -80,21 +81,32 @@ bool COutput::Initialize(::LESDK::Initializer& Context)
 {
     MILAN_UNUSED(Context);
 
+    int NameInitCount = 0;
+    int NameSuppressCount = 0;
+
+    InitLoggingCategories(NameInitCount);
+    InitSuppressedCategories(NameSuppressCount);
+
     InitConsole();
     InitMainLogger();
 
     bUseAsyncLogger
-        ? MILAN_INFOW(L"using asynchronous logger")
-        : MILAN_WARNW(L"forced synchronous logger via -synclogger");
+        ? MILAN_INFOW(ELOG_Startup, L"using asynchronous logger")
+        : MILAN_WARNW(ELOG_Startup, L"forced synchronous logger via -synclogger");
 
-    MILAN_DEBUGW(L"component '%s' initialized", k_typeName);
+    // These numbers have no less-than-or-equal / greater-than relation.
+    // It is valid (but inadvisable) to suppress SFXNames which are not logging categories.
+    MILAN_DEBUGW(ELOG_Startup, L"registered %d logging category(ies)", NameInitCount);
+    MILAN_DEBUGW(ELOG_Startup, L"suppressed %d logging category name(s)", NameSuppressCount);
+
+    MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
 }
 
 void COutput::Terminate(::LESDK::Initializer& Context)
 {
     MILAN_UNUSED(Context);
-    MILAN_DEBUGW(L"component '%s' terminating", k_typeName);
+    MILAN_DEBUGW(ELOG_Teardown, L"component '%s' terminating", k_typeName);
 
     // This is not very safe, but it shouldn't change much...
     reinterpret_cast<MilanLogger*>(gp_mainLogger)->Cleanup();
@@ -125,11 +137,11 @@ void COutput::PostInitialize(::LESDK::Initializer& Context)
 
     GNatives[0xE7] = UObject_LogInternal;
     FindRequiredFunction(0xE7)->Func = UObject_LogInternal;
-    MILAN_INFOW(L"replaced LogInternal through iNative");
+    MILAN_INFOW(ELOG_Startup, L"replaced LogInternal through iNative");
 
     GNatives[0xE8] = UObject_WarnInternal;
     FindRequiredFunction(0xE8)->Func = UObject_WarnInternal;
-    MILAN_INFOW(L"replaced WarnInternal through iNative");
+    MILAN_INFOW(ELOG_Startup, L"replaced WarnInternal through iNative");
 
 #endif
 #endif
@@ -217,4 +229,45 @@ void COutput::InitMainLogger()
 
     MainLogger->Initialize();
     gp_mainLogger = std::exchange(MainLogger, nullptr);
+}
+
+void COutput::InitLoggingCategories(int& InitCount)
+{
+#define _CG_LOGCAT(a) MILAN_CONCAT(ELOG_, a) = SFXName{ #a, 0, false }; InitCount++;
+    #include "Milan/LoggingCategories.inl"
+#undef _CG_LOGCAT
+}
+
+void COutput::InitSuppressedCategories(int& InitCount)
+{
+    MILAN_UNUSED(InitCount);
+
+#ifndef _FINAL_RELEASE
+    if (gp_clientConfig != nullptr)
+    {
+        DWORD flOldProtect = 0u;
+
+        for (auto const& Category : gp_clientConfig->LoggingSuppressed)
+        {
+            SFXNameEntry* const Entry = SFXName(Category.c_str(), 0, false).GetEntry();
+            bool const bConstEntry = Entry->IsConst();
+
+            if (bConstEntry)  [[unlikely]]
+            {
+                [[maybe_unused]] BOOL const Success = VirtualProtect(Entry, sizeof *Entry, PAGE_READWRITE, &flOldProtect);
+                assert(Success && "failed to VirtualProtect a const SFXNameEntry (in)");
+            }
+
+            Entry->Index.Flags |= SFXPackedIndex::k_flagSuppressed;
+
+            if (bConstEntry) [[unlikely]]
+            {
+                [[maybe_unused]] BOOL const Success = VirtualProtect(Entry, sizeof * Entry, flOldProtect, &flOldProtect);
+                assert(Success && "failed to VirtualProtect a const SFXNameEntry (out)");
+            }
+
+            InitCount++;
+        }
+    }
+#endif // ! _FINAL_RELEASE
 }

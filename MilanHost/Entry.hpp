@@ -14,8 +14,8 @@
 
 ::LESDK::Initializer* gp_sdkContext = nullptr;
 
-void InitAllocators(::LESDK::Initializer& Context);
-void LoadInitialConfig();
+void InitSDKBasics(::LESDK::Initializer& Context);
+void ReportConfigError();
 void SetupImguiInterfaces();
 void RegisterNonshipCommands();
 void RegisterVectoredExceptions();

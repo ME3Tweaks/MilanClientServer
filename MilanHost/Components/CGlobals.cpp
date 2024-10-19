@@ -12,13 +12,13 @@
 
 #define LOG_SDK_GLOBAL(pCheck, pReal)                                                       \
     MILAN_CHECKW(pCheck != nullptr, L"failed to find " #pCheck);                            \
-    MILAN_TRACEW(L"" #pCheck " found: 0x%p -> 0x%p", (void*)pCheck, (void*)pReal)
+    MILAN_TRACEW(ELOG_StartupGlobals, L"" #pCheck " found: 0x%p -> 0x%p", (void*)pCheck, (void*)pReal)
 
 
 #define _INSTALL_HOOK_ADDR(Address, String, Function)                                       \
     auto* const MILAN_VARCAT(Function, _target) = (MILAN_VARCAT(t_, Function)*)Address;     \
     MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHook(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook))); \
-    MILAN_TRACEW(L"" String L" hooked: 0x%p -> 0x%p", (void*)MILAN_VARCAT(Function, _target), (void*)MILAN_VARCAT(Function, _orig))
+    MILAN_TRACEW(ELOG_StartupGlobals, L"" String L" hooked: 0x%p -> 0x%p", (void*)MILAN_VARCAT(Function, _target), (void*)MILAN_VARCAT(Function, _orig))
 
 #define _INSTALL_HOOK_INIT(Pattern, String, Function)                                       \
     _INSTALL_HOOK_ADDR(Context.ResolveTyped<MILAN_VARCAT(t_, Function)>(Pattern), String, Function)
@@ -33,7 +33,7 @@
 
 #define _FIND_VAR_ADDR(Address, String, Variable)                                           \
     Variable = (MILAN_VARCAT(t_, Variable)*)Address;                                        \
-    MILAN_TRACEW(L"" String L" found: 0x%p", (void*)Variable)
+    MILAN_TRACEW(ELOG_StartupGlobals, L"" String L" found: 0x%p", (void*)Variable)
 
 #define _FIND_VAR_INIT(Pattern, String, Variable)                                           \
     _FIND_VAR_ADDR(Context.ResolveTyped<MILAN_VARCAT(t_, Variable)>(Pattern), String, Variable)
@@ -48,7 +48,7 @@
 
 bool CGlobals::Initialize(::LESDK::Initializer& Context)
 {
-    MILAN_INFOW(L"base address = 0x%p", (void*)::LESDK::GetMainModuleBase());
+    MILAN_INFOW(ELOG_Startup, L"base address = 0x%p", (void*)::LESDK::GetMainModuleBase());
 
     // Some of the addresses initialized here might be unused completely or in non-debug flows.
     // TODO: Before public release, go through all of globals here and comment everything unneeded.
@@ -59,14 +59,14 @@ bool CGlobals::Initialize(::LESDK::Initializer& Context)
     InitNetworkInjections();
     InitGuidCacheOverride();
 
-    MILAN_DEBUGW(L"component '%s' initialized", k_typeName);
+    MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
 }
 
 void CGlobals::Terminate(::LESDK::Initializer& Context)
 {
     MILAN_UNUSED(Context);
-    MILAN_DEBUGW(L"component '%s' terminating", k_typeName);
+    MILAN_DEBUGW(ELOG_Teardown, L"component '%s' terminating", k_typeName);
     CleanupGuidCacheOverride();
 }
 
@@ -102,12 +102,6 @@ void CGlobals::InitSDK(::LESDK::Initializer& Context)
 
     UObject::GObjObjects = Context.ResolveTyped<TArray<UObject*>>(BUILTIN_GOBOBJECTS_RIP);
     LOG_SDK_GLOBAL(UObject::GObjObjects, UObject::GObjObjects);
-
-    SFXName::GBioNamePools = Context.ResolveTyped<SFXNameEntry const*>(BUILTIN_SFXNAMEPOOLS_RIP);
-    LOG_SDK_GLOBAL(SFXName::GBioNamePools, SFXName::GBioNamePools);
-
-    SFXName::GInitMethod = Context.ResolveTyped<SFXName::tInitMethod>(BUILTIN_SFXNAMEINIT_PHOOK);
-    LOG_SDK_GLOBAL(SFXName::GInitMethod, SFXName::GInitMethod);
 }
 
 void CGlobals::InitGlobals(::LESDK::Initializer& Context)
@@ -228,7 +222,7 @@ void CGlobals::InitGuidCacheOverride()
 {
 #ifndef _FINAL_RELEASE
 #if defined(ENABLE_GUIDCACHE_OVERRIDE) && ENABLE_GUIDCACHE_OVERRIDE
-    MILAN_WARNW(L"this session is using guid cache override");
+    MILAN_WARNW(ELOG_Startup, L"this session is using guid cache override");
     mp_guidCacheOverride = new (std::nothrow) GuidCacheOverride("./guidcache-override.txt");
     MILAN_CHECKW(L"failed to allocate guid cache override");
     mp_guidCacheOverride->UpdateLookup();
@@ -241,7 +235,7 @@ void CGlobals::CleanupGuidCacheOverride()
 #ifndef _FINAL_RELEASE
     if (mp_guidCacheOverride)
     {
-        MILAN_DEBUGW(L"deleting guidcache override");
+        MILAN_DEBUGW(ELOG_Teardown, L"deleting guidcache override");
         delete std::exchange(mp_guidCacheOverride, nullptr);
     }
 #endif // !_FINAL_RELEASE

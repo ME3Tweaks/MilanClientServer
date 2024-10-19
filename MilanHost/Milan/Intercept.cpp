@@ -171,7 +171,7 @@ void MiddleIntercept::Install(wchar_t const* const InLabel, int const InRVA, voi
 {
     auto* const MainBase = reinterpret_cast<unsigned char*>(GetMainBase());
     MiddleIntercept Instance{ InLabel, MainBase + InRVA, InStubFunction, &InCaveIndexer };
-    MILAN_TRACEW(L"installed mid-function intercept '%s' at 0x%p", InLabel, (void*)Instance.Address);
+    MILAN_TRACEW(ELOG_StartupGlobals, L"installed intercept '%s' (0x%p)", InLabel, (void*)Instance.Address);
     MILAN_UNUSED(Instance);
 }
 

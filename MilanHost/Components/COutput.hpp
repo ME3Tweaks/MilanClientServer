@@ -48,7 +48,8 @@ private:
 
     void InitConsole();
     void InitMainLogger();
-
+    void InitLoggingCategories(int& InitCount);
+    void InitSuppressedCategories(int& InitCount);
 
     bool bUseAsyncLogger{ true };
     bool bUseVirtualTerminal{ true };
