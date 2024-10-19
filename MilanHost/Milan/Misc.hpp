@@ -199,3 +199,25 @@ inline TArray<TKey> CollectMapKeys(TMap<TKey, TValue>& Map)
     }
     return Out;
 }
+
+
+AWorldInfo* GlobalWorldInfo() noexcept;
+bool GlobalBegunPlay() noexcept;
+
+
+inline bool IsChildOf(UClass* const Class, UClass* const CheckClass) noexcept
+{
+    for (UClass* SuperClass = Class; SuperClass; SuperClass = (UClass*)SuperClass->SuperField)
+    {
+        if (SuperClass == CheckClass)
+            return true;
+    }
+
+    return false;
+}
+
+template<typename T>
+inline bool IsChildOf(UClass* const Class) noexcept
+{
+    return IsChildOf(Class, T::StaticClass());
+}

@@ -237,17 +237,6 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     [[maybe_unused]] bool bLogAnyway = false;
     [[maybe_unused]] bool bCallOriginal = true;
 
-    //if (Context->IsA<USFXWave>() || Context->IsA<ASFXWaveCoordinator>())
-    //    bLogAnyway = true;
-
-    if (Context->IsA<ASFXWaveCoordinator>() &&
-        Stack->Node->GetName().Equals(L"BeginWaveLoading"))
-    {
-        [[maybe_unused]]
-        auto const Coordinator = Context->Cast<ASFXWaveCoordinator>();
-        __noop();
-    }
-
 #ifndef _FINAL_RELEASE
     if (gb_logProcessInternal || bLogAnyway)
     {
@@ -263,12 +252,8 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
 #endif
 
-    //if (Stack->Node->StaticName().Equals(L"GetProfileSettingFromAccomplishmentProgress"))
-    //{
-    //    auto const Manager = Context->Cast<USFXAccomplishmentManager>();
-    //    MILAN_WARNW(L"GetProfileSettingFromAccomplishmentProgress: loop count = %u, code start = %p",
-    //        Manager->AccomplishmentProgressData.Count(), reinterpret_cast<void*>(Stack->Code));
-    //}
+    //if (Stack->Node->Name == SFXName("AddMutator", 0)) [[unlikely]]
+    //    MILAN_BREAK_ATTACHED();
 
     if (!COMPONENT(CState).On_UObject_ProcessInternal_Pre(Context, Stack, Result))
     {
@@ -388,6 +373,34 @@ AActor* UWorld_SpawnActor_hook(
     MILAN_UNUSED_2(Owner, Instigator);
     MILAN_UNUSED(Unknown4);
 
+    static std::uint64_t s_errorCounter = 0u;
+
+#ifndef _FINAL_RELEASE
+    if (Class == nullptr || !IsChildOf<AActor>(Class))  [[unlikely]]
+    {
+        MILAN_WARNW(L"UWorld::SpawnActor [%llu] will fail: Class is null or not an actor", s_errorCounter);
+    }
+
+    static constexpr std::uint32_t k_classFlagAbstract = 0x00000001;
+    static constexpr std::uint32_t k_classFlagDeprecated = 0x02000000;
+    if (!!(Class->ClassFlags & k_classFlagAbstract) || !!(Class->ClassFlags & k_classFlagDeprecated))  [[unlikely]]
+    {
+        MILAN_WARNW(L"UWorld::SpawnActor [%llu] will fail: Class is abstract or deprecated", s_errorCounter);
+    }
+
+    AActor* const Default = Class->ClassDefaultObject ? Class->ClassDefaultObject->Cast<AActor>() : nullptr;
+    if (GlobalBegunPlay() && Default != nullptr && (Default->bStatic || Default->bNoDelete)) [[unlikely]]
+    {
+        MILAN_WARNW(L"UWorld::SpawnActor [%llu] will fail: CDO is bStatic or bNoDelete and GWorld has begun play", s_errorCounter);
+    }
+
+    if (Template != nullptr && Template->Class != Class)  [[unlikely]]
+    {
+        MILAN_WARNW(L"UWorld::SpawnActor [%llu] will fail: Template (%s) != Class (%s)", s_errorCounter, *Template->Class->GetName(), *Class->GetName());
+    }
+
+#endif // ! _FINAL_RELEASE
+
     //MILAN_TRACEW(L"UWorld::SpawnActor: class = %s, template = %s, name = %s",
     //    Class ? *Class->GetName() : L"n/a", Template ? *Template->GetName() : L"n/a", *Name.ToString());
 
@@ -402,10 +415,24 @@ AActor* UWorld_SpawnActor_hook(
 
     if (Spawned == nullptr)  [[unlikely]]
     {
-        MILAN_WARNW(L"UWorld::SpawnActor: failed, class = %s, template = %s, name = %s",
-            Class ? *Class->GetName() : L"n/a", Template ? *Template->GetName() : L"n/a", *Name.ToString());
+        // Avoid polluting log if we can attribute spawn failure to a known issue.
+        bool bAvoidLogging = false;
+
+        if (Class != nullptr && Class->GetName().Equals(L"SFXMutator_DifficultySpeed"))
+        {
+            AWorldInfo* const WorldInfo = GlobalWorldInfo();
+            if (WorldInfo && (WorldInfo->bIsMenuLevel || WorldInfo->bIsUIWorld || WorldInfo->bIsLobbyLevel))
+                bAvoidLogging = true;
+        }
+
+        if (!bAvoidLogging)
+        {
+            MILAN_WARNW(L"UWorld::SpawnActor: [%llu] failed, class = %s, template = %s, name = %s",
+                s_errorCounter, Class ? *Class->GetName() : L"n/a", Template ? *Template->GetName() : L"n/a", *Name.ToString());
+        }
     }
 
+    s_errorCounter++;
     return Spawned;
 }
 

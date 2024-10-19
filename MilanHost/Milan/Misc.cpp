@@ -5,6 +5,7 @@
 #include <fstream>
 
 #include "Milan/Misc.hpp"
+#include "Proxies/Engine.hpp"
 
 
 
@@ -105,4 +106,22 @@ void WriteCallstackLog(CodePlaceW&& Place, ESeverity const Severity, int const S
             Logger->WriteFormatUnicode(Place, Severity, L"%02d. %p", i + 1, (void*)RelativeVirtualAddress);
         }
     }
+}
+
+AWorldInfo* GlobalWorldInfo() noexcept
+{
+    if (GWorld == nullptr || *GWorld == nullptr) return nullptr;
+
+    auto* const World = reinterpret_cast<UWorld_Proxy*>(*GWorld);
+    auto* const Level = reinterpret_cast<ULevel_Proxy*>(World->PersistentLevel);
+
+    return (Level != nullptr && Level->Actors.Count() > 0)
+        ? reinterpret_cast<AWorldInfo*>(Level->Actors(0))
+        : nullptr;
+}
+
+bool GlobalBegunPlay() noexcept
+{
+    auto* const WorldInfo = GlobalWorldInfo();
+    return WorldInfo ? WorldInfo->bBegunPlay : false;
 }
