@@ -6,6 +6,7 @@
 #pragma once
 
 #include <tuple>
+#include "Containers/vector.hpp"
 #include "Milan/Base.hpp"
 #include "Milan/Hooks.hpp"
 
@@ -26,6 +27,24 @@ public:
 
     /** Retrieves a cached @c IDXGISwapChain::Present pointer. */
     t_IDXGISwapChain_Present* GetSwapChainPresent() const;
+
+    /** Base interface for all user interactions using ImGui. */
+    class IInterface : public NonCopyable
+    {
+    public:
+        virtual ~IInterface() noexcept = default;
+        virtual SFXName GetName() const noexcept = 0;
+        virtual bool IsActive() const noexcept = 0;
+        virtual bool IsIntercepting() const noexcept = 0;
+        virtual void OnWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) = 0;
+        virtual void OnRender() = 0;
+    };
+
+    /** Type for passing ownership of an interface to this component. */
+    using InterfacePtr_t = std::unique_ptr<IInterface>;
+
+    /** Adds an ImGui-based user interaction to this component. */
+    void RegisterInterface(InterfacePtr_t Interface);
 
 private:
 
@@ -51,10 +70,32 @@ private:
     static bool MessageImguiPassthrough(UINT uMsg, WPARAM, LPARAM);
 
 
-    ID3D11Device*               mp_d3d11Device{ nullptr };
-    ID3D11DeviceContext*        mp_d3d11DeviceContext{ nullptr };
-    ID3D11RenderTargetView*     mp_d3d11RenderTargetView{ nullptr };
-    t_IDXGISwapChain_Present*   mp_dxgiSwapChainPresent{ nullptr };
-    bool                        mb_debugPanelEnabled{ false };
-    HWND                        m_activeWindow{};
+    ID3D11Device*                   mp_d3d11Device{ nullptr };
+    ID3D11DeviceContext*            mp_d3d11DeviceContext{ nullptr };
+    ID3D11RenderTargetView*         mp_d3d11RenderTargetView{ nullptr };
+    t_IDXGISwapChain_Present*       mp_dxgiSwapChainPresent{ nullptr };
+    game::vector<InterfacePtr_t>    m_activeInterfaces{};
+    HWND                            m_activeWindow{};
+};
+
+static_assert(ComponentType<CImgui>);
+
+
+// ! CImgui::IInterface implementations.
+// ========================================
+
+/** Draws ImGui's demo window, activated on DELETE release. */
+class DemoInterface final : public CImgui::IInterface
+{
+public:
+    ~DemoInterface() noexcept override = default;
+
+    SFXName GetName() const noexcept override { return SFXName(L"im-debug", 0); }
+    bool IsActive() const noexcept { return mb_active; }
+    bool IsIntercepting() const noexcept { return true; }
+
+    void OnWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+    void OnRender();
+
+    bool mb_active{ false };
 };

@@ -7,6 +7,10 @@
 // Copied from <backends/imgui_impl_win32.h> according to the instructions found there.
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+
+namespace
+{
+
 void* MyImGuiAlloc(size_t const sz, void*)
 {
     assert(GMalloc != nullptr);
@@ -17,6 +21,8 @@ void MyImGuiFree(void* const ptr, void*)
 {
     assert(GMalloc != nullptr);
     return (*GMalloc)->Free(ptr);
+}
+
 }
 
 
@@ -43,6 +49,12 @@ void CImgui::Terminate(::LESDK::Initializer& Context)
     MILAN_UNUSED(Context);
     MILAN_DEBUGW(L"component '%s' terminating", k_typeName);
 
+    if (m_activeWindow)
+    {
+        // Undo system hook to avoid WndProc_hook calling On_WndProc after CImgui has terminated.
+        SetWindowLongPtr(m_activeWindow, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WndProc_orig));
+    }
+
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
@@ -51,8 +63,8 @@ void CImgui::Terminate(::LESDK::Initializer& Context)
 bool CImgui::On_WndProc(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
 {
     m_activeWindow = hWnd;
-    static bool sb_skipOwnCode = false;
 
+    static bool sb_skipOwnCode = false;
     if (sb_skipOwnCode)
     {
         return false;
@@ -64,8 +76,8 @@ bool CImgui::On_WndProc(HWND const hWnd, UINT const uMsg, WPARAM const wParam, L
         return false;
     }
 
-    ImGuiIO& IO = ImGui::GetIO();
-    POINT MousePosition{};
+    ImGuiIO&    IO = ImGui::GetIO();
+    POINT       MousePosition{};
 
     GetCursorPos(&MousePosition);
     ScreenToClient(hWnd, &MousePosition);
@@ -73,10 +85,18 @@ bool CImgui::On_WndProc(HWND const hWnd, UINT const uMsg, WPARAM const wParam, L
     IO.MousePos.x = static_cast<float>(MousePosition.x);
     IO.MousePos.y = static_cast<float>(MousePosition.y);
 
-    if (uMsg == WM_KEYUP && wParam == VK_DELETE && !mb_debugPanelEnabled)
-        mb_debugPanelEnabled = !mb_debugPanelEnabled;
+    bool bInterfaceIntercepting = false;
+    for (InterfacePtr_t& Interface : m_activeInterfaces)
+    {
+        Interface->OnWndProc(hWnd, uMsg, wParam, lParam);
+        if (Interface->IsActive())
+        {
+            if (Interface->IsIntercepting())
+                bInterfaceIntercepting = true;
+        }
+    }
 
-    if (mb_debugPanelEnabled)
+    if (bInterfaceIntercepting)
     {
         ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam);
         if (!MessageImguiPassthrough(uMsg, wParam, lParam))
@@ -128,13 +148,10 @@ bool CImgui::On_SwapChainPresent(IDXGISwapChain* const pChain, UINT const SyncIn
 
         ImGui::NewFrame();
 
-        if (mb_debugPanelEnabled)
+        for (InterfacePtr_t& Interface : m_activeInterfaces)
         {
-            bool bShouldRemain = true;
-            ImGui::ShowDemoWindow(&bShouldRemain);
-
-            if (!bShouldRemain)
-                mb_debugPanelEnabled = !mb_debugPanelEnabled;
+            if (Interface->IsActive())
+                Interface->OnRender();
         }
 
         ImGui::EndFrame();
@@ -160,6 +177,12 @@ HRESULT CImgui::GetDeviceAndContext(IDXGISwapChain* const pChain, ID3D11Device**
     return Result;
 }
 
+void CImgui::RegisterInterface(InterfacePtr_t Interface)
+{
+    MILAN_DEBUGW(L"registering imgui-based interface '%S'", Interface->GetName().GetName());
+    m_activeInterfaces.emplace_back(std::move(Interface));
+}
+
 t_IDXGISwapChain_Present* CImgui::FindSwapChainPresent()
 {
     DXGI_SWAP_CHAIN_DESC SCDesc{};
@@ -181,10 +204,10 @@ t_IDXGISwapChain_Present* CImgui::FindSwapChainPresent()
 
     IDXGISwapChain* pSwapChain = nullptr;
 
-    D3D_FEATURE_LEVEL const LEVELS[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0 };
+    D3D_FEATURE_LEVEL const Levels[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0 };
     HRESULT const Result = D3D11CreateDeviceAndSwapChain(
         nullptr, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_DEBUG,
-        LEVELS, 2, D3D11_SDK_VERSION, &SCDesc,
+        Levels, sizeof(Levels) / sizeof(*Levels), D3D11_SDK_VERSION, &SCDesc,
         &pSwapChain, nullptr, nullptr, nullptr);
 
     if (FAILED(Result))  [[unlikely]]
@@ -226,4 +249,24 @@ bool CImgui::MessageImguiPassthrough(UINT const uMsg, WPARAM, LPARAM)
     };
 
     return true;
+}
+
+
+// ! DemoInterface implementation.
+// ========================================
+
+void DemoInterface::OnWndProc(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
+{
+    MILAN_UNUSED_4(hWnd, uMsg, wParam, lParam);
+    if (uMsg == WM_KEYUP && wParam == VK_DELETE && !mb_active)
+        mb_active = !mb_active;
+}
+
+void DemoInterface::OnRender()
+{
+    bool bShouldRemain = true;
+    ImGui::ShowDemoWindow(&bShouldRemain);
+
+    if (!bShouldRemain)  [[unlikely]]
+        mb_active = !mb_active;
 }

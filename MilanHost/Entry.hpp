@@ -16,6 +16,7 @@
 
 void InitAllocators(::LESDK::Initializer& Context);
 void LoadInitialConfig();
+void SetupImguiInterfaces();
 void RegisterNonshipCommands();
 void RegisterVectoredExceptions();
 void SpawnLocalClients();

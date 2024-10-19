@@ -72,6 +72,7 @@ SPI_IMPLEMENT_ATTACH
     // ----------------------------------------
 
     LoadInitialConfig();
+    SetupImguiInterfaces();
     RegisterNonshipCommands();
     RegisterVectoredExceptions();
     SpawnLocalClients();
@@ -145,6 +146,11 @@ void LoadInitialConfig()
 {
     COMPONENT(CConfig).LoadConfig();
     // TODO: Apply logging configuration via COutput.
+}
+
+void SetupImguiInterfaces()
+{
+    COMPONENT(CImgui).RegisterInterface(std::make_unique<DemoInterface>());
 }
 
 void RegisterNonshipCommands()
