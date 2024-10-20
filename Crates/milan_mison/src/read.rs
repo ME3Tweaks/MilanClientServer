@@ -34,7 +34,9 @@
 //! ```
 
 use std::marker::PhantomData;
+
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::MiType;
 use crate::io::{LocalSerialInput, SerialInput};
@@ -161,6 +163,13 @@ impl<'a> ReadValue<'a> for &'a [u8] {
     }
 }
 
+impl<'a> ReadValue<'a> for Uuid {
+    const MI_TYPE: MiType = MiType::Guid;
+    fn read_value(_: &'a MiDecoder<'a>, input: &impl SerialInput<'a>) -> Result<Self, ReadError> {
+        input.get_array::<16>().map(|bytes| Uuid::from_slice(&bytes).unwrap())
+    }
+}
+
 
 /// Semi-deserialized value.
 #[derive(Clone)]
@@ -176,6 +185,7 @@ pub enum MiValue<'a> {
     Bool(bool),
     String(&'a str),
     Binary(&'a [u8]),
+    Guid(Uuid),
 }
 
 impl<'a> MiValue<'a> {
@@ -193,6 +203,7 @@ impl<'a> MiValue<'a> {
             MiValue::Bool(_) => MiType::Bool,
             MiValue::String(_) => MiType::String,
             MiValue::Binary(_) => MiType::Binary,
+            MiValue::Guid(_) => MiType::Guid,
         }
     }
 }
@@ -302,6 +313,7 @@ impl<'a> MiElement<'a> {
             MiType::Bool => bool::read_value(decoder, input).map(MiValue::Bool)?,
             MiType::String => <&'a str>::read_value(decoder, input).map(MiValue::String)?,
             MiType::Binary => <&'a [u8]>::read_value(decoder, input).map(MiValue::Binary)?,
+            MiType::Guid => Uuid::read_value(decoder, input).map(MiValue::Guid)?,
         };
 
         Ok(Self { name, value })

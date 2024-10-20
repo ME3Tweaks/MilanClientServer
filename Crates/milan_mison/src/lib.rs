@@ -60,6 +60,8 @@ pub enum MiType {
     String = 0x09,
     /// Untyped binary blob.
     Binary = 0x0A,
+    /// Globally unique identifier (16 bytes).
+    Guid = 0x0B,
 }
 
 impl MiType {
@@ -77,6 +79,7 @@ impl MiType {
             0x08 => Some(Self::Bool),
             0x09 => Some(Self::String),
             0x0A => Some(Self::Binary),
+            0x0B => Some(Self::Guid),
             _ => None,
         }
     }
@@ -95,6 +98,7 @@ impl MiType {
             MiType::Single => Some(4),
             MiType::Double => Some(8),
             MiType::Bool => Some(1),
+            MiType::Guid => Some(16),
             _ => None,
         }
     }
@@ -113,6 +117,7 @@ impl MiType {
             MiType::Bool => "Bool",
             MiType::String => "String",
             MiType::Binary => "Binary",
+            MiType::Guid => "Guid",
         }
     }
 }
@@ -145,6 +150,7 @@ impl FromStr for MiType {
             "Bool" => Ok(Self::Bool),
             "String" => Ok(Self::String),
             "Binary" => Ok(Self::Binary),
+            "Guid" => Ok(Self::Guid),
             _ => Err(()),
         }
     }

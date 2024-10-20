@@ -33,6 +33,7 @@ use std::hash::BuildHasher;
 use std::marker::PhantomData;
 
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::io::{OutputBuffer, OutputBufferLike};
 use crate::MiType;
@@ -304,6 +305,16 @@ impl WriteValue for &[u8] {
     fn write_value(&self, output: &mut impl OutputBufferLike) -> Result<(), WriteError> {
         output.get_next_array::<4>().copy_from_slice(&self.len().to_be_bytes());
         output.get_next(self.len()).copy_from_slice(self);
+        Ok(())
+    }
+}
+
+impl WriteValue for Uuid {
+    const MI_TYPE: MiType = MiType::Guid;
+    fn get_size(&self) -> usize { 16 }
+    fn write_value(&self, output: &mut impl OutputBufferLike) -> Result<(), WriteError> {
+        let array = output.get_next_array::<16>();
+        array.copy_from_slice(self.as_bytes().as_slice());
         Ok(())
     }
 }

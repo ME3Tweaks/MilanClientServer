@@ -35,6 +35,7 @@ type        ::= byte_t(0x00)            ; None, an absence of value.
               | byte_t(0x08)            ; Bool, an 8-bit boolean value.
               | byte_t(0x09)            ; String, a UTF-8 string.
               | byte_t(0x0A)            ; Binary, an untyped sequence of bytes.
+              | byte_t(0x0B)            ; Guid, global unique identifier of 16 bytes.
 
 value       ::= ()                      ; type is "None"
               | object_value_t          ; type is "Object"
@@ -48,6 +49,7 @@ value       ::= ()                      ; type is "None"
               | byte_t(0x01)            ; type is "Bool", meaning "true"
               | string_value_t          ; type is "String"
               | blob_value_t            ; type is "Binary"
+              | byte_t * 0x10           ; type is "Guid"
 
 string_value_t  ::= uint32_t('size + 1) (byte_t * 'size) byte_t(0x00)
 blob_value_t    ::= uint32_t('size) (byte_t * 'size)
