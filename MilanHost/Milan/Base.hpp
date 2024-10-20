@@ -569,7 +569,8 @@ public:
     {
         CT** const Alloc = GetAlloc<CT>();
         MILAN_CHECKW(*Alloc != nullptr, L"can't terminate %s (uninitialized)", CT::k_typeName);
-        std::exchange(*Alloc, nullptr)->Terminate(Context);
+        (*Alloc)->Terminate(Context);
+        *Alloc = nullptr;
     }
 };
 

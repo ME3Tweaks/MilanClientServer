@@ -53,6 +53,11 @@ void CImgui::Terminate(::LESDK::Initializer& Context)
     {
         // Undo system hook to avoid WndProc_hook calling On_WndProc after CImgui has terminated.
         SetWindowLongPtr(m_activeWindow, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WndProc_orig));
+
+        // Same with IDXGISwapChain::Present.
+        Context.UninstallHook("IDXGISwapChain::Present");
+
+        // Both of these led to crashes when called after CImgui::Terminate().
     }
 
     ImGui_ImplDX11_Shutdown();
