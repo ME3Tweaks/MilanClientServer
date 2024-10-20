@@ -42,31 +42,6 @@ target_include_directories (${IMGUI_TARGET} PUBLIC ${IMGUI_FOLDER})
 target_link_options (${IMGUI_TARGET} PUBLIC ${MILAN_LINK_OPTIONS})
 
 
-# ! ImPlot target.
-# ========================================
-
-set (IMPLOT_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/implot")
-set (IMPLOT_TARGET "ImPlot")
-
-set (IMPLOT_SOURCES
-  ${IMPLOT_FOLDER}/implot_demo.cpp
-  ${IMPLOT_FOLDER}/implot_internal.h
-  ${IMPLOT_FOLDER}/implot_items.cpp
-  ${IMPLOT_FOLDER}/implot.cpp
-  ${IMPLOT_FOLDER}/implot.h
-)
-
-add_library (${IMPLOT_TARGET} STATIC ${IMPLOT_SOURCES})
-set_target_properties (${IMPLOT_TARGET} PROPERTIES FOLDER "ThirdParty")
-source_group (TREE "${IMPLOT_FOLDER}" FILES ${IMPLOT_SOURCES})
-
-target_compile_definitions (${IMPLOT_TARGET} PRIVATE ${MILAN_COMPILE_DEFINITIONS})
-target_compile_options (${IMPLOT_TARGET} PRIVATE ${MILAN_COMPILE_OPTIONS})
-target_include_directories (${IMPLOT_TARGET} PUBLIC ${IMPLOT_FOLDER})
-target_link_options (${IMPLOT_TARGET} PUBLIC ${MILAN_LINK_OPTIONS})
-target_link_libraries (${IMPLOT_TARGET} PUBLIC ${IMGUI_TARGET})
-
-
 # ! LESDK-LE3 target.
 # ========================================
 
