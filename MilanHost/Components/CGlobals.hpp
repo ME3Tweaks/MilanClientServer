@@ -23,6 +23,9 @@ public:
     /** Additional initialization code that needs to run after all other components' initialization. */
     void PostInitialize(::LESDK::Initializer& Context);
 
+    /** Uninstalls several hooks which may otherwise cause use-after-free during component termination. */
+    void UninstallSomeHooks(::LESDK::Initializer& Context);
+
     void UpdateGuidCacheOverride();
 
 private:

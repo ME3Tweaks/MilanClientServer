@@ -76,6 +76,17 @@ void CGlobals::PostInitialize(::LESDK::Initializer& Context)
     InitWindowProc(Context);
 }
 
+void CGlobals::UninstallSomeHooks(::LESDK::Initializer& Context)
+{
+    Context.UninstallHook("UWorld::Tick");
+    Context.UninstallHook("UObject::ProcessInternal");
+    Context.UninstallHook("UObject::ProcessEvent");
+    Context.UninstallHook("UObject::ProcessDelegate");
+    Context.UninstallHook("UObject::CallFunction");
+    Context.UninstallHook("UGameEngine::Tick");
+    Context.UninstallHook("UGameEngine::Exec");
+}
+
 void CGlobals::UpdateGuidCacheOverride()
 {
 #ifndef _FINAL_RELEASE

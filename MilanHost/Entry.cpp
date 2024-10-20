@@ -104,8 +104,9 @@ void SingleDetachImpl()
         return;
 
     MILAN_INFOW(ELOG_Teardown, L"single detach starting");
-    COMPONENT(COutput).FlushEverything();
 
+    COMPONENT(COutput).FlushEverything();
+    COMPONENT(CGlobals).UninstallSomeHooks(*gp_sdkContext);
 
     // Terminate subsystems in reverse.
     // ----------------------------------------
@@ -124,11 +125,8 @@ void SingleDetachImpl()
 
     CleanupGlobalConfig();
 
-    delete gp_componentContainer;
-    gp_componentContainer = nullptr;
-
-    delete gp_sdkContext;
-    gp_sdkContext = nullptr;
+    delete std::exchange(gp_componentContainer, nullptr);
+    delete std::exchange(gp_sdkContext, nullptr);
 }
 
 void InitSDKBasics(::LESDK::Initializer& Context)
