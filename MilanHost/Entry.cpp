@@ -362,24 +362,6 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    Commands.RegisterCommand(L"log", L"lookuppackageguids",
-        [](wchar_t const*)
-        {
-            gb_logLookupPackageGuid = !gb_logLookupPackageGuid;
-            MILAN_INFOW(L"logging of guid cache package lookups: %s",
-                gb_logLookupPackageGuid ? L"enabled" : L"disabled");
-            return true;
-        });
-
-    Commands.RegisterCommand(L"log", L"pendingpackages",
-        [](wchar_t const*)
-        {
-            gb_logPendingPackages = !gb_logPendingPackages;
-            MILAN_INFOW(L"logging of net pending packages: %s",
-                gb_logPendingPackages ? L"enabled" : L"disabled");
-            return true;
-        });
-
     Commands.RegisterCommand(L"util", L"updateguidcacheoverride",
         [](wchar_t const*)
         {

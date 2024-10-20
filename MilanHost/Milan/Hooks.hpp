@@ -125,8 +125,6 @@ extern bool gb_logCallFunction;
 extern bool gb_logProcessDelegate;
 extern bool gb_logProcessEvent;
 extern bool gb_logProcessInternal;
-extern bool gb_logLookupPackageGuid;
-extern bool gb_logPendingPackages;
 extern bool gb_logSerializeObject;
 
 
@@ -280,8 +278,6 @@ void UWorld_Tick_hook(UWorld* Context, int Unknown, float Delta);
 // ========================================
 
 #ifndef _FINAL_RELEASE
-
-extern bool gb_logReplicateActor;
 
 using t_UActorChannel_ReplicateActor = void(UActorChannel* Context);
 extern t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_orig;

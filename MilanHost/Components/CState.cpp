@@ -43,20 +43,6 @@ bool CState::Initialize(::LESDK::Initializer& Context)
     ::ecsm::init_logger(::ecsm_log);
     ::ecsm::init_state();
 
-#ifndef _FINAL_RELEASE
-
-    // WTF is this doing in state?..
-
-    COMPONENT(CCommands).RegisterCommand(L"net", L"logactorrepl",
-        [](wchar_t const*)
-        {
-            gb_logReplicateActor = !gb_logReplicateActor;
-            MILAN_INFOW(L"actor replication log %s", gb_logReplicateActor ? L"ENABLED" : L"DISABLED");
-            return true;
-        });
-
-#endif
-
     MILAN_UNUSED(Context);
     MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;

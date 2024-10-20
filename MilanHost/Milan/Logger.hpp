@@ -110,11 +110,11 @@ public:
 
 protected:
 
-    /** Checks if a logging message with given category should go through the logger. */
-    inline static bool FilterCategory(SFXName const Category) noexcept
+    /** Checks if a logging message should go through the logger. */
+    inline static bool FilterMessage(ESeverity const Severity, SFXName const Category) noexcept
     {
     #ifndef _FINAL_RELEASE
-        return !Category.GetEntry()->IsSuppressed();
+        return !Category.GetEntry()->IsSuppressed() || Severity >= ESeverity::Error;
     #else
         MILAN_UNUSED(Category);
         return true;

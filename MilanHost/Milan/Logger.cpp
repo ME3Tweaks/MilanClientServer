@@ -81,14 +81,14 @@ BasicConsoleLoggerOutput::~BasicConsoleLoggerOutput() noexcept {}
 void BasicConsoleLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Severity, SFXName const Category,
     char const* const Data, size_t const Size, float const Seconds, FormatStyleA const& Style)
 {
-    std::fprintf(Style.OutStream, "[%07.3f] [%s] {%s} %s\n", Seconds, Style.SevToken, Category.GetName(), Data);
+    std::fprintf(Style.OutStream, "[%07.3f] [%s %s] %s\n", Seconds, Style.SevToken, Category.GetName(), Data);
     MILAN_UNUSED_4(Place, Severity, Category, Size);
 }
 
 void BasicConsoleLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Severity, SFXName const Category,
     wchar_t const* const Data, size_t const Size, float const Seconds, FormatStyleW const& Style)
 {
-    std::fwprintf(Style.OutStream, L"[%07.3f] [%s] {%S} %s\n", Seconds, Style.SevToken, Category.GetName(), Data);
+    std::fwprintf(Style.OutStream, L"[%07.3f] [%s %S] %s\n", Seconds, Style.SevToken, Category.GetName(), Data);
     MILAN_UNUSED_4(Place, Severity, Category, Size);
 }
 
@@ -108,16 +108,16 @@ ConsoleLoggerOutput::~ConsoleLoggerOutput() noexcept {}
 void ConsoleLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Severity, SFXName const Category,
     char const* const Data, size_t const Size, float const Seconds, FormatStyleA const& Style)
 {
-    _fprintf_l(Style.OutStream, "%s[%07.3f] [%s] {%s} %s%s\n", s_sinkLocale,
-        Style.OpenSeq, Seconds, Style.SevToken, Category.GetName(), Data, Style.CloseSeq);
+    _fprintf_l(Style.OutStream, "%s[%07.3f] [%s] %s%s\n", s_sinkLocale,
+        Style.OpenSeq, Seconds, Category.GetName(), Data, Style.CloseSeq);
     MILAN_UNUSED_4(Place, Severity, Category, Size);
 }
 
 void ConsoleLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Severity, SFXName const Category,
     wchar_t const* const Data, size_t const Size, float const Seconds, FormatStyleW const& Style)
 {
-    _fwprintf_l(Style.OutStream, L"%s[%07.3f] [%s] {%S} %s%s\n", s_sinkLocale,
-        Style.OpenSeq, Seconds, Style.SevToken, Category.GetName(), Data, Style.CloseSeq);
+    _fwprintf_l(Style.OutStream, L"%s[%07.3f] [%S] %s%s\n", s_sinkLocale,
+        Style.OpenSeq, Seconds, Category.GetName(), Data, Style.CloseSeq);
     MILAN_UNUSED_4(Place, Severity, Category, Size);
 }
 
@@ -180,7 +180,7 @@ void FileLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Sever
         // Can't use the style here, but this should be a corner case anyway...
         auto const Token = GetFormatStyleShortW(Severity).SevToken;
 
-        _fwprintf_l(OutputFile, L"[%07.3f] [%s] {%S} %s\n", s_sinkLocale, Seconds, Token, Category.GetName(), UnicodeBuffer.data());
+        _fwprintf_l(OutputFile, L"[%07.3f] [%s %S] %s\n", s_sinkLocale, Seconds, Token, Category.GetName(), UnicodeBuffer.data());
     }
 
     MILAN_UNUSED_3(Place, Category, Style);
@@ -189,7 +189,7 @@ void FileLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Sever
 void FileLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Severity, SFXName const Category,
     wchar_t const* const Data, size_t const Size, float const Seconds, FormatStyleW const& Style)
 {
-    _fwprintf_l(OutputFile, L"[%07.3f] [%s] {%S} %s\n", s_sinkLocale, Seconds, Style.SevToken, Category.GetName(), Data);
+    _fwprintf_l(OutputFile, L"[%07.3f] [%s %S] %s\n", s_sinkLocale, Seconds, Style.SevToken, Category.GetName(), Data);
     MILAN_UNUSED_5(Place, Severity, Category, Size, Seconds);
 }
 
@@ -218,7 +218,7 @@ MilanLogger::~MilanLogger() noexcept
 
 void MilanLogger::WriteAnsi(CodePlaceA const& Place, ESeverity const Severity, SFXName const Category, std::string_view const Message)
 {
-    if (!FilterCategory(Category)) return;
+    if (!FilterMessage(Severity, Category)) return;
 
     auto const Seconds = MessageTimer.GetSeconds();
     std::lock_guard<std::mutex> _(WriteMutex);
@@ -232,7 +232,7 @@ void MilanLogger::WriteAnsi(CodePlaceA const& Place, ESeverity const Severity, S
 
 void MilanLogger::WriteUnicode(CodePlaceW const& Place, ESeverity const Severity, SFXName const Category, std::wstring_view const Message)
 {
-    if (!FilterCategory(Category)) return;
+    if (!FilterMessage(Severity, Category)) return;
 
     auto const Seconds = MessageTimer.GetSeconds();
     std::lock_guard<std::mutex> _(WriteMutex);
@@ -285,7 +285,7 @@ template<typename CodePlaceType, typename ViewType>
     requires (std::same_as<ViewType, std::string_view> || std::same_as<ViewType, std::wstring_view>)
 void AsyncMilanLogger::WriteInternal(CodePlaceType const& Place, ESeverity const Severity, SFXName const Category, ViewType const Message)
 {
-    if (!FilterCategory(Category)) return;
+    if (!FilterMessage(Severity, Category)) return;
 
     std::unique_lock<std::mutex> Lock{ WriteMutex };
     std::size_t const RecordLength = sizeof(RecordHeader) + (Message.length() + 1) * sizeof(ViewType::value_type);

@@ -21,8 +21,6 @@ bool gb_logCallFunction = false;
 bool gb_logProcessDelegate = false;
 bool gb_logProcessEvent = false;
 bool gb_logProcessInternal = false;
-bool gb_logLookupPackageGuid = false;
-bool gb_logPendingPackages = false;
 bool gb_logSerializeObject = false;
 
 
@@ -53,12 +51,12 @@ void BioRequestExit_hook(UBOOL const bForce, INT const ExitCode, INT const Unuse
     {
         if (bForce)
         {
-            MILAN_WARNW(ELOG_Teardown, L"BioRequestExit: bForce = TRUE, ExitCode = %d", ExitCode);
+            MILAN_WARNW(ELOG_EngineHooks, L"BioRequestExit: bForce = TRUE, ExitCode = %d", ExitCode);
             ::Sleep(1000);
         }
         else
         {
-            MILAN_DEBUGW(ELOG_Teardown, L"BioRequestExit: bForce = FALSE, ExitCode = %d", ExitCode);
+            MILAN_DEBUGW(ELOG_EngineHooks, L"BioRequestExit: bForce = FALSE, ExitCode = %d", ExitCode);
         }
     }
 #endif
@@ -97,11 +95,11 @@ UBOOL UGameEngine_Exec_hook(UGameEngine* const Context, WCHAR const* const Comma
 t_UGameEngine_LoadMap* UGameEngine_LoadMap_orig = nullptr;
 UBOOL UGameEngine_LoadMap_hook(UGameEngine* const Context, FURL* const Url, UPendingLevel* const Level, FString* const Error)
 {
-    MILAN_TRACEW(L"UGameEngine::LoadMap: Url = %s...", *Url->Map);
+    MILAN_TRACEW(ELOG_EngineHooks, L"UGameEngine::LoadMap: Url = %s...", *Url->Map);
     NETPROF(CaptureLevelStart(Url));
 
     auto const Result = (*UGameEngine_LoadMap_orig)(Context, Url, Level, Error);
-    if (!Result) MILAN_ERRORW(L"UGameEngine::LoadMap failed: %s", *(*Error));
+    if (!Result) MILAN_ERRORW(ELOG_EngineHooks, L"UGameEngine::LoadMap failed: %s", *(*Error));
 
     return Result;
 }
@@ -139,14 +137,14 @@ void UObject_CallFunction_hook(UObject* const Context, FFrame* const Stack, void
 #ifndef _FINAL_RELEASE
     if (Function == nullptr)
     {
-        MILAN_ERRORW(L"UObject::CallFunction: %s", *Context->StaticFullName());
-        MILAN_ERRORW(L"  Function is null, stack dumped:");
+        MILAN_ERRORW(ELOG_EngineHooks, L"UObject::CallFunction: %s", *Context->StaticFullName());
+        MILAN_ERRORW(ELOG_EngineHooks, L"  Function is null, stack dumped:");
 
         int i = 0;
         for (FFrame* Current = Stack; Current; Current = Current->PreviousFrame)
         {
-            MILAN_WARNW(L"%3d Stack.Object = %s\n", i, Current->Object ? *Current->Object->StaticFullName() : L"???");
-            MILAN_WARNW(L"    Stack.Node = %s\n", Current->Node ? *Current->Node->StaticFullName() : L"???");
+            MILAN_WARNW(ELOG_EngineHooks, L"%3d Stack.Object = %s\n", i, Current->Object ? *Current->Object->StaticFullName() : L"???");
+            MILAN_WARNW(ELOG_EngineHooks, L"    Stack.Node = %s\n", Current->Node ? *Current->Node->StaticFullName() : L"???");
             --i;
         }
 
@@ -216,7 +214,7 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     if (kbForceFailureNetMessagePrelogin && Context->IsA<AGameInfo>() && Function->StaticName().Contains(L"PreLogin"))
     {
         auto const CastParms = reinterpret_cast<AGameInfo_eventPreLogin_Parms*>(Parms);
-        MILAN_DEBUGW(L"AGameInfo::PreLogin: Options = %s, Address = %s, Error = %s",
+        MILAN_DEBUGW(ELOG_EngineHooks, L"AGameInfo::PreLogin: Options = %s, Address = %s, Error = %s",
             *CastParms->Options, *CastParms->Address, *CastParms->ErrorMessage);
 
         if (CastParms->ErrorMessage.Empty())
@@ -361,30 +359,30 @@ AActor* UWorld_SpawnActor_hook(
 #ifndef _FINAL_RELEASE
     if (Class == nullptr || !IsChildOf<AActor>(Class))  [[unlikely]]
     {
-        MILAN_WARNW(L"UWorld::SpawnActor [%llu] will fail: Class is null or not an actor", s_errorCounter);
+        MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: Class is null or not an actor", s_errorCounter);
     }
 
     static constexpr std::uint32_t k_classFlagAbstract = 0x00000001;
     static constexpr std::uint32_t k_classFlagDeprecated = 0x02000000;
     if (!!(Class->ClassFlags & k_classFlagAbstract) || !!(Class->ClassFlags & k_classFlagDeprecated))  [[unlikely]]
     {
-        MILAN_WARNW(L"UWorld::SpawnActor [%llu] will fail: Class is abstract or deprecated", s_errorCounter);
+        MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: Class is abstract or deprecated", s_errorCounter);
     }
 
     AActor* const Default = Class->ClassDefaultObject ? Class->ClassDefaultObject->Cast<AActor>() : nullptr;
     if (GlobalBegunPlay() && Default != nullptr && (Default->bStatic || Default->bNoDelete)) [[unlikely]]
     {
-        MILAN_WARNW(L"UWorld::SpawnActor [%llu] will fail: CDO is bStatic or bNoDelete and GWorld has begun play", s_errorCounter);
+        MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: CDO is bStatic or bNoDelete and GWorld has begun play", s_errorCounter);
     }
 
     if (Template != nullptr && Template->Class != Class)  [[unlikely]]
     {
-        MILAN_WARNW(L"UWorld::SpawnActor [%llu] will fail: Template (%s) != Class (%s)", s_errorCounter, *Template->Class->GetName(), *Class->GetName());
+        MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: Template (%s) != Class (%s)", s_errorCounter, *Template->Class->GetName(), *Class->GetName());
     }
 
 #endif // ! _FINAL_RELEASE
 
-    //MILAN_TRACEW(L"UWorld::SpawnActor: class = %s, template = %s, name = %s",
+    //MILAN_TRACEW(ELOG_EngineHooks, L"UWorld::SpawnActor: class = %s, template = %s, name = %s",
     //    Class ? *Class->GetName() : L"n/a", Template ? *Template->GetName() : L"n/a", *Name.ToString());
 
     AActor* const Spawned = (*UWorld_SpawnActor_orig)(
@@ -410,7 +408,7 @@ AActor* UWorld_SpawnActor_hook(
 
         if (!bAvoidLogging)
         {
-            MILAN_WARNW(L"UWorld::SpawnActor: [%llu] failed, class = %s, template = %s, name = %s",
+            MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor: [%llu] failed, class = %s, template = %s, name = %s",
                 s_errorCounter, Class ? *Class->GetName() : L"n/a", Template ? *Template->GetName() : L"n/a", *Name.ToString());
         }
     }
@@ -424,34 +422,6 @@ void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delt
 {
     (*UWorld_Tick_orig)(Context, Unknown, Delta);
     COMPONENT(CState).On_UWorld_Tick(Context, Unknown, Delta);
-
-#ifndef _FINAL_RELEASE
-    if (gb_logPendingPackages)
-    {
-        do
-        {
-            auto const World = reinterpret_cast<UWorld_Proxy*>(*GWorld);
-            auto const NetDriver = reinterpret_cast<UNetDriver_Proxy*>(World->NetDriver);
-            if (NetDriver == nullptr)
-                break;
-
-            auto const ServerConnection = reinterpret_cast<UNetConnection_Proxy*>(NetDriver->ServerConnection);
-            if (ServerConnection == nullptr)
-                break;
-
-            if (ServerConnection->PendingPackageInfos.Any())
-                MILAN_DEBUGW(ELOG_NetHooks, L"pending packages on active netdriver (one tick):");
-            
-            for (FPackageInfo const& Pending : ServerConnection->PendingPackageInfos)
-            {
-                MILAN_TRACEW(ELOG_NetHooks, L"- %s, Guid = %s, Parent = %s",
-                    *Pending.PackageName.ToString(), *FormatGuid(Pending.Guid),
-                    Pending.Parent ? *Pending.Parent->GetFullName() : L"n/a");
-                MILAN_UNUSED(Pending);
-            }
-        } while (false);
-    }
-#endif
 }
 
 
@@ -459,8 +429,6 @@ void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delt
 // ========================================
 
 #ifndef _FINAL_RELEASE
-
-bool gb_logReplicateActor = false;
 
 t_UActorChannel_ReplicateActor* UActorChannel_ReplicateActor_orig = nullptr;
 void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
@@ -472,22 +440,17 @@ void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
 
     if (false)
     {
-        MILAN_DEBUGW(ELOG_NetHooks, L"UActorChannel::ReplicateActor:");
-        MILAN_DEBUGW(ELOG_NetHooks, L"  Channel: %s", *Channel->StaticFullName());
-        MILAN_DEBUGW(ELOG_NetHooks, L"    Props: OpenedLocally=%d, OpenPacketId=%d, NumInRec=%d, NumOutRec=%d, NegotiatedVer=%d",
+        MILAN_DEBUGW(ELOG_NetHooksTrace, L"UActorChannel::ReplicateActor:");
+        MILAN_DEBUGW(ELOG_NetHooksTrace, L"  Channel: %s", *Channel->StaticFullName());
+        MILAN_DEBUGW(ELOG_NetHooksTrace, L"    Props: OpenedLocally=%d, OpenPacketId=%d, NumInRec=%d, NumOutRec=%d, NegotiatedVer=%d",
             Channel->OpenedLocally, Channel->OpenPacketId, Channel->NumInRec, Channel->NumOutRec, Channel->NegotiatedVer);
-        MILAN_DEBUGW(ELOG_NetHooks, L"  Actor: %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
+        MILAN_DEBUGW(ELOG_NetHooksTrace, L"  Actor: %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
         if (Channel->Actor != nullptr)
         {
             auto* const Actor = Channel->Actor;
-            MILAN_DEBUGW(ELOG_NetHooks, L"    Props: bNetOwner=%d, bNetInitial=%d Top=%s",
+            MILAN_DEBUGW(ELOG_NetHooksTrace, L"    Props: bNetOwner=%d, bNetInitial=%d Top=%s",
                 !!Actor->bNetOwner, !!Actor->bNetInitial, *Actor->StaticName());
         }
-    }
-    else if (gb_logReplicateActor)
-    {
-        MILAN_DEBUGW(ELOG_NetHooks, L"UActorChannel::ReplicateActor: %s",
-                Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
     }
 
     (*UActorChannel_ReplicateActor_orig)(Context);
@@ -496,7 +459,7 @@ void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
 t_UActorChannel_SetChannelActor* UActorChannel_SetChannelActor_orig = nullptr;
 void UActorChannel_SetChannelActor_hook(UActorChannel* const Context, AActor* const Actor)
 {
-    //MILAN_TRACEW(L"UActorChannel::SetChannelActor: %s <- %s", *Context->GetName(), *Actor->GetName());
+    MILAN_TRACEW(ELOG_NetHooksTrace, L"UActorChannel::SetChannelActor: %s <- %s", *Context->GetName(), *Actor->GetName());
     (*UActorChannel_SetChannelActor_orig)(Context, Actor);
 }
 
@@ -506,11 +469,11 @@ int UGuidCache_LookupPackageGuid_hook(UGuidCache* const Context, SFXName const P
     auto const Cache = reinterpret_cast<UGuidCache_Proxy*>(Context);
     auto const bFound = (*UGuidCache_LookupPackageGuid_orig)(Context, Package, OutGuid);
 
-    if (!bFound && gb_logLookupPackageGuid)
-    {
-        MILAN_WARNW(L"UGuidCache::LookupPackageGuid failed for cache = '%s', package = '%s'",
-            *Cache->Filename, *Package.ToString());
-    }
+    //if (!bFound)  [[unlikely]]
+    //{
+    //    MILAN_WARNW(ELOG_NetHooksTrace, L"UGuidCache::LookupPackageGuid failed for cache = '%s', package = '%s'",
+    //        *Cache->Filename, *Package.ToString());
+    //}
 
 #if defined(ENABLE_GUIDCACHE_OVERRIDE) && ENABLE_GUIDCACHE_OVERRIDE
 
@@ -519,7 +482,7 @@ int UGuidCache_LookupPackageGuid_hook(UGuidCache* const Context, SFXName const P
         auto const Override = gp_guidCacheOverride->Get(Package);
         if (Override.has_value())
         {
-            MILAN_WARNW(L"UGuidCache::LookupPackageGuid using override for package = '%s', new guid = '%s'",
+            MILAN_WARNW(ELOG_NetHooks, L"UGuidCache::LookupPackageGuid using override for package = '%s', new guid = '%s'",
                 *Package.ToString(), *FormatGuid(*Override));
             *OutGuid = *Override;
             return TRUE;
@@ -544,7 +507,7 @@ int UNetConnection_ClientSupportsLevel_hook(UNetConnection* const Context, UObje
 
         if (Return != 0)
         {
-            //MILAN_TRACEW(ELOG_NetHooks, L"UNetConnection::ClientSupportsLevel: %s (%s) => TRUE",
+            //MILAN_TRACEW(ELOG_NetHooksTrace, L"UNetConnection::ClientSupportsLevel: %s (%s) => TRUE",
             //    Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
         }
         else
@@ -582,22 +545,28 @@ void UNetConnection_Close_hook(UNetConnection* const Context)
 t_UNetConnection_CreateChannel* UNetConnection_CreateChannel_orig = nullptr;
 UChannel* UNetConnection_CreateChannel_hook(UNetConnection* const Context, EChannelType const Type, INT const bLocal, INT const Index)
 {
-    //auto const DescType = [](EChannelType const T) -> FString
-    //    {
-    //        switch (T)
-    //        {
-    //        case CHTYPE_None: return L"None";
-    //        case CHTYPE_Control: return L"Control";
-    //        case CHTYPE_Actor: return L"Actor";
-    //        case CHTYPE_File: return L"File";
-    //        case CHTYPE_Voice: return L"Voice";
-    //        }
-    //        return FString::Printf(L"%d", (int)T);
-    //    };
+    [[maybe_unused]]
+    auto const DescType = [](EChannelType const T) -> FString
+        {
+            switch (T)
+            {
+            case CHTYPE_None: return L"None";
+            case CHTYPE_Control: return L"Control";
+            case CHTYPE_Actor: return L"Actor";
+            case CHTYPE_File: return L"File";
+            case CHTYPE_Voice: return L"Voice";
+            }
+            return FString::Printf(L"%d", (int)T);
+        };
 
-    //MILAN_TRACEW(ELOG_NetHooks, L"UNetConnection::CreateChannel: type = %s, local = %s, index = %d", *DescType(Type), bLocal ? L"true" : L"false", Index);
+    MILAN_TRACEW(ELOG_NetHooksTrace, L"UNetConnection::CreateChannel: type = %s, local = %s, index = %d", *DescType(Type), bLocal ? L"true" : L"false", Index);
     UChannel* const Return = (*UNetConnection_CreateChannel_orig)(Context, Type, bLocal, Index);
-    //if (Return == nullptr) MILAN_WARNW(ELOG_NetHooks, L"UNetConnection::CreateChannel:   failed, returning nullptr");
+
+    if (Return == nullptr)
+    {
+        MILAN_WARNW(ELOG_NetHooks, L"UNetConnection::CreateChannel:   failed, returning nullptr");
+    }
+
     return Return;
 }
 
@@ -613,7 +582,7 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
 
         if (Return != 0)
         {
-            //MILAN_TRACEW(L"UPackageMap::SupportsObject: %s (%s) => TRUE",
+            //MILAN_TRACEW(ELOG_NetHooksTrace, L"UPackageMap::SupportsObject: %s (%s) => TRUE",
             //    Context ? *Context->GetName() : L"???", Object ? *Object->GetFullName() : L"???");
         }
         else
@@ -694,20 +663,6 @@ int UPackageMap_SerializeObject_hook(UPackageMap* const Context, FArchive* const
 
     if (Archive->ArIsLoading)
     {
-        //auto const PackageMap = reinterpret_cast<UPackageMap_Proxy*>(Context);
-        //if (*Object == nullptr)
-        //{
-        //    SFXName const CharEnemies(L"Char_Enemies", 0);
-        //    for (auto const& PackageInfo : PackageMap->List)
-        //    {
-        //        if (PackageInfo.PackageName == CharEnemies)
-        //        {
-        //            auto const Package = PackageInfo.Parent;
-        //            MILAN_UNUSED(Package);
-        //        }
-        //    }
-        //}
-
         if (gb_logSerializeObject || *Object == nullptr)
         {
             if (*Object != nullptr)
@@ -874,8 +829,11 @@ UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, 
     UINT const Ret = (*FSocketWin_SendTo_orig)(Context, Data, Count, Sent, Destination);
     if (Count > 0)
     {
+        // This would be too verbose even for ELOG_NetHooksTrace.
+
         //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Destination->sin_addr), ntohs(Destination->sin_port));
-        //MILAN_TRACEW(ELOG_NetHooks, L"FSocketWin::SendTo: type=%d, desc=%s, count=%d, sent=%d, dest=%s", Context->Type, *Context->Description, Count, *Sent, *Remote);
+        //MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::SendTo: type=%d, desc=%s, count=%d, sent=%d, dest=%s", Context->Type, *Context->Description, Count, *Sent, *Remote);
+
         NETPROF(CaptureSocketCall(Destination, true, *Sent * 8));
     }
     return Ret;
@@ -888,7 +846,7 @@ UINT FSocketWin_Send_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent)
     if (Count > 0)
     {
         // This remains uncommented because I haven't managed to trigger a call to this function yet...
-        MILAN_WARNW(ELOG_NetHooks, L"FSocketWin::Send: type=%d, desc=%s, count=%d, sent=%d", Context->Type, *Context->Description, Count, *Sent);
+        MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::Send: type=%d, desc=%s, count=%d, sent=%d", Context->Type, *Context->Description, Count, *Sent);
     }
     return Ret;
 }
@@ -899,8 +857,11 @@ UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read
     UINT const Ret = (*FSocketWin_RecvFrom_orig)(Context, Buffer, Max, Read, Source);
     if (*Read > 0)
     {
+        // This would be too verbose even for ELOG_NetHooksTrace.
+
         //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Source->sin_addr), ntohs(Source->sin_port));
-        //MILAN_TRACEW(ELOG_NetHooks, L"FSocketWin::RecvFrom: type=%d, desc=%s, read=%d, source=%s", Context->Type, *Context->Description, *Read, *Remote);
+        //MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::RecvFrom: type=%d, desc=%s, read=%d, source=%s", Context->Type, *Context->Description, *Read, *Remote);
+
         NETPROF(CaptureSocketCall(Source, false, *Read * 8));
     }
     return Ret;
@@ -913,7 +874,7 @@ UINT FSocketWin_Recv_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read)
     if (*Read > 0)
     {
         // This remains uncommented because I haven't managed to trigger a call to this function yet...
-        MILAN_WARNW(ELOG_NetHooks, L"FSocketWin::Recv: type=%d, desc=%s, read=%d", Context->Type, *Context->Description, *Read);
+        MILAN_WARNW(ELOG_NetHooksTrace, L"FSocketWin::Recv: type=%d, desc=%s, read=%d", Context->Type, *Context->Description, *Read);
     }
     return Ret;
 }

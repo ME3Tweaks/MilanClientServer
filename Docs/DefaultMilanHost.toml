@@ -23,8 +23,11 @@ suppressed = [
   # "Teardown",
 
   # "Client",
+  # "EngineHooks",
   # "DevelUtils",
   # "MultiProfile",
   # "NetHooks",
+  # "NetHooksTrace",
+  # "NetHooksRepl",
   # "NetProf",
 ]
