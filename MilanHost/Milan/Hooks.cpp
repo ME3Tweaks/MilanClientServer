@@ -208,6 +208,9 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
 
     (*UObject_ProcessEvent_orig)(Context, Function, Parms, Result);
 
+    UClass* const ObjectClass = Context->Class;
+    MILAN_UNUSED(ObjectClass);
+
 #ifndef _FINAL_RELEASE
 
     static constexpr auto kbForceFailureNetMessagePrelogin = false;

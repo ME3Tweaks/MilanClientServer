@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+    <!-- Override for LESDK's own SFXName .natvis definition. -->
+    <Type Name="SFXName" Priority="High">
+        <DisplayString Condition="(((SFXNameEntry*)((char*)*(GBioNamePools + Chunk) + Offset))->Index.Flags &amp; 2) == 0">
+            {((SFXNameEntry*)((char*)*(GBioNamePools + Chunk) + Offset))->AnsiName,s}
+        </DisplayString>
+        <DisplayString Condition="(((SFXNameEntry*)((char*)*(GBioNamePools + Chunk) + Offset))->Index.Flags &amp; 2) != 0">
+            {((SFXNameEntry*)((char*)*(GBioNamePools + Chunk) + Offset))->WideName,su}
+        </DisplayString>
+        <Expand>
+            <Item Name="[Pool]">(GBioNamePools + Chunk)</Item>
+            <Item Name="[Entry]">(SFXNameEntry*)((char*)*(GBioNamePools + Chunk) + Offset)</Item>
+            <Item Name="[Flags]">((SFXNameEntry*)((char*)*(GBioNamePools + Chunk) + Offset))->Index.Flags</Item>
+            <Item Name="[Ansi value]">((SFXNameEntry*)((char*)*(GBioNamePools + Chunk) + Offset))->AnsiName</Item>
+            <Item Name="[Unicode value]">((SFXNameEntry*)((char*)*(GBioNamePools + Chunk) + Offset))->WideName</Item>
+        </Expand>
+    </Type>
+    
+    <Type Name="UObject" Inheritable="true">
+        <DisplayString>{{ Class={Class->Name} Name={Name} }}</DisplayString>
+    </Type>
+
+</AutoVisualizer>

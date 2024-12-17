@@ -31,6 +31,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND WIN32)
     "/W4" "/WX" "/permissive"
     "/wd4121"  # -warn: alignment of member was sensitive to padding
     "/wd4127"  # -warn: conditional expression is constant
+    "/wd4201"  # -warn: nonstandard extension used (nameless struct/union)
   )
 
   set (MILAN_LINK_OPTIONS

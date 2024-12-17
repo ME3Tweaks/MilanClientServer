@@ -60,6 +60,7 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Proxies/SFXGame.hpp
   ${PROJ_FOLDER}/Entry.cpp
   ${PROJ_FOLDER}/Entry.hpp
+  ${PROJ_FOLDER}/Milan.natvis
 )
 
 set (PROJ_LINKS
