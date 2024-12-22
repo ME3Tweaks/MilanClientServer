@@ -34,6 +34,7 @@ endif ()
 list (APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/Build)
 
 include (MilanBuildConfig)
+include (MilanPatchHooks)
 include (MilanTargetUtils)
 
 
@@ -58,6 +59,8 @@ message ("-- Configured output path (utilities):  ${MILAN_OUTPUT_DIRECTORY_UTILI
 
 # ! Project subtrees.
 # ========================================
+
+mln_patching_init ()
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_EXTERNAL})
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_EXTERNAL})
