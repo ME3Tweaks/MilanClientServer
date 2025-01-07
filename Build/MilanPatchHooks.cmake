@@ -3,16 +3,26 @@
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
+# Property to preserve configuration time on initialization.
+set_property (GLOBAL PROPERTY MLN_CONFIGURE_TIMESTAMP)
+
+
 # ! Creates files which will be patched at build-time.
 # ========================================
 
 function (mln_patching_init)
+
+  # Fetch current timestamp.
+  string (TIMESTAMP PATCHING_TIMESTAMP "%Y%m%d%H%M%S")
+  set (GLOBAL PROPERTY MLN_CONFIGURE_TIMESTAMP "${PATCHING_TIMESTAMP}")
+  message ("-- Patching timestamp: ${PATCHING_TIMESTAMP}")
 
   set (PATCHING_INDEX_PATH "${CMAKE_SOURCE_DIR}/Patching/_index.list")
 
   message ("-- Parsing patch index list (${PATCHING_INDEX_PATH}):")
   file (STRINGS ${PATCHING_INDEX_PATH} PATCHING_INDEX_LIST)
 
+  # Parse patch manifest.
   foreach (PATCHING_LINE IN LISTS PATCHING_INDEX_LIST)
     if (PATCHING_LINE MATCHES "^([^:]+):([^:]+):([^:]+):([^:]+)$")
       set (PATCHING_PATCHED_MODULE "${CMAKE_SOURCE_DIR}/Build/Patched/${CMAKE_MATCH_2}/_submodule.name")
@@ -53,7 +63,7 @@ function (add_library target)
   set (IS_PATCH_CANDIDATE OFF)
   set (MLN_AL_THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/ThirdParty")
 
-  # Only consider simplest types, without any imported targets, ...
+  # Only consider the simplest types, without any imported targets, ...
   if ((MLN_AL_SHARED OR MLN_AL_STATIC) AND NOT MLN_AL_GLOBAL AND NOT MLN_AL_IMPORTED)
     # ... for targets within third party dependency folder ...
     string (FIND ${CMAKE_CURRENT_SOURCE_DIR} ${MLN_AL_THIRDPARTY_DIR} MLN_AL_THIRDPARTY_POS)

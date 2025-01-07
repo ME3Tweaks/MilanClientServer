@@ -6,5 +6,4 @@ members = [
     "Crates/milan_runtime",
     "MilanCore/client_core",
     "MilanCore/client_ffi",
-    "Patching/mln_patcher",
 ]
