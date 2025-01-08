@@ -104,6 +104,8 @@ function (add_library target)
           -Dpatched:FILEPATH="${MLN_AL_PARAM_PATCHED}"
           -Dpatch:FILEPATH="${MLN_AL_PARAM_PATCH}"
           -Dcwd:FILEPATH="${CMAKE_SOURCE_DIR}/Build/Patched/${ARGV0}"
+          -Dmodule="${ARGV0}"
+          -Droot="${CMAKE_SOURCE_DIR}"
           -P "${CMAKE_SOURCE_DIR}/Build/MilanPatchScript.cmake"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/Build/Patched/${ARGV0}"
       )

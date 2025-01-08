@@ -6,7 +6,9 @@
 #   ${original} = full path to the source file
 #   ${patched} = full path to the transient patched file
 #   ${patch} = full path to the patch diff
-#   ${cwd} = intended workind directory
+#   ${cwd} = intended working directory
+#   ${module} = name of the submodule for this patch
+#   ${root} = top-level cmake source directory
 
 
 # Enable execute_process(..) calls to log to stdout.
@@ -38,10 +40,16 @@ if (NOT copy_result EQUAL 0)
 endif ()
 
 
+# Run git from root and pass this to fix things up.
+set (stfu_directory "Build\\Patched\\${module}")
+
+
 # Try to apply the patch.
 execute_process (
-  COMMAND ${GIT_EXECUTABLE} apply --ignore-whitespace --verbose "${patch_transient}"
-  WORKING_DIRECTORY ${cwd}
+  COMMAND ${GIT_EXECUTABLE} apply
+    --ignore-whitespace --unsafe-paths --directory=${stfu_directory}
+    --verbose ".\\${stfu_directory}\\${patch_transient}"
+  WORKING_DIRECTORY ${root}
   RESULT_VARIABLE first_result
   ERROR_VARIABLE first_error
   TIMEOUT 2
@@ -50,8 +58,10 @@ execute_process (
 if (NOT first_result EQUAL 0)
   # Check if the patch was already applied.
   execute_process (
-    COMMAND ${GIT_EXECUTABLE} apply --ignore-whitespace --check --reverse --verbose "${patch_transient}"
-    WORKING_DIRECTORY ${cwd}
+    COMMAND ${GIT_EXECUTABLE} apply
+      --ignore-whitespace --unsafe-paths --directory=${stfu_directory}
+      --verbose --check --reverse ".\\${stfu_directory}\\${patch_transient}"
+    WORKING_DIRECTORY ${root}
     RESULT_VARIABLE second_result
     ERROR_VARIABLE second_error
     TIMEOUT 2
