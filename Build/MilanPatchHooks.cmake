@@ -3,16 +3,16 @@
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
-# Property to preserve configuration time on initialization.
-set_property (GLOBAL PROPERTY MLN_CONFIGURE_TIMESTAMP)
-
-
 # ! Creates files which will be patched at build-time.
 # ========================================
 
 function (mln_patching_init)
 
+  message ("-- Cleaning up Build/Patched directory")
+  file (REMOVE_RECURSE "${CMAKE_SOURCE_DIR}/Build/Patched/")
+
   set (PATCHING_INDEX_PATH "${CMAKE_SOURCE_DIR}/Patching/_index.list")
+  set_property (DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${PATCHING_INDEX_PATH})
 
   message ("-- Parsing patch index list (${PATCHING_INDEX_PATH}):")
   file (STRINGS ${PATCHING_INDEX_PATH} PATCHING_INDEX_LIST)
