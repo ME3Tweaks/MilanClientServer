@@ -1,5 +1,5 @@
 diff --git a/Src/LESDK/Includes.LE3.hpp b/Src/LESDK/Includes.LE3.hpp
-index 918a298..83214b1 100644
+index 5710724..38525b1 100644
 --- a/Src/LESDK/Includes.LE3.hpp
 +++ b/Src/LESDK/Includes.LE3.hpp
 @@ -63,9 +63,9 @@ static_assert(sizeof(UClass) == 0x1F8);
