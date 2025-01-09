@@ -1,0 +1,15 @@
+diff --git a/Src/LESDK/Includes.LE3.hpp b/Src/LESDK/Includes.LE3.hpp
+index 5710724..38525b1 100644
+--- a/Src/LESDK/Includes.LE3.hpp
++++ b/Src/LESDK/Includes.LE3.hpp
+@@ -63,9 +63,9 @@ static_assert(sizeof(UClass) == 0x1F8);
+ static_assert(offsetof(UClass, ClassFlags) == 0x0100);
+ static_assert(offsetof(UClass, ClassCastFlags) == 0x0104);
+ static_assert(offsetof(UClass, ClassUnique) == 0x0108);
+ static_assert(offsetof(UClass, ClassWithin) == 0x010C);
+ static_assert(offsetof(UClass, ClassConfigName) == 0x0114);
+ static_assert(offsetof(UClass, ClassReps) == 0x011C);
+ static_assert(offsetof(UClass, NetFields) == 0x012C);
+ static_assert(offsetof(UClass, ClassDefaultObject) == 0x013C);
+-static_assert(offsetof(UClass, UnknownData144) == 0x0144);
++//static_assert(offsetof(UClass, UnknownData144) == 0x0144);

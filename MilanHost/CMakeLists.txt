@@ -55,9 +55,6 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Milan/NetProfStream.hpp
   ${PROJ_FOLDER}/Milan/Streams.cpp
   ${PROJ_FOLDER}/Milan/Streams.hpp
-  ${PROJ_FOLDER}/Proxies/Core.hpp
-  ${PROJ_FOLDER}/Proxies/Engine.hpp
-  ${PROJ_FOLDER}/Proxies/SFXGame.hpp
   ${PROJ_FOLDER}/Entry.cpp
   ${PROJ_FOLDER}/Entry.hpp
   ${PROJ_FOLDER}/Milan.natvis

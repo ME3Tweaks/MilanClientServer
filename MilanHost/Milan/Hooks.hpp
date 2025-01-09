@@ -9,7 +9,6 @@
 #include <imgui.h>
 
 #include <LESDK/Headers.hpp>
-#include "Proxies/Engine.hpp"
 
 
 // ! Enable / disable definitions.

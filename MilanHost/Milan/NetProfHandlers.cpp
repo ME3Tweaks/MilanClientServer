@@ -5,7 +5,6 @@
 #include "Milan/Misc.hpp"
 #include "Milan/NetProfDecls.hpp"
 #include "Milan/NetProfStream.hpp"
-#include "Proxies/Engine.hpp"
 
 
 namespace
@@ -29,9 +28,10 @@ namespace
         }
     }
 
-    FPackageInfo const* LookupPackageInfo(UTcpipConnection_Proxy* const Connection, FGuid* const Guid)
+    FPackageInfo const* LookupPackageInfo(UTcpipConnection* const Connection, FGuid* const Guid)
     {
-        for (FPackageInfo const& Package : reinterpret_cast<UPackageMap_Proxy*>(Connection->PackageMap)->List)
+        //for (FPackageInfo const& Package : reinterpret_cast<UPackageMap_Proxy*>(Connection->PackageMap)->List)
+        for (FPackageInfo const& Package : Connection->PackageMap->List)
         {
             auto const PackGuid = &Package.Guid;
             if (PackGuid->A == Guid->A && PackGuid->B == Guid->B && PackGuid->C == Guid->C && PackGuid->D == Guid->D)
@@ -41,7 +41,7 @@ namespace
         return nullptr;
     }
 
-    FString LookupPackageName(UTcpipConnection_Proxy* const Connection, FGuid* const Guid)
+    FString LookupPackageName(UTcpipConnection* const Connection, FGuid* const Guid)
     {
         auto const Info = LookupPackageInfo(Connection, Guid);
         return Info ? Info->PackageName.ToString() : L"n/a";
@@ -54,14 +54,12 @@ namespace
 
 void MlnUNetConnectionReceivedPacket1_Handler(UNetConnection* const Connection, FInBunch* const Bunch)
 {
-    auto const NetConn = reinterpret_cast<UNetConnection_Proxy*>(Connection);
-    auto const Channel = reinterpret_cast<UChannel_Proxy*>(NetConn->Channels[Bunch->ChannelIndex]);
-
+    auto const Channel = Connection->Channels[Bunch->ChannelIndex];
 
 #if !defined(_FINAL_RELEASE) && false
     if (Channel && Channel->IsA<UActorChannel>())
     {
-        auto const ActorChannel = reinterpret_cast<UActorChannel_Proxy*>(Channel);
+        auto const ActorChannel = reinterpret_cast<UActorChannel*>(Channel);
         MILAN_TRACEW(ELOG_NetHooksTrace, L"UNetConnection::ReceivedPacket: channel = %s, actor = %s",
             *Channel->GetName(), ActorChannel->Actor ? *ActorChannel->Actor->GetName() : L"n/a");
     }
@@ -73,7 +71,7 @@ void MlnUNetConnectionReceivedPacket1_Handler(UNetConnection* const Connection, 
         MILAN_WARNW(ELOG_NetHooks, L"UNetConnection::ReceivedPacket: unreliable bunch before open (channel = %s)", *ChannelDesc);
     }
 
-    if (Bunch->bReliable && Bunch->ChannelSequence <= NetConn->InReliable[Bunch->ChannelIndex])
+    if (Bunch->bReliable && Bunch->ChannelSequence <= Connection->InReliable[Bunch->ChannelIndex])
     {
         auto const ChannelDesc = Channel ? Channel->GetName() : L"n/a";
         MILAN_WARNW(ELOG_NetHooks, L"UNetConnection::ReceivedPacket: reliable bunch outdated (channel = %s)", *ChannelDesc);
@@ -92,13 +90,12 @@ void MlnUChannelSendBunch2_Handler(UChannel* const Channel, FOutBunch* const Bun
 {
     // Bunches here and in the 1st handler might not be the same!
 
-    auto* const ChannelProxy = reinterpret_cast<UChannel_Proxy*>(Channel);
-    auto* const ConnectionProxy = reinterpret_cast<UTcpipConnection_Proxy*>(ChannelProxy->Connection);
-    MILAN_UNUSED_3(Channel, ChannelProxy, Bunch);
+    auto* const Connection = Channel->Connection->Cast<UTcpipConnection>();
+    MILAN_UNUSED_2(Channel, Bunch);
 
     auto const BitsSent = Bunch->Num - SendBunch1_BitsWrittenBefore;
     MILAN_TRACEW(ELOG_NetHooksTrace, L"UChannel::SendBunch: %s, remote = %s, bits = %d",
-        *Channel->StaticName(), *ConnectionProxy->FormatRemoteAddress(), BitsSent);
+        *Channel->StaticName(), *Connection->FormatRemoteAddress(), BitsSent);
 
     NETPROF(CaptureSendBunch(Channel, BitsSent));
     SendBunch1_BitsWrittenBefore = 0;
@@ -112,7 +109,7 @@ void MlnUActorChannelReplicateActor1_Handler(UActorChannel* const Channel, AActo
     MILAN_UNUSED_2(Channel, Actor);
     MILAN_TRACEW(ELOG_NetHooksRepl, L"UActorChannel::ReplicateActor: %s, actor = %s", *Channel->GetName(), *Actor->GetName());
 
-    NETPROF(CaptureActorReplication(reinterpret_cast<UActorChannel_Proxy*>(Channel)->Connection, Actor));
+    NETPROF(CaptureActorReplication(Channel->Connection, Actor));
 }
 
 void MlnUActorChannelReplicateActor2_Handler(FOutBunch* const Bunch)
@@ -127,7 +124,7 @@ void MlnUActorChannelReplicateActor3_Handler(UActorChannel* const Channel, UProp
     auto const BitsWritten = Bunch->Num - ReplicateActor_BitsWrittenBeforeProp;
     MILAN_TRACEW(ELOG_NetHooksRepl, L"UActorChannel::ReplicateActor: %s, property = %s, bits = %d", *Channel->GetName(), *Property->GetName(), BitsWritten);
 
-    NETPROF(CapturePropertyReplication(reinterpret_cast<UActorChannel_Proxy*>(Channel)->Connection, Property, BitsWritten));
+    NETPROF(CapturePropertyReplication(Channel->Connection, Property, BitsWritten));
     ReplicateActor_BitsWrittenBeforeProp = 0;
 }
 
@@ -135,18 +132,17 @@ void MlnInternalReplicateFunction1_Handler(UActorChannel* const Channel, FOutBun
 {
     MILAN_UNUSED_3(Channel, Bunch, Function);
 
-    auto* const ActorChan = reinterpret_cast<UActorChannel_Proxy*>(Channel);
     MILAN_TRACEW(ELOG_NetHooksRepl, L"InternalReplicateFunction: bits = %d, actor = %s, func = %s",
         Bunch ? Bunch->Num : -1,
-        (ActorChan && ActorChan->Actor) ? *ActorChan->Actor->StaticName() : L"???",
+        (Channel && Channel->Actor) ? *Channel->Actor->StaticName() : L"???",
         Function ? *Function->StaticName() : L"???");
 
-    NETPROF(CaptureRemoteFunction(ActorChan->Connection, ActorChan->Actor, Function, Bunch->Num));
+    NETPROF(CaptureRemoteFunction(Channel->Connection, Channel->Actor, Function, Bunch->Num));
 }
 
 void MlnSeamlessTravelTick1_Handler(FURL* const PendingUrl)
 {
-    FURL* const WorldUrl = &reinterpret_cast<UWorld_Proxy*>(*GWorld)->URL;
+    FURL* const WorldUrl = &(*GWorld)->URL;
     TraceUrl(ELOG_NetHooks, L"SeamlessTravelTick / world", WorldUrl);
     TraceUrl(ELOG_NetHooks, L"SeamlessTravelTick / pending", PendingUrl);
     NETPROF(CaptureLevelStart(PendingUrl));
@@ -155,17 +151,16 @@ void MlnSeamlessTravelTick1_Handler(FURL* const PendingUrl)
 
 void MlnUTcpNetDriverTickDispatch_Handler(UTcpipConnection* const Connection)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
-
-    MILAN_TRACEW(ELOG_NetHooks, L"FNetworkNotify::NotifyAcceptedConnection: %s", *TcpConn->FormatRemoteAddress());
+    MILAN_TRACEW(ELOG_NetHooks, L"FNetworkNotify::NotifyAcceptedConnection: %s", *Connection->FormatRemoteAddress());
     NETPROF(CaptureSessionEvent(Connection, L"ACCEPT", L""));
-
-    MILAN_UNUSED_2(TcpConn, Connection);
+    MILAN_UNUSED(Connection);
 }
 
 void MlnUWorldNotifyControlMessageHello_Handler(UNetConnection* const Connection, BYTE const Platform, INT const StaticVersion, INT const DynamicVersion)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_TRACEW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Hello): Remote = %s, Platform = %hhu, StaticVersion = %#x, DynamicVersion = %#x", *TcpConn->FormatRemoteAddress(), Platform, Byteswap(StaticVersion), Byteswap(DynamicVersion));
     NETPROF(CaptureControlMessage(Connection, false, NM_Hello, FString::Printf(L"Platform=%hhu, StaticVersion=%#x, DynamicVersion=%#x", Platform, StaticVersion, DynamicVersion)));
 
@@ -174,7 +169,9 @@ void MlnUWorldNotifyControlMessageHello_Handler(UNetConnection* const Connection
 
 void MlnUWorldNotifyControlMessageNetspeed_Handler(UNetConnection* const Connection, INT const Speed, INT const ClampedSpeed)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_TRACEW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Netspeed): Remote = %s, Speed = %d, Clamped = %d", *TcpConn->FormatRemoteAddress(), Speed, ClampedSpeed);
     NETPROF(CaptureControlMessage(Connection, false, NM_Netspeed, FString::Printf(L"Speed=%d, Clamped=%d", Speed, ClampedSpeed)));
     MILAN_UNUSED_4(Connection, TcpConn, Speed, ClampedSpeed);
@@ -182,7 +179,9 @@ void MlnUWorldNotifyControlMessageNetspeed_Handler(UNetConnection* const Connect
 
 void MlnUWorldNotifyControlMessageLogin_Handler(UNetConnection* const Connection, FString* const LoginError)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_TRACEW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Login): Remote = %s, ClientResponse = %s, RequestURL = %s, LoginError = %s",
         *TcpConn->FormatRemoteAddress(), *TcpConn->ClientResponse, *TcpConn->RequestURL, LoginError->Chars());
     NETPROF(CaptureControlMessage(Connection, false, NM_Login,
@@ -193,7 +192,9 @@ void MlnUWorldNotifyControlMessageLogin_Handler(UNetConnection* const Connection
 
 void MlnUWorldNotifyControlMessageFailure_Handler(UNetConnection* const Connection, FString* const Error)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_ERRORW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Failure): Remote = %s, Error = %s", *TcpConn->FormatRemoteAddress(), Error->Chars());
     NETPROF(CaptureControlMessage(Connection, false, NM_Failure, *Error));
 
@@ -203,7 +204,9 @@ void MlnUWorldNotifyControlMessageFailure_Handler(UNetConnection* const Connecti
 
 void MlnUWorldNotifyControlMessageUses_Handler(UNetConnection* const Connection, FPackageInfo* const Package)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_TRACEW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Uses): Remote = %s, Package = %s, Guid = %s (%s), Gen = %d",
         *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *FormatGuid(Package->Guid), *LookupPackageName(TcpConn, &Package->Guid), Package->RemoteGeneration);
 
@@ -216,7 +219,9 @@ void MlnUWorldNotifyControlMessageUses_Handler(UNetConnection* const Connection,
 
 void MlnUWorldNotifyControlMessageHave_Handler(UNetConnection* const Connection, FGuid* const Guid, INT const Generation)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_TRACEW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Have): Remote = %s, Guid = %s (%s), Gen = %d",
         *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid), Generation);
 
@@ -228,7 +233,9 @@ void MlnUWorldNotifyControlMessageHave_Handler(UNetConnection* const Connection,
 
 void MlnUWorldNotifyControlMessageJoin_Handler(UNetConnection* const Connection, QWORD* const UniqueId, FString* const SpawnError)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
 
     NETPROF(CaptureControlMessage(Connection, false, NM_Join, FString::Printf(L"UniqueId=%llu, SpawnError=%s", *UniqueId, **SpawnError)));
 
@@ -249,7 +256,9 @@ void MlnUWorldNotifyControlMessageJoin_Handler(UNetConnection* const Connection,
 
 void MlnUWorldNotifyControlMessageAbort_Handler(UNetConnection* const Connection, FGuid* const Guid)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_WARNW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Abort): Remote = %s, Guid = %s (%s)",
         *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid));
 
@@ -261,7 +270,9 @@ void MlnUWorldNotifyControlMessageAbort_Handler(UNetConnection* const Connection
 
 void MlnUWorldNotifyControlMessageUnload_Handler(UNetConnection* const Connection, FGuid* const Guid)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_TRACEW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Unload): Remote = %s, Guid = %s (%s)",
         *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid));
 
@@ -273,7 +284,9 @@ void MlnUWorldNotifyControlMessageUnload_Handler(UNetConnection* const Connectio
 
 void MlnUWorldNotifyControlMessageUnknown19_Handler(UNetConnection* const Connection, INT const UnknownCrc, FInBunch* const Bunch)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_TRACEW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Unk19_DLM): Remote = %s, DLI CRC32 = 0x%08x", *TcpConn->FormatRemoteAddress(), UnknownCrc);
 
     NETPROF(CaptureControlMessage(Connection, false, NM_Unk19_DLM, FString::Printf(L"CRC32=0x%08x", UnknownCrc)));
@@ -282,7 +295,9 @@ void MlnUWorldNotifyControlMessageUnknown19_Handler(UNetConnection* const Connec
 
 void MlnUWorldNotifyControlMessageUnknown21_Handler(UNetConnection* const Connection, FGuid* const Guid, INT const Flag, FInBunch* const Bunch)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_TRACEW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Unk21_VIS): Remote = %s, Guid = %s (%s), Flag = %d",
         *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid), Flag);
 
@@ -294,7 +309,9 @@ void MlnUWorldNotifyControlMessageUnknown21_Handler(UNetConnection* const Connec
 
 void MlnUNetPendingLevelNotifyControlMessageWelcome_Handler(UNetConnection* const Connection, FString* const Map, FString* const GameName)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_TRACEW(ELOG_NetHooks, L"UNetPendingLevel::NotifyControlMessage (Welcome): Remote = %s, Map = %s, GameName = %s",
         *TcpConn->FormatRemoteAddress(), Map->Chars(), GameName->Chars());
     NETPROF(CaptureControlMessage(Connection, true, NM_Welcome, FString::Printf(L"Map=%s, GameName=%s", **Map, **GameName)));
@@ -303,7 +320,9 @@ void MlnUNetPendingLevelNotifyControlMessageWelcome_Handler(UNetConnection* cons
 
 void MlnUNetPendingLevelNotifyControlMessageUpgrade_Handler(UNetConnection* const Connection, INT const StaticVersion, INT const DynamicVersion)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_ERRORW(ELOG_NetHooks, L"UNetPendingLevel::NotifyControlMessage (Upgrade): Remote = %s, StaticVersion = 0x%08X, DynamicVersion = 0x%08X",
         *TcpConn->FormatRemoteAddress(), StaticVersion, DynamicVersion);
 
@@ -315,7 +334,9 @@ void MlnUNetPendingLevelNotifyControlMessageUpgrade_Handler(UNetConnection* cons
 
 void MlnUNetPendingLevelNotifyControlMessageChallenge_Handler(UNetConnection* const Connection, INT const Version, FString* const Challenge)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_TRACEW(ELOG_NetHooks, L"UNetPendingLevel::NotifyControlMessage (Challenge): Remote = %s, Version = %d, Challenge = %s",
         *TcpConn->FormatRemoteAddress(), Version, Challenge->Chars());
     NETPROF(CaptureControlMessage(Connection, true, NM_Challenge, FString::Printf(L"Version=%d, Challenge=%s", Version, **Challenge)));
@@ -324,7 +345,9 @@ void MlnUNetPendingLevelNotifyControlMessageChallenge_Handler(UNetConnection* co
 
 void MlnUNetPendingLevelNotifyControlMessageFailure_Handler(UNetConnection* const Connection, FString* const Error)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_TRACEW(ELOG_NetHooks, L"UNetPendingLevel::NotifyControlMessage (Failure): Remote = %s, Error = %s", *TcpConn->FormatRemoteAddress(), Error->Chars());
     NETPROF(CaptureControlMessage(Connection, true, NM_Failure, *Error));
     MILAN_UNUSED_3(Connection, TcpConn, Error);
@@ -332,7 +355,9 @@ void MlnUNetPendingLevelNotifyControlMessageFailure_Handler(UNetConnection* cons
 
 void MlnUNetPendingLevelNotifyControlMessageUses_Handler(UNetConnection* const Connection, FPackageInfo* const Package)
 {
-    auto const  TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     auto const  Resolved = LookupPackageName(TcpConn, &Package->Guid);
     FGuid       FoundGuid{};
 
@@ -353,8 +378,7 @@ void MlnUNetPendingLevelNotifyControlMessageUses_Handler(UNetConnection* const C
             break;
         }
 #else
-        auto* const Cache = reinterpret_cast<UGuidCache_Proxy*>(*Iter);
-        auto* const Guid = Cache->PackageGuids.Find(SFXName(Package->PackageName));
+        auto* const Guid = (*Iter)->PackageGuids.Find(SFXName(Package->PackageName));
 
         if (Guid != nullptr)
         {
@@ -406,7 +430,9 @@ void MlnUNetPendingLevelNotifyControlMessageDlMngr_Handler(FString* const Class,
 
 void MlnUNetPendingLevelNotifyControlMessageUnload_Handler(UNetConnection* const Connection, FGuid* const Guid)
 {
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_CHECKW(TcpConn != nullptr, L"");
+
     MILAN_TRACEW(ELOG_NetHooks, L"UNetPendingLevel::NotifyControlMessage (Unload): Remote = %s, Guid = %s (%s)",
         *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid));
 

@@ -438,19 +438,16 @@ void UActorChannel_ReplicateActor_hook(UActorChannel* const Context)
 {
     MILAN_CHECKW(Context != nullptr, L"");
 
-    auto* const Channel = reinterpret_cast<UActorChannel_Proxy*>(Context);
-    MILAN_UNUSED(Channel);
-
     if (false)
     {
         MILAN_DEBUGW(ELOG_NetHooksTrace, L"UActorChannel::ReplicateActor:");
-        MILAN_DEBUGW(ELOG_NetHooksTrace, L"  Channel: %s", *Channel->StaticFullName());
+        MILAN_DEBUGW(ELOG_NetHooksTrace, L"  Channel: %s", *Context->StaticFullName());
         MILAN_DEBUGW(ELOG_NetHooksTrace, L"    Props: OpenedLocally=%d, OpenPacketId=%d, NumInRec=%d, NumOutRec=%d, NegotiatedVer=%d",
-            Channel->OpenedLocally, Channel->OpenPacketId, Channel->NumInRec, Channel->NumOutRec, Channel->NegotiatedVer);
-        MILAN_DEBUGW(ELOG_NetHooksTrace, L"  Actor: %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
-        if (Channel->Actor != nullptr)
+            Context->OpenedLocally, Context->OpenPacketId, Context->NumInRec, Context->NumOutRec, Context->NegotiatedVer);
+        MILAN_DEBUGW(ELOG_NetHooksTrace, L"  Actor: %s", Context->Actor ? *Context->Actor->StaticFullName() : L"n/a");
+        if (Context->Actor != nullptr)
         {
-            auto* const Actor = Channel->Actor;
+            auto* const Actor = Context->Actor;
             MILAN_DEBUGW(ELOG_NetHooksTrace, L"    Props: bNetOwner=%d, bNetInitial=%d Top=%s",
                 !!Actor->bNetOwner, !!Actor->bNetInitial, *Actor->StaticName());
         }
@@ -469,13 +466,12 @@ void UActorChannel_SetChannelActor_hook(UActorChannel* const Context, AActor* co
 t_UGuidCache_LookupPackageGuid* UGuidCache_LookupPackageGuid_orig = nullptr;
 int UGuidCache_LookupPackageGuid_hook(UGuidCache* const Context, SFXName const Package, FGuid* const OutGuid)
 {
-    auto const Cache = reinterpret_cast<UGuidCache_Proxy*>(Context);
     auto const bFound = (*UGuidCache_LookupPackageGuid_orig)(Context, Package, OutGuid);
 
     //if (!bFound)  [[unlikely]]
     //{
     //    MILAN_WARNW(ELOG_NetHooksTrace, L"UGuidCache::LookupPackageGuid failed for cache = '%s', package = '%s'",
-    //        *Cache->Filename, *Package.ToString());
+    //        *Context->Filename, *Package.ToString());
     //}
 
 #if defined(ENABLE_GUIDCACHE_OVERRIDE) && ENABLE_GUIDCACHE_OVERRIDE
@@ -494,7 +490,6 @@ int UGuidCache_LookupPackageGuid_hook(UGuidCache* const Context, SFXName const P
 
 #endif
 
-    MILAN_UNUSED(Cache);
     return bFound;
 }
 
@@ -504,10 +499,6 @@ int UNetConnection_ClientSupportsLevel_hook(UNetConnection* const Context, UObje
     int const Return = (*UNetConnection_ClientSupportsLevel_orig)(Context, Object);
 
     {
-        // This is left so that we can see PackageMap fields in an attached debugger.
-        auto* const Connection = reinterpret_cast<UNetConnection_Proxy*>(Context);
-        MILAN_UNUSED(Connection);
-
         if (Return != 0)
         {
             //MILAN_TRACEW(ELOG_NetHooksTrace, L"UNetConnection::ClientSupportsLevel: %s (%s) => TRUE",
@@ -526,12 +517,11 @@ int UNetConnection_ClientSupportsLevel_hook(UNetConnection* const Context, UObje
 t_UNetConnection_Close* UNetConnection_Close_orig = nullptr;
 void UNetConnection_Close_hook(UNetConnection* const Context)
 {
-    auto* const Connection = reinterpret_cast<UNetConnection_Proxy*>(Context);
-    if (Connection->Driver != nullptr && Connection->ConnectionState != USOCK_Closed)
+    if (Context->Driver != nullptr && Context->ConnectionState != USOCK_Closed)
     {
         FString RemoteAddress{};
 
-        auto* const TcpipConnection = reinterpret_cast<UTcpipConnection_Proxy*>(Context->Cast<UTcpipConnection>());
+        auto* const TcpipConnection = Context->Cast<UTcpipConnection>();
         if (TcpipConnection != nullptr)
         {
             auto const& Address = TcpipConnection->Address;
@@ -579,9 +569,9 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
     int const Return = (*UPackageMap_SupportsObject_orig)(Context, Object);
 
     {
-        // This is left so that we can see PackageMap fields in an attached debugger.
-        auto* const PackageMap = reinterpret_cast<UPackageMap_Proxy*>(Context);
-        MILAN_UNUSED(PackageMap);
+        //// This is left so that we can see PackageMap fields in an attached debugger.
+        //auto* const PackageMap = reinterpret_cast<UPackageMap_Proxy*>(Context);
+        //MILAN_UNUSED(PackageMap);
 
         if (Return != 0)
         {
@@ -605,7 +595,7 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
                 return Return;
             }
 
-            int const* const ListIndex = PackageMap->PackageMapList.Find(SFXName(OutermostPackage->Name));
+            int const* const ListIndex = Context->PackageMapList.Find(SFXName(OutermostPackage->Name));
             if (ListIndex == nullptr)
             {
                 // Uncomment this variable to see available packages in Visual Studio debugger.
@@ -616,7 +606,7 @@ int UPackageMap_SupportsObject_hook(UPackageMap* const Context, UObject* const O
                 return Return;
             }
 
-            FPackageInfo const& PackageInfo = PackageMap->List((UINT)*ListIndex);
+            FPackageInfo const& PackageInfo = Context->List((UINT)*ListIndex);
             if (Object->NetIndex >= PackageInfo.ObjectCount)
             {
                 MILAN_WARNW(ELOG_NetHooks, L"UPackageMap::SupportsObject: %s => FALSE (NetIndex=%d >= PackageInfo.ObjectCount=%d)",
@@ -645,13 +635,13 @@ int UPackageMap_SerializeObject_hook(UPackageMap* const Context, FArchive* const
         // default or archetype objects
         if (*Object != nullptr && ((*Object)->ObjectFlags & 0x600) != 0)
         {
-            auto const PackageMap = reinterpret_cast<UPackageMap_Proxy*>(Context);
+            //auto const PackageMap = reinterpret_cast<UPackageMap_Proxy*>(Context);
             auto const Outermost = GetOutermostOf(*Object);
-            auto const Index = PackageMap->PackageMapList.Find(SFXName(Outermost->Name));
+            auto const Index = Context->PackageMapList.Find(SFXName(Outermost->Name));
 
             FPackageInfo const* Info = nullptr;
             if (Index != nullptr)
-                Info = &PackageMap->List(*Index);
+                Info = &Context->List(*Index);
 
             MILAN_DEBUGW(ELOG_NetHooks, L"  NetIndex = %d, Outermost = %s, Index = %s, ObjBase = %s, ObjCount = %s",
                 (*Object)->NetIndex,
@@ -760,15 +750,14 @@ int UWorld_ServerTickClients_hook(UWorld* const Context, float const Delta)
 {
     if (false)
     {
-        auto* const World = reinterpret_cast<UWorld_Proxy*>(Context);
         auto* const WorldInfo = (*GEngine)->GetCurrentWorldInfo();
 
         MILAN_WARNW(ELOG_NetHooks, L"UWorld::ServerTickClients: delta = %f", Delta);
         MILAN_WARNW(ELOG_NetHooks, L"--------------------------------------");
 
-        for (int LevelIndex = 0; LevelIndex < (int)World->Levels.Count(); ++LevelIndex)
+        for (int LevelIndex = 0; LevelIndex < (int)Context->Levels.Count(); ++LevelIndex)
         {
-            auto* const Level = reinterpret_cast<ULevel_Proxy*>(World->Levels(LevelIndex));
+            auto* const Level = Context->Levels(LevelIndex);
             if (Level == nullptr) continue;
 
             MILAN_DEBUGW(ELOG_NetHooks, L" Level(%d): %s", LevelIndex, *Level->StaticFullName());

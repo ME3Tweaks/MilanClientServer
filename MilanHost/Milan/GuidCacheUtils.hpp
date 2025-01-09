@@ -12,7 +12,6 @@
 #include "Containers/string.hpp"
 #include "Containers/unordered_map.hpp"
 #include "Milan/Base.hpp"
-#include "Proxies/Engine.hpp"
 
 
 // TODO: Move this to LExSDKv2!

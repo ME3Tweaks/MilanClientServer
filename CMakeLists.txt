@@ -31,9 +31,10 @@ endif ()
 # ! Build configuration.
 # ========================================
 
-list (APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/Build)
+list (APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR})
 
 include (MilanBuildConfig)
+include (MilanPatchHooks)
 include (MilanTargetUtils)
 
 
@@ -59,17 +60,20 @@ message ("-- Configured output path (utilities):  ${MILAN_OUTPUT_DIRECTORY_UTILI
 # ! Project subtrees.
 # ========================================
 
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_EXTERNAL})
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_EXTERNAL})
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_EXTERNAL})
+mln_patching_apply ()
+mln_patching_setup_tasks ()
+
+set (CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_EXTERNAL})
+set (CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_EXTERNAL})
+set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_EXTERNAL})
 
 add_subdirectory ("ThirdParty")
 
 if (MILAN_BUILD_HOST)
 
-  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
-  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
-  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
+  set (CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
+  set (CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
+  set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
 
   set_property (GLOBAL PROPERTY VS_STARTUP_PROJECT MilanHost)
 
@@ -80,9 +84,9 @@ endif ()
 
 if (MILAN_BUILD_UTILS)
 
-  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
-  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
-  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
+  set (CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
+  set (CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
+  set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
 
   add_subdirectory ("Utilities")
 
@@ -93,14 +97,17 @@ endif ()
 # ========================================
 
 set (REPO_SOURCES
-  Build/.gitignore
-  Build/MilanBuildConfig.cmake
   .editorconfig
   #.gitattributes
   .gitignore
   .gitmodules
   CMakeLists.txt
   CMakePresets.json
+  MilanBuildConfig.cmake
+  MilanPatchApply.cmake
+  MilanPatchCleanup.cmake
+  MilanPatchHooks.cmake
+  MilanTargetUtils.cmake
 )
 
 add_custom_target (Repo SOURCES ${REPO_SOURCES})

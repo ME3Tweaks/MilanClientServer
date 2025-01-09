@@ -1,4 +1,4 @@
-# File:   Build/MilanBuildConfig.cmake
+# File:   MilanBuildConfig.cmake
 # Brief:  Toolchain options for different configurations
 # ========================================
 

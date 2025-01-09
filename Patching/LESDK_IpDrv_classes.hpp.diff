@@ -1,0 +1,41 @@
+diff --git a/Src/LESDK/LE3/IpDrv_classes.hpp b/Src/LESDK/LE3/IpDrv_classes.hpp
+index 3001e64..fca2acb 100644
+--- a/Src/LESDK/LE3/IpDrv_classes.hpp
++++ b/Src/LESDK/LE3/IpDrv_classes.hpp
+@@ -768,25 +768,35 @@ public:
+ 	bool InitHostBeacon ( int InNumTeams, int InNumPlayersPerTeam, int InNumReservations, struct SFXName InSessionName );
+ };
+ 
+ // Class IpDrv.TcpipConnection
+ // 0x0028 (0x6094 - 0x606C)
+ class UTcpipConnection : public UNetConnection
+ {
+ public:
+-	unsigned char                                      UnknownData00[ 0x28 ];                            		// 0x606C (0x0028) MISSED OFFSET
++	//unsigned char                                      UnknownData00[ 0x28 ];                            		// 0x606C (0x0028) MISSED OFFSET
++
++    SOCKADDR_IN                     Address;                    // 0x606C
++    unsigned char                   Unknown_607C[24];           // 0x607C
+ 
+ private:
+ 	static UClass* pClassPointer;
+ 
+ public:
+ 	static UClass* StaticClass();
+ 
++    inline FString FormatRemoteAddress() const
++    {
++        return FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
++    }
++
+ };
++static_assert(offsetof(UTcpipConnection, Address) == 0x606C);
++static_assert(offsetof(UTcpipConnection, Unknown_607C) == 0x607C);
+ 
+ // Class IpDrv.TcpNetDriver
+ // 0x0024 (0x0200 - 0x01DC)
+ class UTcpNetDriver : public UNetDriver
+ {
+ public:
+ 	unsigned long                                      AllowPlayerPortUnreach : 1;                       		// 0x01DC (0x0004) [0x0000000000004000] [0x00000001] ( CPF_Config )
+ 	unsigned long                                      LogPortUnreach : 1;                               		// 0x01E0 (0x0004) [0x0000000000004000] [0x00000001] ( CPF_Config )

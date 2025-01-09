@@ -43,6 +43,6 @@ get_property (CARGO_TARGETS
 foreach (MY_CARGO_TARGET ${CARGO_TARGETS})
   if (MY_CARGO_TARGET MATCHES "cargo-")
     message ("-- Grouping auto-generated '${MY_CARGO_TARGET}' target")
-    set_target_properties (${MY_CARGO_TARGET} PROPERTIES FOLDER "Cargo")
+    set_target_properties (${MY_CARGO_TARGET} PROPERTIES FOLDER "[CARGO]")
   endif ()
 endforeach ()

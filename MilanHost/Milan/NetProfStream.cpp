@@ -2,7 +2,6 @@
 
 #include "Milan/Misc.hpp"
 #include "Milan/NetProfStream.hpp"
-#include "Proxies/Engine.hpp"
 
 
 // ! NetworkCapture implementation.
@@ -128,11 +127,10 @@ void NetworkCapture::CaptureSocketCall(SOCKADDR_IN* const Remote, bool const bSe
 
 void NetworkCapture::CaptureSendBunch(UChannel* const Channel, INT const Bits)
 {
-    auto const Proxy = reinterpret_cast<UChannel_Proxy*>(Channel);
     std::lock_guard<std::mutex> const _(Mutex);
 
     *this << NPRecord::SendBunch;
-    *this << Proxy->Connection << Channel << Bits;
+    *this << Channel->Connection << Channel << Bits;
 }
 
 void NetworkCapture::RecordStringTable_NoLock()
@@ -224,9 +222,8 @@ NetworkCapture& NetworkCapture::operator<<(float const Value)
 NetworkCapture& NetworkCapture::operator<<(UNetConnection* const Connection)
 {
     MILAN_CHECKW(Connection != nullptr, L"");
-    MILAN_VERIFYW(Connection->IsA<UTcpipConnection>(), L"");
-
-    auto const TcpConn = reinterpret_cast<UTcpipConnection_Proxy*>(Connection);
+    auto const TcpConn = Connection->Cast<UTcpipConnection>();
+    MILAN_VERIFYW(TcpConn != nullptr, L"");
     return *this << &TcpConn->Address;
 }
 
