@@ -1,4 +1,4 @@
-# File:   Build/MilanPatchHooks.cmake
+# File:   MilanPatchHooks.cmake
 # Brief:  Some key logic for sdk patcher.
 # See:    Based on https://github.com/scivision/cmake-patch-file.
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -117,12 +117,12 @@ endfunction ()
 function (mln_patching_setup_tasks)
 
   add_custom_target (APPLY_PATCHES
-    COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/Build/MilanPatchApply.cmake"
+    COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/MilanPatchApply.cmake"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   )
 
   add_custom_target (CLEANUP_PATCHES
-    COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/Build/MilanPatchCleanup.cmake"
+    COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/MilanPatchCleanup.cmake"
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   )
 

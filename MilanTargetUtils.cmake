@@ -1,4 +1,4 @@
-# File:   Build/MilanTargetUtils.cmake
+# File:   MilanTargetUtils.cmake
 # Brief:  Auxiliary logic for CMake targets.
 # ========================================
 

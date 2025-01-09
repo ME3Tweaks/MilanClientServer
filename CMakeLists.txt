@@ -31,7 +31,7 @@ endif ()
 # ! Build configuration.
 # ========================================
 
-list (APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/Build)
+list (APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR})
 
 include (MilanBuildConfig)
 include (MilanPatchHooks)
@@ -97,14 +97,17 @@ endif ()
 # ========================================
 
 set (REPO_SOURCES
-  Build/.gitignore
-  Build/MilanBuildConfig.cmake
   .editorconfig
   #.gitattributes
   .gitignore
   .gitmodules
   CMakeLists.txt
   CMakePresets.json
+  MilanBuildConfig.cmake
+  MilanPatchApply.cmake
+  MilanPatchCleanup.cmake
+  MilanPatchHooks.cmake
+  MilanTargetUtils.cmake
 )
 
 add_custom_target (Repo SOURCES ${REPO_SOURCES})
