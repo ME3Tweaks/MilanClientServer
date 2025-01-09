@@ -8,7 +8,6 @@
 
 #include <string_view>
 #include <LESDK/Headers.hpp>
-#include "Proxies/Engine.hpp"
 
 
 // ! Enumerations.
@@ -147,4 +146,4 @@ void ProfilePlayerControllers(MilanCanvasDrawer& Drawer, UObject* Target);
 void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* Target);
 void ProfileWorldInfo(MilanCanvasDrawer& Drawer, UObject* Target);
 
-void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel_Proxy* Channel, unsigned int Index);
+void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel* Channel, unsigned int Index);

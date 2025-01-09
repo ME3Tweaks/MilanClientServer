@@ -5,7 +5,6 @@
 #include <fstream>
 
 #include "Milan/Misc.hpp"
-#include "Proxies/Engine.hpp"
 
 
 
@@ -112,9 +111,7 @@ AWorldInfo* GlobalWorldInfo() noexcept
 {
     if (GWorld == nullptr || *GWorld == nullptr) return nullptr;
 
-    auto* const World = reinterpret_cast<UWorld_Proxy*>(*GWorld);
-    auto* const Level = reinterpret_cast<ULevel_Proxy*>(World->PersistentLevel);
-
+    auto* const Level = (*GWorld)->PersistentLevel;
     return (Level != nullptr && Level->Actors.Count() > 0)
         ? reinterpret_cast<AWorldInfo*>(Level->Actors(0))
         : nullptr;

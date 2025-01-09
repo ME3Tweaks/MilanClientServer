@@ -318,18 +318,14 @@ void ProfilePendingPackages(MilanCanvasDrawer& Drawer, UObject* Target)
 {
     MILAN_UNUSED_2(Drawer, Target);
 
-    auto const World = reinterpret_cast<UWorld_Proxy*>(*GWorld);
-    auto const NetDriver = reinterpret_cast<UNetDriver_Proxy*>(World->NetDriver);
-
+    auto const NetDriver = (*GWorld)->NetDriver;
     if (NetDriver == nullptr)
     {
         // This is quite weird...
         return;
     }
 
-    auto const ServerConnection = reinterpret_cast<UNetConnection_Proxy*>(NetDriver->ServerConnection);
-
-    for (FPackageInfo const& Pending : ServerConnection->PendingPackageInfos)
+    for (FPackageInfo const& Pending : NetDriver->ServerConnection->PendingPackageInfos)
     {
         Drawer.DrawString(Pending.PackageName.ToString());
         Drawer.PushIndent();
@@ -374,9 +370,7 @@ void ProfilePlayerControllers(MilanCanvasDrawer& Drawer, UObject* Target)
 
     Drawer.DrawSeparator();
 
-    auto const World = reinterpret_cast<UWorld_Proxy*>(*GWorld);
-    auto const Persistent = reinterpret_cast<ULevelBase_Proxy*>(World->PersistentLevel);
-    auto const First = Persistent->Actors(0);
+    auto const First = (*GWorld)->PersistentLevel->Actors(0);
 
     Drawer.DrawString(L"controller chain on persistent level:");
     Drawer.PushIndent();
@@ -438,8 +432,7 @@ void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* const Target)
 
     // NetDriver
 
-    auto* const World = reinterpret_cast<UWorld_Proxy*>(*GWorld);
-    auto* const NetDriver = reinterpret_cast<UNetDriver_Proxy*>(World->NetDriver);
+    auto* const NetDriver = (*GWorld)->NetDriver;
 
     //Drawer.DrawString(FString::Printf(L"World: %s", *World->StaticName()));
     Drawer.DrawString(FString::Printf(L"NetDriver: %s", NetDriver ? *NetDriver->StaticName() : L"n/a"));
@@ -450,12 +443,9 @@ void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* const Target)
 
         for (UINT i = 0u; i < NetDriver->ChildConnections.Count(); ++i)
         {
-            //MILAN_CHECKW(ChildConnIter->IsA<UChildConnection>(), L"");
+            auto* const ChildConn = NetDriver->ChildConnections(i);
 
-            auto* const ChildConnIter = NetDriver->ChildConnections(i);
-            auto* const ChildConn = reinterpret_cast<UNetConnection_Proxy*>(ChildConnIter);
-
-            Drawer.DrawString(FString::Printf(L"ChildConnections(%d): %s", i, *ChildConnIter->StaticName()));
+            Drawer.DrawString(FString::Printf(L"ChildConnections(%d): %s", i, *ChildConn->StaticName()));
 
             Drawer.PushIndent();
             Drawer.DrawProperty(L"Viewer", ChildConn->Viewer ? ChildConn->Viewer->StaticFullName() : L"n/a");
@@ -466,15 +456,14 @@ void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* const Target)
             {
                 Drawer.PushIndent();
                 MILAN_CHECKW(Channel != nullptr, L"");
-                auto* const ChannelProxy = reinterpret_cast<UActorChannel_Proxy*>(Channel);
-                DrawActorChannel(Drawer, ChannelProxy, ChannelIndex++);
+                DrawActorChannel(Drawer, Channel, ChannelIndex++);
                 Drawer.PopIndent();
 
-                if (Actor != ChannelProxy->Actor)
+                if (Actor != Channel->Actor)
                 {
                     MILAN_WARNW(L"server has actor channel with actor != channel->actor");
                     MILAN_WARNW(L"  actor = %s", Actor ? *Actor->StaticFullName() : L"n/a");
-                    MILAN_WARNW(L"  channel->actor = %s", ChannelProxy->Actor ? *ChannelProxy->Actor->StaticFullName() : L"n/a");
+                    MILAN_WARNW(L"  channel->actor = %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
                 }
             }
             Drawer.DrawString(L"Client visible levels");
@@ -506,27 +495,25 @@ void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* const Target)
     {
         Drawer.PushIndent();
 
-        auto* const ServerConn = reinterpret_cast<UNetConnection_Proxy*>(NetDriver->ServerConnection);
-        Drawer.DrawProperty(L"Viewer", ServerConn->Viewer ? ServerConn->Viewer->StaticFullName() : L"n/a");
+        Drawer.DrawProperty(L"Viewer", NetDriver->ServerConnection->Viewer ? NetDriver->ServerConnection->Viewer->StaticFullName() : L"n/a");
 
         Drawer.DrawString(L"ServerConnection:");
         Drawer.PushIndent();
 
         Drawer.DrawString(L"Actor channels");
         unsigned int ChannelIndex = 0;
-        for (auto const& [Actor, Channel] : ServerConn->ActorChannels)
+        for (auto const& [Actor, Channel] : NetDriver->ServerConnection->ActorChannels)
         {
             Drawer.PushIndent();
             MILAN_CHECKW(Channel != nullptr, L"");
-            auto* const ChannelProxy = reinterpret_cast<UActorChannel_Proxy*>(Channel);
-            DrawActorChannel(Drawer, ChannelProxy, ChannelIndex++);
+            DrawActorChannel(Drawer, Channel, ChannelIndex++);
             Drawer.PopIndent();
 
-            if (Actor != ChannelProxy->Actor)
+            if (Actor != Channel->Actor)
             {
                 MILAN_WARNW(L"client has actor channel with actor != channel->actor");
                 MILAN_WARNW(L"  actor = %s", Actor ? *Actor->StaticFullName() : L"n/a");
-                MILAN_WARNW(L"  channel->actor = %s", ChannelProxy->Actor ? *ChannelProxy->Actor->StaticFullName() : L"n/a");
+                MILAN_WARNW(L"  channel->actor = %s", Channel->Actor ? *Channel->Actor->StaticFullName() : L"n/a");
             }
         }
 
@@ -540,7 +527,7 @@ void ProfileWorldInfo(MilanCanvasDrawer& Drawer, UObject* const Target)
     MILAN_UNUSED_2(Drawer, Target);
 }
 
-void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel_Proxy* const Channel, unsigned int const Index)
+void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel* const Channel, unsigned int const Index)
 {
     static FColor s_flagsActorColor{ .B = 210, .G = 210, .R = 200, .A = 255 };
     static FColor s_flagsBaseColor{ .B = 255, .G = 185, .R = 185, .A = 255 };
@@ -564,7 +551,7 @@ void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel_Proxy* const Chan
     // > Relevancy timer.
     // ----------------------------------------
 
-    //auto* const NetDriver = (UNetDriver_Proxy*)(((UWorld_Proxy*)Channel->World)->NetDriver);
+    //auto* const NetDriver = Channel->World->NetDriver;
     //Drawer.DrawProperty(L"relevancy timer", FString::Printf(L"Time=%f, RelevantTime=%f, RelevantTimeout=%f",
     //    NetDriver->Time, Channel->RelevantTime, NetDriver->RelevantTimeout));
 

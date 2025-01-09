@@ -23,10 +23,6 @@
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
 
-#include "Proxies/Core.hpp"
-#include "Proxies/Engine.hpp"
-#include "Proxies/SFXGame.hpp"
-
 
 SPI_PLUGINSIDE_SUPPORT(L"MilanHost", L"Project Milan Team", L"0.1.0", SPI_GAME_LE3, SPI_VERSION_ANY);
 SPI_PLUGINSIDE_POSTLOAD;
@@ -204,9 +200,8 @@ void RegisterNonshipCommands()
             int Index = 0;
             for (TypedObjectIterator<UGuidCache, true, false> Iter{}; Iter; ++Iter)
             {
-                auto* const Cache = reinterpret_cast<UGuidCache_Proxy*>(*Iter);
-                MILAN_INFOW(L"UGuidCache n. %d: filename = %s", Index, *Cache->Filename);
-                for (auto const& [Name, Guid] : Cache->PackageGuids)
+                MILAN_INFOW(L"UGuidCache n. %d: filename = %s", Index, *(*Iter)->Filename);
+                for (auto const& [Name, Guid] : (*Iter)->PackageGuids)
                 {
                     MILAN_INFOW(L"  %s => %s", *Name.ToString(), *FormatGuid(Guid));
                 }

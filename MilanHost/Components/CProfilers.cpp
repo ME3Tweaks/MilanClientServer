@@ -137,8 +137,8 @@ void CProfilers::RegisterCommands()
             for (TypedObjectIterator<UPackageMap, true, false> Iter; Iter; ++Iter)
             {
                 MILAN_DEBUGW(L"  %s", *(*Iter)->StaticFullName());
-                auto const Packages = reinterpret_cast<UPackageMap_Proxy*>(*Iter);
-                for (FPackageInfo const& Package : Packages->List)
+                //auto const Packages = reinterpret_cast<UPackageMap_Proxy*>(*Iter);
+                for (FPackageInfo const& Package : (*Iter)->List)
                 {
                     MILAN_UNUSED(Package);
                     MILAN_DEBUGW(L"    %s, guid = %s, gen = %d / %d",
