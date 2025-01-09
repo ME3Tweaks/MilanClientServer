@@ -186,6 +186,17 @@ void RegisterNonshipCommands()
             return true;
         });
 
+    Commands.RegisterCommand(L"dbg", L"dumpclassctors",
+        [](wchar_t const*)
+        {
+            for (TypedObjectIterator<UClass, false, false> Iter{}; Iter; ++Iter)
+            {
+                MILAN_INFOW(L"%s => %p / %p / %p", *(*Iter)->GetFullName(),
+                    (*Iter)->ClassConstructor, (*Iter)->ClassStaticConstructor, (*Iter)->ClassStaticInitializer);
+            }
+            return true;
+        });
+
     Commands.RegisterCommand(L"dump", L"guidcaches",
         [](wchar_t const*)
         {
