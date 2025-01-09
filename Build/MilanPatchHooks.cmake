@@ -1,45 +1,108 @@
 # File:   Build/MilanPatchHooks.cmake
 # Brief:  Some key logic for sdk patcher.
+# See:    Based on https://github.com/scivision/cmake-patch-file.
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 
-# ! Creates files which will be patched at build-time.
-# ========================================
+find_package (Git REQUIRED)
+set (CMAKE_EXECUTE_PROCESS_COMMAND_ECHO STDOUT)
 
-function (mln_patching_init)
 
-  message ("-- Cleaning up Build/Patched directory")
-  file (REMOVE_RECURSE "${CMAKE_SOURCE_DIR}/Build/Patched/")
+# Applies a single patch to a single submodule.
+function (mln_patch_single__ original patch cwd module)
+  set (target_directory ${cwd}\\ThirdParty\\${module})
+
+  # Try to apply the patch.
+  execute_process (
+    COMMAND ${GIT_EXECUTABLE}
+      apply --ignore-whitespace --unsafe-paths --verbose
+        --directory=${target_directory} ${patch}
+    WORKING_DIRECTORY ${cwd}
+    RESULT_VARIABLE first_result
+    ERROR_VARIABLE first_error
+    TIMEOUT 2
+  )
+
+  if (NOT first_result EQUAL 0)
+    # Check if the patch was already applied.
+    execute_process (
+      COMMAND ${GIT_EXECUTABLE}
+        apply --ignore-whitespace --unsafe-paths --verbose --check --reverse
+          --directory=${target_directory} ${patch}
+      WORKING_DIRECTORY ${cwd}
+      RESULT_VARIABLE second_result
+      ERROR_VARIABLE second_error
+      TIMEOUT 2
+    )
+
+    if (NOT second_result EQUAL 0)
+      message (FATAL_ERROR "\n
+!! Failed to apply patch ${patch}: \n
+    git apply: result = ${first_result}, error = ${first_error} \n
+    git apply --check --reverse: result = ${second_result}, error = ${second_error} \n
+    Paths: \n
+      Original = ${original} \n
+      Patch = ${patch} \n
+      Cwd = ${cwd} \n
+")
+    endif ()
+  endif ()
+
+endfunction ()
+
+
+# Applies patches from the manifest to their submodules.
+function (mln_patching_apply)
 
   set (PATCHING_INDEX_PATH "${CMAKE_SOURCE_DIR}/Patching/_index.list")
-  set_property (DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${PATCHING_INDEX_PATH})
-
-  message ("-- Parsing patch index list (${PATCHING_INDEX_PATH}):")
   file (STRINGS ${PATCHING_INDEX_PATH} PATCHING_INDEX_LIST)
 
-  # Parse patch manifest and store info for generating transient files.
+  message ("-- Parsing patch index list (${PATCHING_INDEX_PATH}):")
+
+  # Parse patch manifest and apply every entry.
   foreach (PATCHING_LINE IN LISTS PATCHING_INDEX_LIST)
     if (PATCHING_LINE MATCHES "^([^:]+):([^:]+):([^:]+):([^:]+)$")
-      set (PATCHING_PATCHED_MODULE "${CMAKE_SOURCE_DIR}/Build/Patched/${CMAKE_MATCH_2}/_submodule.txt")
-      set (PATCHING_PATCHED_PARAMS "${CMAKE_SOURCE_DIR}/Build/Patched/${CMAKE_MATCH_2}/${CMAKE_MATCH_4}.params.txt")
-
+      set (PATCHING_SUBMODULE_PATH "${CMAKE_SOURCE_DIR}/ThirdParty/${CMAKE_MATCH_1}")
       set (PATCHING_ORIGINAL_FILE "${CMAKE_SOURCE_DIR}/ThirdParty/${CMAKE_MATCH_1}/${CMAKE_MATCH_3}")
-      set (PATCHING_PATCHED_FILE "${CMAKE_SOURCE_DIR}/Build/Patched/${CMAKE_MATCH_2}/${CMAKE_MATCH_3}")
-      set (PATCHING_DIFF_FILE "${CMAKE_SOURCE_DIR}/Patching/${CMAKE_MATCH_4}")
+      set (PATCHING_PATCH_FILE "${CMAKE_SOURCE_DIR}/Patching/${CMAKE_MATCH_4}")
 
-      message ("-- Registering patch: submodule = ${CMAKE_MATCH_1}, library = ${CMAKE_MATCH_2}, file = ${CMAKE_MATCH_3}, diff = ${CMAKE_MATCH_4}")
-      message ("--   Ensuring file for build-time patching: ${PATCHING_PATCHED_FILE}")
+      message ("-- Applying patch: submodule = ${CMAKE_MATCH_1}, library = ${CMAKE_MATCH_2}, file = ${CMAKE_MATCH_3}, diff = ${CMAKE_MATCH_4}")
+      message ("--   Target file path: ${PATCHING_ORIGINAL_FILE}")
 
-      if (NOT EXISTS ${PATCHING_PATCHED_MODULE})
-        file (WRITE ${PATCHING_PATCHED_MODULE} "${CMAKE_MATCH_1}")
-      endif ()
+      mln_patch_single__ (
+        ${PATCHING_ORIGINAL_FILE}   # original
+        ${PATCHING_PATCH_FILE}      # patch
+        ${CMAKE_SOURCE_DIR}         # cwd
+        ${CMAKE_MATCH_1}            # module
+      )
 
-      if (NOT EXISTS ${PATCHING_PATCHED_PARAMS})
-        file (WRITE ${PATCHING_PATCHED_PARAMS} "${PATCHING_ORIGINAL_FILE}\n${PATCHING_PATCHED_FILE}\n${PATCHING_DIFF_FILE}")
-      endif ()
+    else ()
+      message (FATAL_ERROR "!! Invalid patch index line: ${PATCHING_LINE}")
+    endif ()
+  endforeach ()
 
-      if (NOT EXISTS ${PATCHING_PATCHED_FILE})
-        file (WRITE ${PATCHING_PATCHED_FILE} "")
+endfunction ()
+
+# Runs "git restore ." for every submodule in the manifest.
+function (mln_patching_cleanup)
+
+  set (PATCHING_INDEX_PATH "${CMAKE_SOURCE_DIR}/Patching/_index.list")
+  file (STRINGS ${PATCHING_INDEX_PATH} PATCHING_INDEX_LIST)
+
+  message ("-- Parsing patch index list (${PATCHING_INDEX_PATH}):")
+  foreach (PATCHING_LINE IN LISTS PATCHING_INDEX_LIST)
+    if (PATCHING_LINE MATCHES "^([^:]+):([^:]+):([^:]+):([^:]+)$")
+
+      set (PATCHING_SUBMODULE_PATH "${CMAKE_SOURCE_DIR}/ThirdParty/${CMAKE_MATCH_1}")
+      execute_process (
+        COMMAND ${GIT_EXECUTABLE} restore .
+        WORKING_DIRECTORY ${PATCHING_SUBMODULE_PATH}
+        RESULT_VARIABLE RESTORE_RESULT
+        ERROR_VARIABLE RESTORE_ERROR
+        TIMEOUT 2
+      )
+      if (NOT RESTORE_RESULT EQUAL 0)
+        message (FATAL_ERROR "!! Failed to restore submodule ${CMAKE_MATCH_1} (${RESTORE_ERROR}): ${RESTORE_RESULT}")
       endif ()
 
     else ()
@@ -50,133 +113,20 @@ function (mln_patching_init)
 endfunction ()
 
 
-# ! Overrides `add_library` function to inject patched paths.
-# ========================================
+# Sets up tasks to control patches en masse.
+function (mln_patching_setup_tasks)
 
-function (add_library target)
-
-  # We need this to populate passed source files, which are left unparsed.
-  cmake_parse_arguments (MLN_AL
-    "INTERFACE;MODULE;OBJECT;SHARED;STATIC;EXCLUDE_FROM_ALL;GLOBAL;IMPORTED"
-    ""
-    ""
-    ${ARGN}
+  add_custom_target (APPLY_PATCHES
+    COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/Build/MilanPatchApply.cmake"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   )
 
-  set (IS_PATCH_CANDIDATE OFF)
-  set (MLN_AL_THIRDPARTY_DIR "${CMAKE_SOURCE_DIR}/ThirdParty")
+  add_custom_target (CLEANUP_PATCHES
+    COMMAND ${CMAKE_COMMAND} -P "${CMAKE_SOURCE_DIR}/Build/MilanPatchCleanup.cmake"
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  )
 
-  # Only consider the simplest types, without any imported targets, ...
-  if ((MLN_AL_SHARED OR MLN_AL_STATIC) AND NOT MLN_AL_GLOBAL AND NOT MLN_AL_IMPORTED)
-    # ... for targets within third party dependency folder ...
-    string (FIND ${CMAKE_CURRENT_SOURCE_DIR} ${MLN_AL_THIRDPARTY_DIR} MLN_AL_THIRDPARTY_POS)
-    if (NOT MLN_AL_THIRDPARTY_POS EQUAL "-1")
-      # ... and only if the target declares sources.
-      if (MLN_AL_UNPARSED_ARGUMENTS)
-        set (IS_PATCH_CANDIDATE ON)
-      endif ()
-    endif ()
-  endif ()
-
-  if (IS_PATCH_CANDIDATE)
-
-    message (">> ADDING PATCHABLE LIBRARY ${ARGV0} IN ${CMAKE_CURRENT_SOURCE_DIR}:")
-
-
-    # Setup transient file generation.
-
-    file (GLOB MLN_AL_PARAMS_LISTS LIST_DIRECTORIES false "${CMAKE_SOURCE_DIR}/Build/Patched/${ARGV0}/*.params.txt")
-    foreach (MLN_AL_PARAMS_LIST IN LISTS MLN_AL_PARAMS_LISTS)
-
-      file (STRINGS ${MLN_AL_PARAMS_LIST} MLN_AL_PARAMS)
-      list (GET MLN_AL_PARAMS 0 MLN_AL_PARAM_ORIGINAL)
-      list (GET MLN_AL_PARAMS 1 MLN_AL_PARAM_PATCHED)
-      list (GET MLN_AL_PARAMS 2 MLN_AL_PARAM_PATCH)
-
-      # message ("]] original = ${MLN_AL_PARAM_ORIGINAL}")
-      # message ("]] patched = ${MLN_AL_PARAM_PATCHED}")
-      # message ("]] patch = ${MLN_AL_PARAM_PATCH}")
-
-      add_custom_command (
-        OUTPUT ${MLN_AL_PARAM_PATCHED}
-        COMMAND ${CMAKE_COMMAND}
-          -Doriginal:FILEPATH="${MLN_AL_PARAM_ORIGINAL}"
-          -Dpatched:FILEPATH="${MLN_AL_PARAM_PATCHED}"
-          -Dpatch:FILEPATH="${MLN_AL_PARAM_PATCH}"
-          -Dcwd:FILEPATH="${CMAKE_SOURCE_DIR}/Build/Patched/${ARGV0}"
-          -Dmodule="${ARGV0}"
-          -Droot="${CMAKE_SOURCE_DIR}"
-          -P "${CMAKE_SOURCE_DIR}/Build/MilanPatchScript.cmake"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/Build/Patched/${ARGV0}"
-      )
-
-    endforeach ()
-
-
-    # Build split source lists.
-
-    set (MLN_AL_ORIGINAL_SOURCES)
-    set (MLN_AL_PATCHED_SOURCES)
-
-    foreach (MLN_AL_SOURCE IN LISTS MLN_AL_UNPARSED_ARGUMENTS)
-      string (LENGTH ${CMAKE_CURRENT_SOURCE_DIR} MLN_AL_DIRECTORY_LENGTH)
-      string (SUBSTRING ${MLN_AL_SOURCE} ${MLN_AL_DIRECTORY_LENGTH} -1 MLN_AL_SOURCE_LOCAL)
-      set (MLN_AL_PATCHED_SOURCE "${CMAKE_SOURCE_DIR}/Build/Patched/${ARGV0}/${MLN_AL_SOURCE_LOCAL}")
-
-      # This path will exist only if current source file needs to be patched.
-      if (EXISTS ${MLN_AL_PATCHED_SOURCE})
-
-        list (APPEND MLN_AL_PATCHED_SOURCES ${MLN_AL_PATCHED_SOURCE})
-
-      else ()
-
-        list (APPEND MLN_AL_ORIGINAL_SOURCES ${MLN_AL_SOURCE})
-
-      endif ()
-    endforeach ()
-
-    # We're assuming two things here: that first argument is always the target name,
-    # and that the second one is always the library type. Works for Milan's use case, but it's nowhere
-    # good enough for a general-purpose solution.
-
-    _add_library (${ARGV0} ${ARGV1} ${MLN_AL_ORIGINAL_SOURCES} ${MLN_AL_PATCHED_SOURCES})
-    source_group ("[Patched files]" FILES ${MLN_AL_PATCHED_SOURCES})
-
-  else ()
-
-    # Pass all arguments unmodified.
-    _add_library (${ARGV})
-
-  endif ()
-
-endfunction ()
-
-
-# ! Overrides `target_include_directories` function to inject patched paths.
-# ========================================
-
-function (target_include_directories)
-
-  if (EXISTS "${CMAKE_SOURCE_DIR}/Build/Patched/${ARGV0}")
-
-    set (MLN_INCLUDE_DIRECTORIES ${ARGV})
-    list (REMOVE_AT MLN_INCLUDE_DIRECTORIES 0 1)
-
-    foreach (MLN_INCLUDE_DIR IN LISTS MLN_INCLUDE_DIRECTORIES)
-
-      string (LENGTH ${CMAKE_CURRENT_SOURCE_DIR} MLN_INCLUDE_DIR_LEN)
-      string (FIND ${MLN_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} MLN_INCLUDE_DIR_POS)
-
-      if (${MLN_INCLUDE_DIR_POS} EQUAL 0)
-        string (SUBSTRING ${MLN_INCLUDE_DIR} ${MLN_INCLUDE_DIR_LEN} -1 MLN_INCLUDE_DIR_START)
-        string (PREPEND MLN_INCLUDE_DIR_START "${CMAKE_SOURCE_DIR}/Build/Patched/${ARGV0}")
-        _target_include_directories (${ARGV0} ${ARGV1} ${MLN_INCLUDE_DIR_START})
-      endif ()
-
-    endforeach ()
-
-  endif ()
-
-  _target_include_directories (${ARGV})
+  set_target_properties (APPLY_PATCHES PROPERTIES FOLDER "[PATCHING]")
+  set_target_properties (CLEANUP_PATCHES PROPERTIES FOLDER "[PATCHING]")
 
 endfunction ()
