@@ -11,7 +11,7 @@ namespace
 {
     void TraceUrl(SFXName const Category, wchar_t const* const InLabel, FURL* const InUrl)
     {
-        MILAN_UNUSED_2(InLabel, InUrl);
+        MILAN_UNUSED_3(Category, InLabel, InUrl);
         MILAN_TRACEW(Category, L"%s: proto=%s, host=%s, map=%s, portal=%s, port=%d, valid=%d",
             InLabel, *InUrl->Protocol, *InUrl->Host, *InUrl->Map, *InUrl->Portal, InUrl->Port, InUrl->Valid);
 
@@ -91,7 +91,7 @@ void MlnUChannelSendBunch2_Handler(UChannel* const Channel, FOutBunch* const Bun
     // Bunches here and in the 1st handler might not be the same!
 
     auto* const Connection = Channel->Connection->Cast<UTcpipConnection>();
-    MILAN_UNUSED_2(Channel, Bunch);
+    MILAN_UNUSED_3(Connection, Channel, Bunch);
 
     auto const BitsSent = Bunch->Num - SendBunch1_BitsWrittenBefore;
     MILAN_TRACEW(ELOG_NetHooksTrace, L"UChannel::SendBunch: %s, remote = %s, bits = %d",

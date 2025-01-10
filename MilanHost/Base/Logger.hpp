@@ -115,7 +115,7 @@ protected:
     #ifndef _FINAL_RELEASE
         return !Category.GetEntry()->IsSuppressed() || Severity >= ESeverity::Error;
     #else
-        MILAN_UNUSED(Category);
+        MILAN_UNUSED_2(Severity, Category);
         return true;
     #endif
     }
