@@ -129,21 +129,3 @@ private:
 
     FString const& FormatObjectName(UObject* Object);
 };
-
-struct CanvasProfilerRecord
-{
-    wchar_t const* Subtitle;
-    wchar_t const* Description;
-    void (*Function)(MilanCanvasDrawer& Drawer, UObject* Target);
-};
-
-
-// ! Implementation of canvas profilers.
-// ========================================
-
-void ProfilePendingPackages(MilanCanvasDrawer& Drawer, UObject* Target);
-void ProfilePlayerControllers(MilanCanvasDrawer& Drawer, UObject* Target);
-void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* Target);
-void ProfileWorldInfo(MilanCanvasDrawer& Drawer, UObject* Target);
-
-void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel* Channel, unsigned int Index);

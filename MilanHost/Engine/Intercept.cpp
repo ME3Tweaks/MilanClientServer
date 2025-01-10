@@ -47,7 +47,7 @@ bool FunctionNamedIntercept::Applies (
     return *FunctionDescriptor == Check;
 }
 
-void FunctionNamedIntercept::InvalidateAllRegistered()
+void FunctionNamedIntercept::InvalidateRegistered()
 {
     for (FunctionNamedIntercept* Intercept : RegisteredIntercepts)
     {
@@ -94,7 +94,7 @@ bool FunctionStructIntercept::Applies(UStruct* const Node, wchar_t const* const 
     return TargetNode == Node;
 }
 
-void FunctionStructIntercept::InvalidateAllRegistered()
+void FunctionStructIntercept::InvalidateRegistered()
 {
     for (FunctionStructIntercept* Intercept : RegisteredIntercepts)
     {

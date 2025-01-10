@@ -248,8 +248,9 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
 #endif
 
-    //if (Stack->Node->Name == SFXName("AddMutator", 0)) [[unlikely]]
-    //    MILAN_BREAK_ATTACHED();
+    //// TODO: TEMPORARY CHECK: Delete this log once SFXOnlineFoundation situation is figured out.
+    //if (Stack->Node->GetOutermost()->Name == SFXName(L"SFXOnlineFoundation", 0))
+    //    MILAN_INFOW(ELOG_DevelUtils, L"ProcessInternal: %s", *Stack->Node->GetFullName());
 
     if (!COMPONENT(CState).On_UObject_ProcessInternal_Pre(Context, Stack, Result))
     {
@@ -278,8 +279,10 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     if (s_skipMainMenu)
     {
         static bool s_checkMainMenuSplash = true;
-        if (s_checkMainMenuSplash && Stack->Node->StaticFullName()
-            .Equals(L"Function SFXGame.BioSeqAct_ShouldShowSplashSequence.Activated"))
+        static FunctionNamedIntercept s_checkMainMenuIntercept{};
+
+        if (s_checkMainMenuSplash && s_checkMainMenuIntercept
+            .Applies(Stack->Node, L"SFXGame", L"BioSeqAct_ShouldShowSplashSequence", L"Activated"))
         {
             s_checkMainMenuSplash = false;
 
@@ -290,8 +293,10 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
         }
 
         static bool s_checkMainMenuLobbyFlow = true;
-        if (s_checkMainMenuLobbyFlow && Stack->Node->StaticFullName()
-            .Equals(L"Function SFXGameContentLiveKismet.BioSeqAct_ShowMainMenu.Activated"))
+        static FunctionNamedIntercept s_checkMainMenuLobbyFlowIntercept{};
+
+        if (s_checkMainMenuLobbyFlow && s_checkMainMenuLobbyFlowIntercept
+            .Applies(Stack->Node, L"SFXGameContentLiveKismet", L"BioSeqAct_ShowMainMenu", L"Activated"))
         {
             s_checkMainMenuLobbyFlow = false;
             for (TypedObjectIterator<USFXGUI_MainMenu_RTT, false, false> Iter{}; Iter; ++Iter)
@@ -312,9 +317,9 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
             auto const Window = reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
             auto const Name = reinterpret_cast<FString*>(reinterpret_cast<unsigned char*>(Viewport) + 0xD4);
 
-            MILAN_TRACEW(ELOG_Startup, L"Updating title for %s, FViewport* = %p", *(*Iter)->StaticName(), Viewport);
+            MILAN_TRACEW(ELOG_Startup, L"Updating title for %s, viewport at %p", *(*Iter)->StaticName(), Viewport);
 
-            *Name = FString::Printf(L"Mass Effect 3 (INST = %d) PID = %d", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
+            *Name = FString::Printf(L"Mass Effect 3 (INST = %d, PID = %d)", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
             DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
 
             s_updateWindow = false;

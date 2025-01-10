@@ -20,6 +20,7 @@ class TypedObjectIterator final : public NonCopyable
 
     void SkipToNext()
     {
+        static constexpr QWORD RF_ClassDefaultObject = 0x200;
         UObject** const IterEnd = UObject::GObjObjects->GetData()
             + UObject::GObjObjects->Count();
 
@@ -29,9 +30,12 @@ class TypedObjectIterator final : public NonCopyable
             {
                 if (*Current && (*Current)->Cast<T>())
                 {
-                    if (!bIncludeDefaults && (*Current)->StaticName().StartsWith(L"Default__"))
+                    if constexpr (!bIncludeDefaults)
                     {
-                        continue;
+                        if (((*Current)->ObjectFlags & RF_ClassDefaultObject) != 0)
+                            continue;
+                        //if ((*Current)->StaticName().StartsWith(L"Default__"))
+                        //    continue;
                     }
 
                     break;
@@ -44,9 +48,12 @@ class TypedObjectIterator final : public NonCopyable
             {
                 if (*Current && (*Current)->CastDirect<T>())
                 {
-                    if (!bIncludeDefaults && (*Current)->StaticName().StartsWith(L"Default__"))
+                    if constexpr (!bIncludeDefaults)
                     {
-                        continue;
+                        if (((*Current)->ObjectFlags & RF_ClassDefaultObject) != 0)
+                            continue;
+                        //if ((*Current)->StaticName().StartsWith(L"Default__"))
+                        //    continue;
                     }
 
                     break;

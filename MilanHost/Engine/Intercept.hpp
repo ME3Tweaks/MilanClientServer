@@ -34,6 +34,9 @@ class FunctionNamedIntercept
 
     std::unique_ptr<TargetDescriptor> FunctionDescriptor{};
 
+    // This array stores bare pointers because instances of this class are
+    // expected to be stored statically, so on cleanup we just clear the array
+    // without deallocating individual instances.
     static TArray<FunctionNamedIntercept*> RegisteredIntercepts;
 
 public:
@@ -41,7 +44,7 @@ public:
     FunctionNamedIntercept();
     bool Applies(UStruct* Node, wchar_t const* PackageName, wchar_t const* ClassName, wchar_t const* FunctionName);
 
-    static void InvalidateAllRegistered();
+    static void InvalidateRegistered();
     static void CleanupRegistered();
 };
 
@@ -53,8 +56,8 @@ public:
  */
 class FunctionStructIntercept
 {
-    UStruct* TargetNode{ nullptr };
-    wchar_t const* TargetFullName{ nullptr };
+    UStruct*            TargetNode{ nullptr };
+    wchar_t const*      TargetFullName{ nullptr };
 
     // Can't use ::game::vector here because it would pre-allocate
     // in dynamic initializer, i.e. before we have the GMalloc pointer.
@@ -65,7 +68,7 @@ public:
     FunctionStructIntercept();
     bool Applies(UStruct* Node, wchar_t const* FullName);
 
-    static void InvalidateAllRegistered();
+    static void InvalidateRegistered();
     static void CleanupRegistered();
 };
 

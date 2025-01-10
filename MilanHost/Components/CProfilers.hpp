@@ -29,6 +29,20 @@ private:
     void SetupProfilerRecords();
     void RegisterCommands();
 
+    static void ProfilePendingPackages(MilanCanvasDrawer& Drawer, UObject* Target);
+    static void ProfilePlayerControllers(MilanCanvasDrawer& Drawer, UObject* Target);
+    static void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* Target);
+    static void ProfileWorldInfo(MilanCanvasDrawer& Drawer, UObject* Target);
+
+    static void DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel* Channel, unsigned int Index);
+
+    struct CanvasProfilerRecord final
+    {
+        wchar_t const* Subtitle;
+        wchar_t const* Description;
+        void (*Function)(MilanCanvasDrawer& Drawer, UObject* Target);
+    };
+
     MilanCanvasDrawer       m_activeCanvas{};
     ECanvasProfilerMode     m_profilerMode{ CPM_None };
     CanvasProfilerRecord    m_profilerRecords[CPM_Max] = {};
