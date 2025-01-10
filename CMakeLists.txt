@@ -18,7 +18,6 @@ set_property (GLOBAL PROPERTY USER_FOLDERS ON)
 # ========================================
 
 option (MILAN_BUILD_HOST "Build the client host target" ON)
-option (MILAN_BUILD_UTILS "Build auxiliary targets" ON)
 
 if (DEFINED ENV{MILAN_CMAKE_PRESET})
   set (MILAN_CMAKE_PRESET $ENV{MILAN_CMAKE_PRESET})
@@ -50,11 +49,9 @@ endif ()
 
 set (MILAN_OUTPUT_DIRECTORY_CLIENT      ${MILAN_OUTPUT_DIRECTORY})
 set (MILAN_OUTPUT_DIRECTORY_EXTERNAL    ${MILAN_OUTPUT_DIRECTORY}/ThirdParty)
-set (MILAN_OUTPUT_DIRECTORY_UTILITIES   ${MILAN_OUTPUT_DIRECTORY}/Utilities)
 
 message ("-- Configured output path (client):     ${MILAN_OUTPUT_DIRECTORY_CLIENT}")
 message ("-- Configured output path (external):   ${MILAN_OUTPUT_DIRECTORY_EXTERNAL}")
-message ("-- Configured output path (utilities):  ${MILAN_OUTPUT_DIRECTORY_UTILITIES}")
 
 
 # ! Project subtrees.
@@ -79,16 +76,6 @@ if (MILAN_BUILD_HOST)
 
   add_subdirectory ("MilanCore")
   add_subdirectory ("MilanHost")
-
-endif ()
-
-if (MILAN_BUILD_UTILS)
-
-  set (CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
-  set (CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
-  set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_UTILITIES})
-
-  add_subdirectory ("Utilities")
 
 endif ()
 
