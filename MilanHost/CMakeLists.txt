@@ -6,6 +6,15 @@ set (PROJ_TARGET MilanHost)
 set (PROJ_FOLDER ${CMAKE_CURRENT_SOURCE_DIR})
 
 set (PROJ_SOURCES
+  ${PROJ_FOLDER}/Base/Base.cpp
+  ${PROJ_FOLDER}/Base/Base.hpp
+  ${PROJ_FOLDER}/Base/Buffers.cpp
+  ${PROJ_FOLDER}/Base/Buffers.hpp
+  ${PROJ_FOLDER}/Base/Logger.cpp
+  ${PROJ_FOLDER}/Base/Logger.hpp
+  ${PROJ_FOLDER}/Base/LoggingCategories.inl
+  ${PROJ_FOLDER}/Base/Streams.cpp
+  ${PROJ_FOLDER}/Base/Streams.hpp
   ${PROJ_FOLDER}/Components/CCommands.cpp
   ${PROJ_FOLDER}/Components/CCommands.hpp
   ${PROJ_FOLDER}/Components/CGlobals.cpp
@@ -25,38 +34,29 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Containers/string.hpp
   ${PROJ_FOLDER}/Containers/unordered_map.hpp
   ${PROJ_FOLDER}/Containers/vector.hpp
-  ${PROJ_FOLDER}/Milan/Base.cpp
-  ${PROJ_FOLDER}/Milan/Base.hpp
-  ${PROJ_FOLDER}/Milan/Buffers.cpp
-  ${PROJ_FOLDER}/Milan/Buffers.hpp
-  ${PROJ_FOLDER}/Milan/Canvas.cpp
-  ${PROJ_FOLDER}/Milan/Canvas.hpp
-  ${PROJ_FOLDER}/Milan/ClientConfig.cpp
-  ${PROJ_FOLDER}/Milan/ClientConfig.hpp
-  ${PROJ_FOLDER}/Milan/CmdArgs.cpp
-  ${PROJ_FOLDER}/Milan/CmdArgs.hpp
+  ${PROJ_FOLDER}/Engine/Canvas.cpp
+  ${PROJ_FOLDER}/Engine/Canvas.hpp
+  ${PROJ_FOLDER}/Engine/Hooks.cpp
+  ${PROJ_FOLDER}/Engine/Hooks.hpp
+  ${PROJ_FOLDER}/Engine/Intercept.cpp
+  ${PROJ_FOLDER}/Engine/Intercept.hpp
   ${PROJ_FOLDER}/Milan/GuidCacheUtils.cpp
   ${PROJ_FOLDER}/Milan/GuidCacheUtils.hpp
-  ${PROJ_FOLDER}/Milan/Hooks.cpp
-  ${PROJ_FOLDER}/Milan/Hooks.hpp
-  ${PROJ_FOLDER}/Milan/Intercept.cpp
-  ${PROJ_FOLDER}/Milan/Intercept.hpp
-  ${PROJ_FOLDER}/Milan/Logger.cpp
-  ${PROJ_FOLDER}/Milan/Logger.hpp
-  ${PROJ_FOLDER}/Milan/LoggingCategories.inl
   ${PROJ_FOLDER}/Milan/Misc.cpp
   ${PROJ_FOLDER}/Milan/Misc.hpp
-  ${PROJ_FOLDER}/Milan/MPProfile.cpp
-  ${PROJ_FOLDER}/Milan/MPProfile.hpp
-  ${PROJ_FOLDER}/Milan/NetProfDecls.hpp
-  ${PROJ_FOLDER}/Milan/NetProfExtractors.asm
-  ${PROJ_FOLDER}/Milan/NetProfHandlers.cpp
-  ${PROJ_FOLDER}/Milan/NetProfStream.cpp
-  ${PROJ_FOLDER}/Milan/NetProfStream.hpp
-  ${PROJ_FOLDER}/Milan/Streams.cpp
-  ${PROJ_FOLDER}/Milan/Streams.hpp
-  ${PROJ_FOLDER}/Entry.cpp
-  ${PROJ_FOLDER}/Entry.hpp
+  ${PROJ_FOLDER}/NetProf/NetProfDecls.hpp
+  ${PROJ_FOLDER}/NetProf/NetProfExtractors.asm
+  ${PROJ_FOLDER}/NetProf/NetProfHandlers.cpp
+  ${PROJ_FOLDER}/NetProf/NetProfStream.cpp
+  ${PROJ_FOLDER}/NetProf/NetProfStream.hpp
+  ${PROJ_FOLDER}/Online/MPProfile.cpp
+  ${PROJ_FOLDER}/Online/MPProfile.hpp
+  ${PROJ_FOLDER}/Shell/ClientConfig.cpp
+  ${PROJ_FOLDER}/Shell/ClientConfig.hpp
+  ${PROJ_FOLDER}/Shell/CmdArgs.cpp
+  ${PROJ_FOLDER}/Shell/CmdArgs.hpp
+  ${PROJ_FOLDER}/Shell/Entry.cpp
+  ${PROJ_FOLDER}/Shell/Entry.hpp
   ${PROJ_FOLDER}/Milan.natvis
 )
 

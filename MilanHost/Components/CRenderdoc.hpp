@@ -7,8 +7,8 @@
 
 #include <renderdoc/renderdoc_app.h>
 
-#include "Milan/Base.hpp"
-#include "Milan/Hooks.hpp"
+#include "Base/Base.hpp"
+#include "Engine/Hooks.hpp"
 
 
 class CRenderdoc final : public NonCopyable

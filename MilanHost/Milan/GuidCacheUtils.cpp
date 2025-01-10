@@ -1,6 +1,7 @@
 #include <cstdio>
+
+#include "Base/Logger.hpp"
 #include "Milan/GuidCacheUtils.hpp"
-#include "Milan/Logger.hpp"
 
 
 // ! GuidCacheOverride implementation.
@@ -75,5 +76,3 @@ void GuidCacheOverride::UpdateLookup()
     MILAN_DEBUGW(ELOG_DevelUtils, L"GuidCacheOverride: total %llu package(s) overriden in %f ms.", EntryCount, Timer.GetMilliseconds());
     MILAN_UNUSED(EntryCount);
 }
-
-

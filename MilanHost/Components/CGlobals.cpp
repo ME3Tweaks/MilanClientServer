@@ -1,10 +1,9 @@
 #include "Components/CGlobals.hpp"
 #include "Components/CImgui.hpp"
-
+#include "Engine/Hooks.hpp"
+#include "Engine/Intercept.hpp"
 #include "Milan/GuidCacheUtils.hpp"
-#include "Milan/Hooks.hpp"
-#include "Milan/Intercept.hpp"
-#include "Milan/NetProfDecls.hpp"
+#include "NetProf/NetProfDecls.hpp"
 
 
 // ! Internal macros.

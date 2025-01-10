@@ -1,12 +1,12 @@
 /**
- * @file        MilanHost/Milan/NetProfDecls.hpp
+ * @file        MilanHost/NetProf/NetProfDecls.hpp
  * @header      Declarations for Network Profiler extractors and handlers.
  */
 
 #pragma once
 
 #include <LESDK/Headers.hpp>
-#include "Milan/Base.hpp"
+#include "Base/Base.hpp"
 
 
 /**

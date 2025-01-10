@@ -1,18 +1,18 @@
 /**
- * @file        MilanHost/Milan/NetProfStream.hpp
+ * @file        MilanHost/NetProf/NetProfStream.hpp
  * @header      Declarations for Milan Network Profiler's capture stream.
  */
 
 #pragma once
 
 #include <mutex>
-
 #include <LESDK/Headers.hpp>
+
+#include "Base/Base.hpp"
+#include "Base/Streams.hpp"
 #include "Containers/string.hpp"
 #include "Containers/unordered_map.hpp"
 #include "Containers/vector.hpp"
-#include "Milan/Base.hpp"
-#include "Milan/Streams.hpp"
 
 
 enum class NPRecord : unsigned char

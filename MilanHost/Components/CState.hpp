@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include "Milan/Base.hpp"
-#include "Milan/Hooks.hpp"
+#include "Base/Base.hpp"
+#include "Engine/Hooks.hpp"
 
 
 class CState final : public NonCopyable

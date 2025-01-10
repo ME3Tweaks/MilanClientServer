@@ -1,10 +1,10 @@
 #include <intrin.h>
 
-#include "Milan/Base.hpp"
-#include "Milan/Hooks.hpp"
+#include "Base/Base.hpp"
+#include "Engine/Hooks.hpp"
 #include "Milan/Misc.hpp"
-#include "Milan/NetProfDecls.hpp"
-#include "Milan/NetProfStream.hpp"
+#include "NetProf/NetProfDecls.hpp"
+#include "NetProf/NetProfStream.hpp"
 
 
 namespace

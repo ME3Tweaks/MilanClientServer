@@ -1,11 +1,10 @@
+#include "Base/Logger.hpp"
 #include "Components/COutput.hpp"
-
-#include "Milan/ClientConfig.hpp"
-#include "Milan/CmdArgs.hpp"
-#include "Milan/Hooks.hpp"
-#include "Milan/Intercept.hpp"
-#include "Milan/Logger.hpp"
+#include "Engine/Hooks.hpp"
+#include "Engine/Intercept.hpp"
 #include "Milan/Misc.hpp"
+#include "Shell/ClientConfig.hpp"
+#include "Shell/CmdArgs.hpp"
 
 
 #ifndef _FINAL_RELEASE
@@ -234,7 +233,7 @@ void COutput::InitMainLogger()
 void COutput::InitLoggingCategories(int& InitCount)
 {
 #define _CG_LOGCAT(a) MILAN_CONCAT(ELOG_, a) = SFXName{ #a, 0, false }; InitCount++;
-    #include "Milan/LoggingCategories.inl"
+    #include "Base/LoggingCategories.inl"
 #undef _CG_LOGCAT
 }
 

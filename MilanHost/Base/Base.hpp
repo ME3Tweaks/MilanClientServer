@@ -1,5 +1,5 @@
 /**
- * @file        MilanHost/Milan/Base.hpp
+ * @file        MilanHost/Base/Base.hpp
  * @header      Very basic things used across MilanHost.
  */
 
@@ -365,7 +365,7 @@ static constexpr ESeverity k_logError = ESeverity::Error;
 
 
 #define _CG_LOGCAT(a) extern SFXName MILAN_CONCAT(ELOG_, a);
-    #include "Milan/LoggingCategories.inl"
+    #include "Base/LoggingCategories.inl"
 #undef _CG_LOGCAT
 
 

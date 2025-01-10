@@ -1,5 +1,5 @@
 /**
- * @file        MilanHost/Milan/Logger.hpp
+ * @file        MilanHost/Base/Logger.hpp
  * @header      Logger implementations.
  */
 
@@ -12,8 +12,8 @@
 #include <thread>
 #include <tuple>
 
+#include "Base/Base.hpp"
 #include "Containers/vector.hpp"
-#include "Milan/Base.hpp"
 #include "Milan/Misc.hpp"
 
 

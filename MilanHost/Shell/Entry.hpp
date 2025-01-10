@@ -1,6 +1,6 @@
 /**
- * @file        MilanHost/Entry.hpp
- * @header      Local declarations for @c Entry.cpp
+ * @file        MilanHost/Shell/Entry.hpp
+ * @header      Local declarations for @c Shell/Entry.cpp
  */
 
 #pragma once

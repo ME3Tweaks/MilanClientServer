@@ -1,7 +1,7 @@
 #include <tlhelp32.h>
 
-#include "Milan/Base.hpp"
-#include "Milan/Intercept.hpp"
+#include "Base/Base.hpp"
+#include "Engine/Intercept.hpp"
 
 
 // ! FunctionInterceptLegacy implementation.

@@ -1,13 +1,13 @@
 /**
- * @file        MilanHost/Milan/ClientConfig.hpp
+ * @file        MilanHost/Shell/ClientConfig.hpp
  * @header      Client-side configuration.
  */
 
 #pragma once
 
+#include "Base/Base.hpp"
 #include "Containers/string.hpp"
 #include "Containers/vector.hpp"
-#include "Milan/Base.hpp"
 
 
 /**

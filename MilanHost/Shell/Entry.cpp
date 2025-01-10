@@ -5,15 +5,10 @@
 
 #include <LESDK/Headers.hpp>
 
-#include "Entry.hpp"
+#include "Shell/Entry.hpp"
 
-#include "Milan/Base.hpp"
-#include "Milan/ClientConfig.hpp"
-#include "Milan/CmdArgs.hpp"
-#include "Milan/GuidCacheUtils.hpp"
-#include "Milan/Logger.hpp"
-#include "Milan/Misc.hpp"
-
+#include "Base/Base.hpp"
+#include "Base/Logger.hpp"
 #include "Components/CCommands.hpp"
 #include "Components/CGlobals.hpp"
 #include "Components/CImgui.hpp"
@@ -22,6 +17,10 @@
 #include "Components/CProfilers.hpp"
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
+#include "Milan/GuidCacheUtils.hpp"
+#include "Milan/Misc.hpp"
+#include "Shell/ClientConfig.hpp"
+#include "Shell/CmdArgs.hpp"
 
 
 SPI_PLUGINSIDE_SUPPORT(L"MilanHost", L"Project Milan Team", L"0.1.0", SPI_GAME_LE3, SPI_VERSION_ANY);

@@ -1,7 +1,7 @@
 #include <format>
 #include <tomlplusplus/toml.hpp>
 
-#include "Milan/ClientConfig.hpp"
+#include "Shell/ClientConfig.hpp"
 
 
 #define MLN_CONFIG(in, path, type)                                      \

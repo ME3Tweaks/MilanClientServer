@@ -1,10 +1,9 @@
+#include "Base/Streams.hpp"
 #include "Components/CCommands.hpp"
 #include "Components/CState.hpp"
-
-#include "Milan/Intercept.hpp"
+#include "Engine/Intercept.hpp"
 #include "Milan/Misc.hpp"
-#include "Milan/MPProfile.hpp"
-#include "Milan/Streams.hpp"
+#include "Online/MPProfile.hpp"
 
 #include <milan_ecsm_ffi.h>
 

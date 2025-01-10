@@ -1,5 +1,5 @@
 /**
- * @file        MilanHost/Milan/Canvas.hpp
+ * @file        MilanHost/Engine/Canvas.hpp
  * @brief       Drawing profilers on @ref UCanvas instances.
  */
 

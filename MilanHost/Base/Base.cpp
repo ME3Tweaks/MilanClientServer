@@ -4,8 +4,8 @@
 
 #include "Components/COutput.hpp"
 
-#include "Milan/Base.hpp"
-#include "Milan/Hooks.hpp"
+#include "Base/Base.hpp"
+#include "Engine/Hooks.hpp"
 
 
 bool                        gb_disableSafeBreak = false;
@@ -14,7 +14,7 @@ ComponentContainer*         gp_componentContainer = nullptr;
 
 
 #define _CG_LOGCAT(a) SFXName MILAN_CONCAT(ELOG_, a){};
-    #include "Milan/LoggingCategories.inl"
+    #include "Base/LoggingCategories.inl"
 #undef _CG_LOGCAT
 
 

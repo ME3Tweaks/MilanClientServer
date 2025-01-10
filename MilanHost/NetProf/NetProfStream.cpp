@@ -1,7 +1,7 @@
 #include <array>
 
 #include "Milan/Misc.hpp"
-#include "Milan/NetProfStream.hpp"
+#include "NetProf/NetProfStream.hpp"
 
 
 // ! NetworkCapture implementation.

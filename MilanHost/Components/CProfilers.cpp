@@ -1,8 +1,8 @@
 #include "Components/CCommands.hpp"
 #include "Components/CProfilers.hpp"
-#include "Milan/Intercept.hpp"
+#include "Engine/Intercept.hpp"
 #include "Milan/Misc.hpp"
-#include "Milan/NetProfStream.hpp"
+#include "NetProf/NetProfStream.hpp"
 
 
 // ! CProfilers implementation.

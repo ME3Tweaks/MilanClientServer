@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "Milan/Base.hpp"
-#include "Milan/Hooks.hpp"
-#include "Milan/Canvas.hpp"
+#include "Base/Base.hpp"
+#include "Engine/Hooks.hpp"
+#include "Engine/Canvas.hpp"
 
 
 class CProfilers final : public NonCopyable

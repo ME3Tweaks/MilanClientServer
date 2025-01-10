@@ -1,5 +1,5 @@
 /**
- * @file        MilanHost/Milan/Buffers.hpp
+ * @file        MilanHost/Base/Buffers.hpp
  * @brief       Reusable memory buffers.
  */
 
@@ -7,7 +7,7 @@
 
 #include <span>
 
-#include "Milan/Base.hpp"
+#include "Base/Base.hpp"
 #include "Containers/vector.hpp"
 
 

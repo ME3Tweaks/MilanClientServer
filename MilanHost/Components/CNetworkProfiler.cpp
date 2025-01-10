@@ -1,6 +1,6 @@
 #include "Components/CCommands.hpp"
 #include "Components/CNetworkProfiler.hpp"
-#include "Milan/NetProfStream.hpp"
+#include "NetProf/NetProfStream.hpp"
 
 
 // ! CNetworkProfiler implementation.
