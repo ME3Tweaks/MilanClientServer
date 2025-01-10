@@ -1,0 +1,31 @@
+diff --git a/Src/LESDK/Common/Misc.hpp b/Src/LESDK/Common/Misc.hpp
+index 74d074b..c2085bf 100644
+--- a/Src/LESDK/Common/Misc.hpp
++++ b/Src/LESDK/Common/Misc.hpp
+@@ -64,16 +64,26 @@ namespace LESDK {
+         SFXName::FormatMode const Mode = SFXName::k_formatInstanced)
+     {
+         if (InObject->Class != nullptr) {
+             AppendObjectName(InObject->Class, OutString, SFXName::k_formatBasic);
+             OutString.Append(L" ");
+ 
+             if (InObject->Outer != nullptr) {
+                 if (InObject->Outer->Outer != nullptr) {
++                    if (InObject->Outer->Outer->Outer != nullptr) {
++                        if (InObject->Outer->Outer->Outer->Outer != nullptr) {
++                            AppendObjectName(InObject->Outer->Outer->Outer->Outer, OutString, SFXName::k_formatBasic);
++                            OutString.Append(L".");
++                        }
++
++                        AppendObjectName(InObject->Outer->Outer->Outer, OutString, SFXName::k_formatBasic);
++                        OutString.Append(L".");
++                    }
++
+                     AppendObjectName(InObject->Outer->Outer, OutString, SFXName::k_formatBasic);
+                     OutString.Append(L".");
+                 }
+ 
+                 AppendObjectName(InObject->Outer, OutString, SFXName::k_formatBasic);
+                 OutString.Append(L".");
+             }
+ 
