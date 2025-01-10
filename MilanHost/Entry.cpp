@@ -182,7 +182,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    Commands.RegisterCommand(L"dbg", L"dumpclassctors",
+    Commands.RegisterCommand(L"dump", L"classinit",
         [](wchar_t const*)
         {
             for (TypedObjectIterator<UClass, false, false> Iter{}; Iter; ++Iter)
@@ -207,27 +207,6 @@ void RegisterNonshipCommands()
                 }
                 Index++;
             }
-            return true;
-        });
-
-    Commands.RegisterCommand(L"dump", L"nativeops",
-        [](wchar_t const*)
-        {
-            MILAN_INFOW(L"dumping native ops");
-            ::RelativeTimer Timer{};
-
-            std::wofstream Stream{ L"MilanHost-nativeops.csv" };
-            Stream << L"Index;RVA;Address\n";
-
-            auto const Base = reinterpret_cast<std::ptrdiff_t>(::LESDK::GetMainModuleBase());
-
-            for (int Index = 0; Index < 0x400; ++Index)
-            {
-                auto const Address = reinterpret_cast<std::ptrdiff_t>(GNatives[Index]);
-                Stream << std::dec << Index << std::hex << L";0x" << Address - Base << L";0x" << Address << L"\n";
-            }
-
-            MILAN_INFOW(L"dumping native ops - done in %.3f ms.", Timer.GetMilliseconds());
             return true;
         });
 
@@ -256,28 +235,38 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    Commands.RegisterCommand(L"dump", L"sfxuid",
+    Commands.RegisterCommand(L"dump", L"nativeops",
         [](wchar_t const*)
         {
-            MILAN_INFOW(L"dumping SFXUniqueID map");
+            MILAN_INFOW(L"dumping native ops");
             ::RelativeTimer Timer{};
 
-            USFXEngine* const Engine = (*GEngine)->Cast<USFXEngine>();
-            MILAN_CHECKW(Engine != nullptr, L"");
+            std::wofstream Stream{ L"MilanHost-nativeops.csv" };
+            Stream << L"Index;RVA;Address\n";
 
-            auto const LookupAddress = (std::intptr_t)::LESDK::GetMainModuleBase() + 0x1CBC7F8;
-            auto const LookupPtr = (TMap<INT32, INT32>*)LookupAddress;
+            auto const Base = reinterpret_cast<std::ptrdiff_t>(::LESDK::GetMainModuleBase());
 
-            for (auto const [Hash, Index] : *LookupPtr)
+            for (int Index = 0; Index < 0x400; ++Index)
             {
-                wchar_t const* StringValue = L"n/a";
-                if (Index >= 0 && Index < (INT32)Engine->SFXUniqueIDs.Count())
-                    StringValue = *Engine->SFXUniqueIDs(Index);
-
-                MILAN_INFOW(L" Hash = %d, Index = %d  =>  Value = %s", Hash, Index, StringValue);
+                auto const Address = reinterpret_cast<std::ptrdiff_t>(GNatives[Index]);
+                Stream << std::dec << Index << std::hex << L";0x" << Address - Base << L";0x" << Address << L"\n";
             }
 
-            MILAN_INFOW(L"dumping SFXUniqueID map - done in %.3f ms.", Timer.GetMilliseconds());
+            MILAN_INFOW(L"dumping native ops - done in %.3f ms.", Timer.GetMilliseconds());
+            return true;
+        });
+
+    Commands.RegisterCommand(L"dump", L"onlinevers",
+        [](wchar_t const*)
+        {
+            for (TypedObjectIterator<UOnlineSubsystem, true, false> Iter{}; Iter; ++Iter)
+            {
+                auto const Subsystem = *Iter;
+                auto const Name = Subsystem->GetName();
+                MILAN_INFOW(L"%s.GetBuildUniqueId() => 0x%08x", *Name, (unsigned)Subsystem->GetBuildUniqueId());
+                MILAN_INFOW(L"%s.GetBioStaticBuildVersion() => 0x%08x", *Name, (unsigned)Subsystem->GetBioStaticBuildVersion());
+                MILAN_INFOW(L"%s.GetBioDynamicBuildVersion() => 0x%08x", *Name, (unsigned)Subsystem->GetBioDynamicBuildVersion());
+            }
             return true;
         });
 
@@ -323,17 +312,52 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    Commands.RegisterCommand(L"dump", L"onlinevers",
+    Commands.RegisterCommand(L"dump", L"sfxonline",
         [](wchar_t const*)
         {
-            for (TypedObjectIterator<UOnlineSubsystem, true, false> Iter{}; Iter; ++Iter)
+            SFXName const NAME_SFXOnlineFoundation(L"SFXOnlineFoundation", 0);
+            std::ptrdiff_t const Base = reinterpret_cast<std::ptrdiff_t>(::LESDK::GetMainModuleBase());
+
+            MILAN_INFOW(L"Dumping native functions in SFXOnlineFoundation package:");
+            for (TypedObjectIterator<UFunction, false, false> Iter; Iter; ++Iter)
             {
-                auto const Subsystem = *Iter;
-                auto const Name = Subsystem->GetName();
-                MILAN_INFOW(L"%s.GetBuildUniqueId() => 0x%08x", *Name, (unsigned)Subsystem->GetBuildUniqueId());
-                MILAN_INFOW(L"%s.GetBioStaticBuildVersion() => 0x%08x", *Name, (unsigned)Subsystem->GetBioStaticBuildVersion());
-                MILAN_INFOW(L"%s.GetBioDynamicBuildVersion() => 0x%08x", *Name, (unsigned)Subsystem->GetBioDynamicBuildVersion());
+                UFunction* const Function = *Iter;
+                UPackage* const Package = GetOutermostOf(Function);
+                UClass* const Outer = Function->Outer->Cast<UClass>();
+
+                bool const bIsNative = (Function->FunctionFlags & 0x400) != 0;
+                bool const bIsInterface = Outer && (Outer->ClassFlags & 0x4000) != 0;
+
+                if (Package->Name == NAME_SFXOnlineFoundation && bIsNative && !bIsInterface)
+                    MILAN_INFOW(L"%s => 0x%llx", *Function->GetFullName(), (std::ptrdiff_t)Function->Func - Base);
+
+                MILAN_UNUSED_2(Outer, bIsInterface);
             }
+            return true;
+        });
+
+    Commands.RegisterCommand(L"dump", L"sfxuid",
+        [](wchar_t const*)
+        {
+            MILAN_INFOW(L"dumping SFXUniqueID map");
+            ::RelativeTimer Timer{};
+
+            USFXEngine* const Engine = (*GEngine)->Cast<USFXEngine>();
+            MILAN_CHECKW(Engine != nullptr, L"");
+
+            auto const LookupAddress = (std::intptr_t)::LESDK::GetMainModuleBase() + 0x1CBC7F8;
+            auto const LookupPtr = (TMap<INT32, INT32>*)LookupAddress;
+
+            for (auto const [Hash, Index] : *LookupPtr)
+            {
+                wchar_t const* StringValue = L"n/a";
+                if (Index >= 0 && Index < (INT32)Engine->SFXUniqueIDs.Count())
+                    StringValue = *Engine->SFXUniqueIDs(Index);
+
+                MILAN_INFOW(L" Hash = %d, Index = %d  =>  Value = %s", Hash, Index, StringValue);
+            }
+
+            MILAN_INFOW(L"dumping SFXUniqueID map - done in %.3f ms.", Timer.GetMilliseconds());
             return true;
         });
 
@@ -366,7 +390,7 @@ void RegisterNonshipCommands()
             return true;
         });
 
-    Commands.RegisterCommand(L"util", L"updateguidcacheoverride",
+    Commands.RegisterCommand(L"misc", L"updateguidcacheoverride",
         [](wchar_t const*)
         {
             COMPONENT(CGlobals).UpdateGuidCacheOverride();
