@@ -1,5 +1,5 @@
 diff --git a/Src/LESDK/LE3/Core_classes.hpp b/Src/LESDK/LE3/Core_classes.hpp
-index d2edb76..2debd77 100644
+index d2edb76..2f3529c 100644
 --- a/Src/LESDK/LE3/Core_classes.hpp
 +++ b/Src/LESDK/LE3/Core_classes.hpp
 @@ -15,16 +15,199 @@
@@ -202,7 +202,29 @@ index d2edb76..2debd77 100644
  
  #define CONST_InvAspectRatio16x9                                 0.56249
  #define CONST_InvAspectRatio5x4                                  0.8
-@@ -702,25 +885,32 @@ public:
+@@ -262,16 +445,21 @@ public:
+ 	}
+ 
+ 	template<std::derived_from<UObject> T> T const* CastDirect() const requires requires { T::StaticClass(); } {
+ 		return this->Class == T::StaticClass() ? reinterpret_cast<T const*>(this) : nullptr;
+ 	}
+ 
+ 	static UClass* StaticClass();
+ 
++    // Defined after UPackage* because the cast-to type
++    // is required to have been implemented.
++    inline UPackage* GetOutermost();
++    inline UPackage const* GetOutermost() const;
++
+ 	int GetNetIndex ( );
+ 	void appScreenDebugMessage ( FString const& sMsg );
+ 	void appScreenDebugMessageStatic ( FString const& sMsg );
+ 	void GetSystemTime ( int* Year, int* Month, int* DayOfWeek, int* Day, int* Hour, int* Min, int* Sec, int* MSec );
+ 	FString TimeStamp ( );
+ 	struct FVector TransformVectorByRotation ( struct FRotator const& SourceRotation, struct FVector const& SourceVector, unsigned long bInverse );
+ 	struct SFXName GetPackageName ( );
+ 	bool IsPendingKill ( );
+@@ -702,25 +890,32 @@ public:
  
  };
  
@@ -236,7 +258,7 @@ index d2edb76..2debd77 100644
  public:
  	unsigned char                                      UnknownData00[ 0x10 ];                            		// 0x0060 (0x0010) MISSED OFFSET
  
-@@ -1391,17 +1581,34 @@ public:
+@@ -1391,25 +1586,71 @@ public:
      DWORD                           ClassCastFlags;                     // 0x0104 (0x04) - NOT AUTO-GENERATED PROPERTY 
      DWORD                           ClassUnique;                        // 0x0108 (0x04) - NOT AUTO-GENERATED PROPERTY 
      UClass*                         ClassWithin;                        // 0x010C (0x08) - NOT AUTO-GENERATED PROPERTY 
@@ -271,4 +293,41 @@ index d2edb76..2debd77 100644
  public:
  	static UClass* StaticClass();
  
++    inline bool IsChildOf(UClass* const Check) noexcept
++    {
++        for (UClass* SuperClass = this; SuperClass != nullptr; SuperClass = (UClass*)SuperClass->SuperField)
++        {
++            if (SuperClass == Check)
++                return true;
++        }
++
++        return false;
++    }
++
++    template<typename T>
++    inline bool IsChildOf() noexcept
++    {
++        return IsChildOf(T::StaticClass());
++    }
++
  };
+ 
++inline UPackage* UObject::GetOutermost()
++{
++    UObject* Outermost = this;
++    for (; Outermost && Outermost->Outer; Outermost = Outermost->Outer);
++    return Outermost->Cast<UPackage>();
++}
+ 
++inline UPackage const* UObject::GetOutermost() const
++{
++    UObject const* Outermost = this;
++    for (; Outermost && Outermost->Outer; Outermost = Outermost->Outer);
++    return Outermost->Cast<UPackage>();
++}
+ 
+ #undef LESDK_IN_GENERATED
+ 
+ #ifdef _MSC_VER
+ 	#pragma pack ( pop )
+ #endif

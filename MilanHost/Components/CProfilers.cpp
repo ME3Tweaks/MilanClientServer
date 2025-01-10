@@ -1,7 +1,7 @@
 #include "Components/CCommands.hpp"
 #include "Components/CProfilers.hpp"
+#include "Engine/ExtObject.hpp"
 #include "Engine/Intercept.hpp"
-#include "Milan/Misc.hpp"
 #include "NetProf/NetProfStream.hpp"
 
 
@@ -142,7 +142,7 @@ void CProfilers::RegisterCommands()
                 {
                     MILAN_UNUSED(Package);
                     MILAN_DEBUGW(L"    %s, guid = %s, gen = %d / %d",
-                        *Package.PackageName.ToString(), *FormatGuid(Package.Guid),
+                        *Package.PackageName.ToString(), *Package.Guid.ToString(),
                         Package.LocalGeneration, Package.RemoteGeneration);
                 }
             }

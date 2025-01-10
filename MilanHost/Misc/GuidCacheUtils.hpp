@@ -1,5 +1,5 @@
 /**
- * @file        MilanHost/Milan/GuidCacheUtils.hpp
+ * @file        MilanHost/Misc/GuidCacheUtils.hpp
  * @brief       Utilities for debugging GuidCache issues.
  */
 

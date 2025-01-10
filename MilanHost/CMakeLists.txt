@@ -10,6 +10,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Base/Base.hpp
   ${PROJ_FOLDER}/Base/Buffers.cpp
   ${PROJ_FOLDER}/Base/Buffers.hpp
+  ${PROJ_FOLDER}/Base/IOUtils.cpp
+  ${PROJ_FOLDER}/Base/IOUtils.hpp
   ${PROJ_FOLDER}/Base/Logger.cpp
   ${PROJ_FOLDER}/Base/Logger.hpp
   ${PROJ_FOLDER}/Base/LoggingCategories.inl
@@ -36,14 +38,14 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Containers/vector.hpp
   ${PROJ_FOLDER}/Engine/Canvas.cpp
   ${PROJ_FOLDER}/Engine/Canvas.hpp
+  ${PROJ_FOLDER}/Engine/ExtObject.cpp
+  ${PROJ_FOLDER}/Engine/ExtObject.hpp
   ${PROJ_FOLDER}/Engine/Hooks.cpp
   ${PROJ_FOLDER}/Engine/Hooks.hpp
   ${PROJ_FOLDER}/Engine/Intercept.cpp
   ${PROJ_FOLDER}/Engine/Intercept.hpp
-  ${PROJ_FOLDER}/Milan/GuidCacheUtils.cpp
-  ${PROJ_FOLDER}/Milan/GuidCacheUtils.hpp
-  ${PROJ_FOLDER}/Milan/Misc.cpp
-  ${PROJ_FOLDER}/Milan/Misc.hpp
+  ${PROJ_FOLDER}/Misc/GuidCacheUtils.cpp
+  ${PROJ_FOLDER}/Misc/GuidCacheUtils.hpp
   ${PROJ_FOLDER}/NetProf/NetProfDecls.hpp
   ${PROJ_FOLDER}/NetProf/NetProfExtractors.asm
   ${PROJ_FOLDER}/NetProf/NetProfHandlers.cpp

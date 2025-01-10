@@ -1,6 +1,4 @@
 #include <array>
-
-#include "Milan/Misc.hpp"
 #include "NetProf/NetProfStream.hpp"
 
 

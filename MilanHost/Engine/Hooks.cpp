@@ -1,5 +1,6 @@
 #include <array>
 
+#include "Base/IOUtils.hpp"
 #include "Base/Logger.hpp"
 #include "Components/CCommands.hpp"
 #include "Components/CGlobals.hpp"
@@ -8,10 +9,10 @@
 #include "Components/CProfilers.hpp"
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
+#include "Engine/ExtObject.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
-#include "Milan/GuidCacheUtils.hpp"
-#include "Milan/Misc.hpp"
+#include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfStream.hpp"
 #include "Shell/CmdArgs.hpp"
 
@@ -359,7 +360,7 @@ AActor* UWorld_SpawnActor_hook(
     static std::uint64_t s_errorCounter = 0u;
 
 #ifndef _FINAL_RELEASE
-    if (Class == nullptr || !IsChildOf<AActor>(Class))  [[unlikely]]
+    if (Class == nullptr || !Class->IsChildOf<AActor>())  [[unlikely]]
     {
         MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: Class is null or not an actor", s_errorCounter);
     }
@@ -372,7 +373,7 @@ AActor* UWorld_SpawnActor_hook(
     }
 
     AActor* const Default = Class->ClassDefaultObject ? Class->ClassDefaultObject->Cast<AActor>() : nullptr;
-    if (GlobalBegunPlay() && Default != nullptr && (Default->bStatic || Default->bNoDelete)) [[unlikely]]
+    if (ActorUtils::GlobalBegunPlay() && Default != nullptr && (Default->bStatic || Default->bNoDelete)) [[unlikely]]
     {
         MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: CDO is bStatic or bNoDelete and GWorld has begun play", s_errorCounter);
     }
@@ -403,7 +404,7 @@ AActor* UWorld_SpawnActor_hook(
 
         if (Class != nullptr && Class->GetName().Equals(L"SFXMutator_DifficultySpeed"))
         {
-            AWorldInfo* const WorldInfo = GlobalWorldInfo();
+            AWorldInfo* const WorldInfo = ActorUtils::GlobalWorldInfo();
             if (WorldInfo && (WorldInfo->bIsMenuLevel || WorldInfo->bIsUIWorld || WorldInfo->bIsLobbyLevel))
                 bAvoidLogging = true;
         }
@@ -481,7 +482,7 @@ int UGuidCache_LookupPackageGuid_hook(UGuidCache* const Context, SFXName const P
         if (Override.has_value())
         {
             MILAN_WARNW(ELOG_NetHooks, L"UGuidCache::LookupPackageGuid using override for package = '%s', new guid = '%s'",
-                *Package.ToString(), *FormatGuid(*Override));
+                *Package.ToString(), *(*Override).ToString());
             *OutGuid = *Override;
             return TRUE;
         }
@@ -635,7 +636,7 @@ int UPackageMap_SerializeObject_hook(UPackageMap* const Context, FArchive* const
         if (*Object != nullptr && ((*Object)->ObjectFlags & 0x600) != 0)
         {
             //auto const PackageMap = reinterpret_cast<UPackageMap_Proxy*>(Context);
-            auto const Outermost = GetOutermostOf(*Object);
+            auto const Outermost = (*Object)->GetOutermost();
             auto const Index = Context->PackageMapList.Find(SFXName(Outermost->Name));
 
             FPackageInfo const* Info = nullptr;

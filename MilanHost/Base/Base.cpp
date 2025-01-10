@@ -1,10 +1,12 @@
+#include <Windows.h>
+
 #include <array>
+#include <atomic>
 #include <cstdio>
 #include <cwchar>
 
-#include "Components/COutput.hpp"
-
 #include "Base/Base.hpp"
+#include "Components/COutput.hpp"
 #include "Engine/Hooks.hpp"
 
 
@@ -165,4 +167,66 @@ void Details::OnFatalErrorW(CodePlaceW const& Place,
 bool Details::ShouldBreak() noexcept
 {
     return !gb_disableSafeBreak && ::IsDebuggerPresent();
+}
+
+
+// ! RelativeTimer implementation.
+// ========================================
+
+RelativeTimer::RelativeTimer()
+{
+    LARGE_INTEGER liFreq{};
+    LARGE_INTEGER liStart{};
+
+    QueryPerformanceFrequency(&liFreq);
+    QueryPerformanceCounter(&liStart);
+
+    Frequency = liFreq.QuadPart;
+    CounterStart = liStart.QuadPart;
+}
+
+float RelativeTimer::GetSeconds() const
+{
+    LARGE_INTEGER liNow{};
+    QueryPerformanceCounter(&liNow);
+    return static_cast<float>(liNow.QuadPart - CounterStart) / Frequency;
+}
+
+float RelativeTimer::GetMilliseconds() const
+{
+    return GetSeconds() * 1000;
+}
+
+
+// ! Misc utilities.
+// ========================================
+
+int GetGameInstanceOrdinal()
+{
+    static std::atomic_bool s_initialized{ false };
+    static int s_ordinal{ -1 };
+
+    if (!s_initialized.exchange(true))
+    {
+        HANDLE  Mutex = nullptr;
+        int     Ordinal = 0;
+
+        while (true)
+        {
+            auto const Name = FString::Printf(L"MilanHost-%d", Ordinal);
+            Mutex = ::CreateMutexW(nullptr, true, *Name);
+
+            if (Mutex != nullptr && ::GetLastError() != ERROR_ALREADY_EXISTS)
+            {
+                s_ordinal = Ordinal;
+                break;
+            }
+
+            Mutex = nullptr;
+            Ordinal++;
+        }
+
+    }
+
+    return s_ordinal;
 }

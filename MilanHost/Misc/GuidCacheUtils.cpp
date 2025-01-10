@@ -1,7 +1,7 @@
 #include <cstdio>
 
 #include "Base/Logger.hpp"
-#include "Milan/GuidCacheUtils.hpp"
+#include "Misc/GuidCacheUtils.hpp"
 
 
 // ! GuidCacheOverride implementation.
@@ -65,7 +65,7 @@ void GuidCacheOverride::UpdateLookup()
         MILAN_CHECKW(Count == 5, L"");
 
         SFXName const Package(Name, 0);
-        MILAN_TRACEW(ELOG_DevelUtils, L"GuidCacheOverride: adding %s => %s override", *Package.ToString(), *FormatGuid(Guid));
+        MILAN_TRACEW(ELOG_DevelUtils, L"GuidCacheOverride: adding %s => %s override", *Package.ToString(), *Guid.ToString());
 
         Temp.insert({ Package, Guid });
     }

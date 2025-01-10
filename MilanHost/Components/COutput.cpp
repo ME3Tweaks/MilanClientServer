@@ -1,8 +1,8 @@
 #include "Base/Logger.hpp"
 #include "Components/COutput.hpp"
+#include "Engine/ExtObject.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
-#include "Milan/Misc.hpp"
 #include "Shell/ClientConfig.hpp"
 #include "Shell/CmdArgs.hpp"
 

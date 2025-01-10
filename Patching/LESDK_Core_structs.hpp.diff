@@ -1,0 +1,32 @@
+diff --git a/Src/LESDK/LE3/Core_structs.hpp b/Src/LESDK/LE3/Core_structs.hpp
+index 8b902e5..0d2d7ba 100644
+--- a/Src/LESDK/LE3/Core_structs.hpp
++++ b/Src/LESDK/LE3/Core_structs.hpp
+@@ -53,17 +53,26 @@ struct FPlane : FVector
+ 
+ // ScriptStruct Core.Object.Guid
+ // 0x0010
+ struct FGuid
+ {
+ 	int                                                A;                                                		// 0x0000 (0x0004) [0x0000000000000000]              
+ 	int                                                B;                                                		// 0x0004 (0x0004) [0x0000000000000000]              
+ 	int                                                C;                                                		// 0x0008 (0x0004) [0x0000000000000000]              
+-	int                                                D;                                                		// 0x000C (0x0004) [0x0000000000000000]              
++	int                                                D;                                                		// 0x000C (0x0004) [0x0000000000000000]
++
++    inline FString ToString() { return FString::Printf(L"%08X%08X%08X%08X", A, B, C, D); }
++    inline FString ToString() const { return FString::Printf(L"%08X%08X%08X%08X", A, B, C, D); }
++
++    inline bool operator==(FGuid& Other) { return A == Other.A && B == Other.B && C == Other.C && D == Other.D; }
++    inline bool operator==(FGuid const& Other) const { return A == Other.A && B == Other.B && C == Other.C && D == Other.D; }
++
++    inline bool operator!=(FGuid& Other) { return !(*this == Other); }
++    inline bool operator!=(FGuid const& Other) const { return !(*this == Other); }
+ };
+ 
+ // ScriptStruct Core.Object.Vector2D
+ // 0x0008
+ struct FVector2D
+ {
+ 	float                                              X;                                                		// 0x0000 (0x0004) [0x0000000000000001]              ( CPF_Edit )
+ 	float                                              Y;                                                		// 0x0004 (0x0004) [0x0000000000000001]              ( CPF_Edit )

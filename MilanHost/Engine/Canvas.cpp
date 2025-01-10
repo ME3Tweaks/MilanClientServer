@@ -1,7 +1,7 @@
 #include "Base/Base.hpp"
 #include "Engine/Canvas.hpp"
+#include "Engine/ExtObject.hpp"
 #include "Engine/Hooks.hpp"
-#include "Milan/Misc.hpp"
 
 
 // ! CanvasDrawer implementation.
@@ -329,7 +329,7 @@ void ProfilePendingPackages(MilanCanvasDrawer& Drawer, UObject* Target)
     {
         Drawer.DrawString(Pending.PackageName.ToString());
         Drawer.PushIndent();
-        Drawer.DrawProperty(L"Guid", *FormatGuid(Pending.Guid));
+        Drawer.DrawProperty(L"Guid", *Pending.Guid.ToString());
         Drawer.DrawProperty(L"Parent", Pending.Parent ? Pending.Parent->GetFullName() : L"n/a");
         Drawer.DrawProperty(L"ForcedBase", Pending.ForcedExportBasePackageName.ToString());
         Drawer.PopIndent();
@@ -483,7 +483,7 @@ void ProfileNetwork(MilanCanvasDrawer& Drawer, UObject* const Target)
                     FString::Printf(L"Name=%s, Parent=%s, Guid=%s",
                         *PendingPackage.PackageName.ToString(),
                         PendingPackage.Parent ? *PendingPackage.Parent->StaticName() : L"n/a",
-                        *FormatGuid(PendingPackage.Guid)));
+                        *PendingPackage.Guid.ToString()));
                 Drawer.PopIndent();
             }
             Drawer.PopIndent();

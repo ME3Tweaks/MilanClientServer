@@ -605,7 +605,7 @@ static constexpr auto k_seekCurrent = SeekOrigin::Current;
 static constexpr auto k_seekEnd = SeekOrigin::End;
 
 
-// ! Misc types.
+// ! Misc types and utilities.
 // ========================================
 
 class NonCopyable
@@ -615,6 +615,22 @@ public:
     NonCopyable(NonCopyable const&) = delete;
     NonCopyable& operator=(NonCopyable const&) = delete;
 };
+
+class RelativeTimer final
+{
+    long long Frequency{};
+    long long CounterStart{};
+
+public:
+
+    RelativeTimer();
+    float GetSeconds() const;
+    float GetMilliseconds() const;
+};
+
+
+/** Retrieves number of game instances currently launch minus one. */
+int GetGameInstanceOrdinal();
 
 
 /**

@@ -17,8 +17,8 @@
 #include "Components/CProfilers.hpp"
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
-#include "Milan/GuidCacheUtils.hpp"
-#include "Milan/Misc.hpp"
+#include "Engine/ExtObject.hpp"
+#include "Misc/GuidCacheUtils.hpp"
 #include "Shell/ClientConfig.hpp"
 #include "Shell/CmdArgs.hpp"
 
@@ -202,7 +202,7 @@ void RegisterNonshipCommands()
                 MILAN_INFOW(L"UGuidCache n. %d: filename = %s", Index, *(*Iter)->Filename);
                 for (auto const& [Name, Guid] : (*Iter)->PackageGuids)
                 {
-                    MILAN_INFOW(L"  %s => %s", *Name.ToString(), *FormatGuid(Guid));
+                    MILAN_INFOW(L"  %s => %s", *Name.ToString(), *Guid.ToString());
                 }
                 Index++;
             }
@@ -321,7 +321,7 @@ void RegisterNonshipCommands()
             for (TypedObjectIterator<UFunction, false, false> Iter; Iter; ++Iter)
             {
                 UFunction* const Function = *Iter;
-                UPackage* const Package = GetOutermostOf(Function);
+                UPackage* const Package = Function->GetOutermost();
                 UClass* const Outer = Function->Outer->Cast<UClass>();
 
                 bool const bIsNative = (Function->FunctionFlags & 0x400) != 0;

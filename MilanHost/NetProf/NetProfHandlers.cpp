@@ -1,8 +1,8 @@
 #include <intrin.h>
 
 #include "Base/Base.hpp"
+#include "Engine/ExtObject.hpp"
 #include "Engine/Hooks.hpp"
-#include "Milan/Misc.hpp"
 #include "NetProf/NetProfDecls.hpp"
 #include "NetProf/NetProfStream.hpp"
 
@@ -208,11 +208,11 @@ void MlnUWorldNotifyControlMessageUses_Handler(UNetConnection* const Connection,
     MILAN_CHECKW(TcpConn != nullptr, L"");
 
     MILAN_TRACEW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Uses): Remote = %s, Package = %s, Guid = %s (%s), Gen = %d",
-        *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *FormatGuid(Package->Guid), *LookupPackageName(TcpConn, &Package->Guid), Package->RemoteGeneration);
+        *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *Package->Guid.ToString(), *LookupPackageName(TcpConn, &Package->Guid), Package->RemoteGeneration);
 
     auto const Resolved = LookupPackageName(TcpConn, &Package->Guid);
     NETPROF(CaptureControlMessage(Connection, false, NM_Uses, FString::Printf(L"Package=%s, Guid=%s, Gen=%d, Resolved=%s",
-            *Package->PackageName.ToString(), *FormatGuid(Package->Guid), Package->RemoteGeneration, *Resolved)));
+            *Package->PackageName.ToString(), *Package->Guid.ToString(), Package->RemoteGeneration, *Resolved)));
 
     MILAN_UNUSED_4(TcpConn, Resolved, Connection, Package);
 }
@@ -223,10 +223,10 @@ void MlnUWorldNotifyControlMessageHave_Handler(UNetConnection* const Connection,
     MILAN_CHECKW(TcpConn != nullptr, L"");
 
     MILAN_TRACEW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Have): Remote = %s, Guid = %s (%s), Gen = %d",
-        *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid), Generation);
+        *TcpConn->FormatRemoteAddress(), *Guid->ToString(), *LookupPackageName(TcpConn, Guid), Generation);
 
     NETPROF(CaptureControlMessage(Connection, false, NM_Have, FString::Printf(L"Guid=%s, Gen=%d, Resolved=%s",
-        *FormatGuid(*Guid), Generation, *LookupPackageName(TcpConn, Guid))));
+        *Guid->ToString(), Generation, *LookupPackageName(TcpConn, Guid))));
 
     MILAN_UNUSED_4(TcpConn, Connection, Guid, Generation);
 }
@@ -260,10 +260,10 @@ void MlnUWorldNotifyControlMessageAbort_Handler(UNetConnection* const Connection
     MILAN_CHECKW(TcpConn != nullptr, L"");
 
     MILAN_WARNW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Abort): Remote = %s, Guid = %s (%s)",
-        *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid));
+        *TcpConn->FormatRemoteAddress(), *Guid->ToString(), *LookupPackageName(TcpConn, Guid));
 
     NETPROF(CaptureControlMessage(Connection, false, NM_Abort, FString::Printf(L"Guid=%s, Resolved=%s",
-        *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid))));
+        *Guid->ToString(), *LookupPackageName(TcpConn, Guid))));
 
     MILAN_UNUSED_3(TcpConn, Connection, Guid);
 }
@@ -274,10 +274,10 @@ void MlnUWorldNotifyControlMessageUnload_Handler(UNetConnection* const Connectio
     MILAN_CHECKW(TcpConn != nullptr, L"");
 
     MILAN_TRACEW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Unload): Remote = %s, Guid = %s (%s)",
-        *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid));
+        *TcpConn->FormatRemoteAddress(), *Guid->ToString(), *LookupPackageName(TcpConn, Guid));
 
     NETPROF(CaptureControlMessage(Connection, false, NM_Unload, FString::Printf(L"Guid=%s, Resolved=%s",
-        *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid))));
+        *Guid->ToString(), *LookupPackageName(TcpConn, Guid))));
 
     MILAN_UNUSED_3(TcpConn, Connection, Guid);
 }
@@ -299,10 +299,10 @@ void MlnUWorldNotifyControlMessageUnknown21_Handler(UNetConnection* const Connec
     MILAN_CHECKW(TcpConn != nullptr, L"");
 
     MILAN_TRACEW(ELOG_NetHooks, L"UWorld::NotifyControlMessage (Unk21_VIS): Remote = %s, Guid = %s (%s), Flag = %d",
-        *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid), Flag);
+        *TcpConn->FormatRemoteAddress(), *Guid->ToString(), *LookupPackageName(TcpConn, Guid), Flag);
 
     NETPROF(CaptureControlMessage(Connection, false, NM_Unk21_VIS, FString::Printf(L"Flag=%d, Guid=%s, Resolved=%s",
-        Flag, *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid))));
+        Flag, *Guid->ToString(), *LookupPackageName(TcpConn, Guid))));
 
     MILAN_UNUSED_5(Connection, TcpConn, Guid, Flag, Bunch);
 }
@@ -394,7 +394,7 @@ void MlnUNetPendingLevelNotifyControlMessageUses_Handler(UNetConnection* const C
     if (bMatchedPackage)
     {
         MILAN_TRACEW(ELOG_NetHooks, L"UNetPendingLevel::NotifyControlMessage (Uses): Remote = %s, Package = %s, Guid = %s (%s), Gen = %d",
-            *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *FormatGuid(Package->Guid),
+            *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *Package->Guid.ToString(),
             *Resolved, Package->RemoteGeneration);
     }
     else
@@ -402,17 +402,17 @@ void MlnUNetPendingLevelNotifyControlMessageUses_Handler(UNetConnection* const C
         wchar_t const* const ErrorReason = bFoundPackage ? L"mismatched guid" : L"missing package";
 
         MILAN_WARNW(ELOG_NetHooks, L"UNetPendingLevel::NotifyControlMessage (Uses): Remote = %s, Package = %s, Guid = %s (%s), Gen = %d, Failure = %s",
-            *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *FormatGuid(Package->Guid),
+            *TcpConn->FormatRemoteAddress(), *Package->PackageName.ToString(), *Package->Guid.ToString(),
             *Resolved, Package->RemoteGeneration, ErrorReason);
 
         if (bFoundPackage)
         {
-            MILAN_WARNW(ELOG_NetHooks, L"  expected guid = %s, found guid = %s", *FormatGuid(Package->Guid), *FormatGuid(FoundGuid));
+            MILAN_WARNW(ELOG_NetHooks, L"  expected guid = %s, found guid = %s", *Package->Guid.ToString(), *FoundGuid.ToString());
         }
     }
 
     NETPROF(CaptureControlMessage(Connection, true, NM_Uses, FString::Printf(L"Package=%s, Guid=%s, Gen=%d, Resolved=%s",
-        *Package->PackageName.ToString(), *FormatGuid(Package->Guid), Package->RemoteGeneration, *Resolved)));
+        *Package->PackageName.ToString(), *Package->Guid.ToString(), Package->RemoteGeneration, *Resolved)));
     MILAN_UNUSED_4(TcpConn, Resolved, Connection, Package);
 }
 
@@ -434,10 +434,10 @@ void MlnUNetPendingLevelNotifyControlMessageUnload_Handler(UNetConnection* const
     MILAN_CHECKW(TcpConn != nullptr, L"");
 
     MILAN_TRACEW(ELOG_NetHooks, L"UNetPendingLevel::NotifyControlMessage (Unload): Remote = %s, Guid = %s (%s)",
-        *TcpConn->FormatRemoteAddress(), *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid));
+        *TcpConn->FormatRemoteAddress(), *Guid->ToString(), *LookupPackageName(TcpConn, Guid));
 
     NETPROF(CaptureControlMessage(Connection, true, NM_Unload, FString::Printf(L"Guid=%s, Resolved=%s",
-        *FormatGuid(*Guid), *LookupPackageName(TcpConn, Guid))));
+        *Guid->ToString(), *LookupPackageName(TcpConn, Guid))));
 
     MILAN_BREAK_ATTACHED();  // This injection hasn't been tested yet.
     MILAN_UNUSED_3(Connection, TcpConn, Guid);
