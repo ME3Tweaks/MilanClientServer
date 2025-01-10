@@ -33,7 +33,7 @@ void CProfilers::On_UObject_ProcessEvent(UObject* const Context, UFunction* cons
 {
     MILAN_UNUSED_4(Context, Function, Parms, Result);
 
-    static FunctionInterceptLegacy GameViewportClient_PostRender{};
+    static FunctionStructIntercept GameViewportClient_PostRender{};
     if (GameViewportClient_PostRender.Applies(Function, L"Function Engine.GameViewportClient.PostRender"))
     {
         auto* const TParms = reinterpret_cast<UGameViewportClient_eventPostRender_Parms*>(Parms);

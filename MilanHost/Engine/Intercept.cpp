@@ -4,18 +4,77 @@
 #include "Engine/Intercept.hpp"
 
 
-// ! FunctionInterceptLegacy implementation.
+// ! FunctionNamedIntercept implementation.
 // ========================================
 
-TArray<FunctionInterceptLegacy*> FunctionInterceptLegacy::RegisteredIntercepts;
+TArray<FunctionNamedIntercept*> FunctionNamedIntercept::RegisteredIntercepts;
 
-FunctionInterceptLegacy::FunctionInterceptLegacy()
+FunctionNamedIntercept::FunctionNamedIntercept()
 {
     // This requires all instances to be static.
     RegisteredIntercepts.Add(this);
 }
 
-bool FunctionInterceptLegacy::Applies(UStruct* const Node, wchar_t const* const FullName)
+bool FunctionNamedIntercept::Applies (
+    UStruct* const Node,
+    wchar_t const* const PackageName,
+    wchar_t const* const ClassName,
+    wchar_t const* const FunctionName
+)
+{
+    MILAN_CHECKW(Node != nullptr, L"");
+
+    if (!FunctionDescriptor)
+    {
+        MILAN_CHECKW(PackageName != nullptr, L"");
+        MILAN_CHECKW(ClassName != nullptr, L"");
+        MILAN_CHECKW(FunctionName != nullptr, L"");
+
+        FunctionDescriptor = std::make_unique<TargetDescriptor>();
+        FunctionDescriptor->Package = SFXName(PackageName, 0);
+        FunctionDescriptor->Class = SFXName(ClassName, 0);
+        FunctionDescriptor->Function = SFXName(FunctionName, 0);
+    }
+
+    UPackage* const Package = Node->GetOutermost();
+    UObject* const Outer = Node->Outer;
+
+    TargetDescriptor const Check {
+        .Package = Package ? Package->Name : SFXName(),
+        .Class = Outer ? Outer->Name : SFXName(),
+        .Function = Node->Name
+    };
+    return *FunctionDescriptor == Check;
+}
+
+void FunctionNamedIntercept::InvalidateAllRegistered()
+{
+    for (FunctionNamedIntercept* Intercept : RegisteredIntercepts)
+    {
+        MILAN_CHECKW(Intercept->FunctionDescriptor, L"");
+        Intercept->FunctionDescriptor = nullptr;
+    }
+}
+
+void FunctionNamedIntercept::CleanupRegistered()
+{
+    RegisteredIntercepts.Clear();
+    RegisteredIntercepts.Shrink();
+}
+
+
+// ! FunctionStructIntercept implementation.
+// ========================================
+
+TArray<FunctionStructIntercept*> FunctionStructIntercept::RegisteredIntercepts;
+
+FunctionStructIntercept::FunctionStructIntercept()
+{
+    // This requires all instances to be static.
+    RegisteredIntercepts.Add(this);
+}
+
+bool FunctionStructIntercept::Applies(UStruct* const Node, wchar_t const* const FullName)
 {
     MILAN_CHECKW(Node != nullptr, L"");
 
@@ -35,16 +94,16 @@ bool FunctionInterceptLegacy::Applies(UStruct* const Node, wchar_t const* const 
     return TargetNode == Node;
 }
 
-void FunctionInterceptLegacy::InvalidateAllRegistered()
+void FunctionStructIntercept::InvalidateAllRegistered()
 {
-    for (FunctionInterceptLegacy* Intercept : RegisteredIntercepts)
+    for (FunctionStructIntercept* Intercept : RegisteredIntercepts)
     {
         MILAN_CHECKW(Intercept->TargetFullName != nullptr, L"");
         Intercept->TargetNode = nullptr;
     }
 }
 
-void FunctionInterceptLegacy::CleanupRegistered()
+void FunctionStructIntercept::CleanupRegistered()
 {
     RegisteredIntercepts.Clear();
     RegisteredIntercepts.Shrink();
@@ -144,12 +203,12 @@ std::span<unsigned char> CaveIndexer::ViewMainModule()
 }
 
 
-// ! MiddleIntercept implementation.
+// ! BinaryInjection implementation.
 // ========================================
 
 #ifndef _FINAL_RELEASE
 
-MiddleIntercept::MiddleIntercept(wchar_t const* const InLabel, void* const InAddress,
+BinaryInjection::BinaryInjection(wchar_t const* const InLabel, void* const InAddress,
     void* const InStubFunction, CaveIndexer* const InCaveIndexer)
 {
     MILAN_CHECKW(InLabel != nullptr, L"");
@@ -162,20 +221,20 @@ MiddleIntercept::MiddleIntercept(wchar_t const* const InLabel, void* const InAdd
     Init(InAddress, InStubFunction, InCaveIndexer);
 }
 
-MiddleIntercept::~MiddleIntercept() noexcept
+BinaryInjection::~BinaryInjection() noexcept
 {
     // ...
 }
 
-void MiddleIntercept::Install(wchar_t const* const InLabel, int const InRVA, void* const InStubFunction, CaveIndexer& InCaveIndexer)
+void BinaryInjection::Install(wchar_t const* const InLabel, int const InRVA, void* const InStubFunction, CaveIndexer& InCaveIndexer)
 {
     auto* const MainBase = reinterpret_cast<unsigned char*>(GetMainBase());
-    MiddleIntercept Instance{ InLabel, MainBase + InRVA, InStubFunction, &InCaveIndexer };
+    BinaryInjection Instance{ InLabel, MainBase + InRVA, InStubFunction, &InCaveIndexer };
     MILAN_TRACEW(ELOG_StartupGlobals, L"installed intercept '%s' (0x%p)", InLabel, (void*)Instance.Address);
     MILAN_UNUSED(Instance);
 }
 
-void MiddleIntercept::Init(void* const InAddress,
+void BinaryInjection::Init(void* const InAddress,
     void* const InStubFunction, CaveIndexer* const InCaveIndexer)
 {
     Function = InStubFunction;
@@ -311,7 +370,7 @@ void MiddleIntercept::Init(void* const InAddress,
     Indexer = nullptr;
 }
 
-void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* const RelayAddress,
+void BinaryInjection::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* const RelayAddress,
     unsigned char*& CallCursor, std::ptrdiff_t& CallAvailLength) const
 {
     std::memset(Scratch, 0, sizeof *Scratch);
@@ -398,7 +457,7 @@ void MiddleIntercept::EncodeCallCave(ZydisEncoderRequest* const Scratch, void* c
 }
 
 
-void MiddleIntercept::UpdateProtect(void* const InAddress, size_t const Length, bool const bEnable) const
+void BinaryInjection::UpdateProtect(void* const InAddress, size_t const Length, bool const bEnable) const
 {
     DWORD Previous = 0u;
 
@@ -414,12 +473,12 @@ void MiddleIntercept::UpdateProtect(void* const InAddress, size_t const Length, 
     }
 }
 
-void MiddleIntercept::UpdateProtect(CaveIndexer::CCaveInfo const& InCave, bool const bEnable) const
+void BinaryInjection::UpdateProtect(CaveIndexer::CCaveInfo const& InCave, bool const bEnable) const
 {
     UpdateProtect(reinterpret_cast<void*>(InCave.Address), InCave.Size, bEnable);
 }
 
-void MiddleIntercept::DebugDisassemble(unsigned char* const Pointer, size_t Length)
+void BinaryInjection::DebugDisassemble(unsigned char* const Pointer, size_t Length)
 {
     MILAN_CHECKW(Pointer != nullptr, L"");
     MILAN_CHECKW(Length != 0, L"");
@@ -439,7 +498,7 @@ void MiddleIntercept::DebugDisassemble(unsigned char* const Pointer, size_t Leng
     }
 }
 
-size_t MiddleIntercept::GetPageSize() noexcept
+size_t BinaryInjection::GetPageSize() noexcept
 {
     static size_t PageSize = SIZE_MAX;
 
@@ -453,7 +512,7 @@ size_t MiddleIntercept::GetPageSize() noexcept
     return PageSize;
 }
 
-std::intptr_t MiddleIntercept::GetMainBase() noexcept
+std::intptr_t BinaryInjection::GetMainBase() noexcept
 {
     static std::intptr_t MainBase = INTPTR_MAX;
 

@@ -194,36 +194,36 @@ void CGlobals::InitNetworkInjections()
     CaveIndexer Indexer{ k_needCaveSize };
 
 
-    MiddleIntercept::Install(L"UNetConnection::ReceivedPacket-1", 0x48B663, MlnUNetConnectionReceivedPacket1, Indexer);
+    BinaryInjection::Install(L"UNetConnection::ReceivedPacket-1", 0x48B663, MlnUNetConnectionReceivedPacket1, Indexer);
 
-    MiddleIntercept::Install(L"UChannel::SendBunch-1", 0x48E3D9, MlnUChannelSendBunch1, Indexer);
-    MiddleIntercept::Install(L"UChannel::SendBunch-2", 0x48E645, MlnUChannelSendBunch2, Indexer);
-    MiddleIntercept::Install(L"UActorChannel::ReplicateActor-1", 0x48C82C, MlnUActorChannelReplicateActor1, Indexer);
-    MiddleIntercept::Install(L"UActorChannel::ReplicateActor-2", 0x48D3B0, MlnUActorChannelReplicateActor2, Indexer);
-    MiddleIntercept::Install(L"UActorChannel::ReplicateActor-3", 0x48D43D, MlnUActorChannelReplicateActor3, Indexer);
-    MiddleIntercept::Install(L"InternalReplicateFunction", 0x709CFC, MlnInternalReplicateFunction1, Indexer);
-    MiddleIntercept::Install(L"SeamlessTravelTick", 0x8CA57B, MlnSeamlessTravelTick1, Indexer);
-    MiddleIntercept::Install(L"UTcpNetDriverTickDispatch", 0x90CEDA, MlnUTcpNetDriverTickDispatch, Indexer);
+    BinaryInjection::Install(L"UChannel::SendBunch-1", 0x48E3D9, MlnUChannelSendBunch1, Indexer);
+    BinaryInjection::Install(L"UChannel::SendBunch-2", 0x48E645, MlnUChannelSendBunch2, Indexer);
+    BinaryInjection::Install(L"UActorChannel::ReplicateActor-1", 0x48C82C, MlnUActorChannelReplicateActor1, Indexer);
+    BinaryInjection::Install(L"UActorChannel::ReplicateActor-2", 0x48D3B0, MlnUActorChannelReplicateActor2, Indexer);
+    BinaryInjection::Install(L"UActorChannel::ReplicateActor-3", 0x48D43D, MlnUActorChannelReplicateActor3, Indexer);
+    BinaryInjection::Install(L"InternalReplicateFunction", 0x709CFC, MlnInternalReplicateFunction1, Indexer);
+    BinaryInjection::Install(L"SeamlessTravelTick", 0x8CA57B, MlnSeamlessTravelTick1, Indexer);
+    BinaryInjection::Install(L"UTcpNetDriverTickDispatch", 0x90CEDA, MlnUTcpNetDriverTickDispatch, Indexer);
 
-    MiddleIntercept::Install(L"UWorldNotifyControlMessageHello", 0x8C48FD, MlnUWorldNotifyControlMessageHello, Indexer);
-    MiddleIntercept::Install(L"UWorldNotifyControlMessageNetspeed", 0x8C4B96, MlnUWorldNotifyControlMessageNetspeed, Indexer);
-    MiddleIntercept::Install(L"UWorldNotifyControlMessageLogin", 0x8C4FA2, MlnUWorldNotifyControlMessageLogin, Indexer);
-    MiddleIntercept::Install(L"UWorldNotifyControlMessageFailure", 0x8C4559, MlnUWorldNotifyControlMessageFailure, Indexer);
-    MiddleIntercept::Install(L"UWorldNotifyControlMessageUses", 0x8C43D7, MlnUWorldNotifyControlMessageUses, Indexer);
-    MiddleIntercept::Install(L"UWorldNotifyControlMessageHave", 0x8C4C39, MlnUWorldNotifyControlMessageHave, Indexer);
-    MiddleIntercept::Install(L"UWorldNotifyControlMessageJoin", 0x8C518B, MlnUWorldNotifyControlMessageJoin, Indexer);
-    MiddleIntercept::Install(L"UWorldNotifyControlMessageAbort", 0x8C4DAE, MlnUWorldNotifyControlMessageAbort, Indexer);
-    MiddleIntercept::Install(L"UWorldNotifyControlMessageUnload", 0x8C4309, MlnUWorldNotifyControlMessageUnload, Indexer);
-    MiddleIntercept::Install(L"UWorldNotifyControlMessageUnknown19", 0x8C42B3, MlnUWorldNotifyControlMessageUnknown19, Indexer);
-    MiddleIntercept::Install(L"UWorldNotifyControlMessageUnknown21", 0x8C57B2, MlnUWorldNotifyControlMessageUnknown21, Indexer);
+    BinaryInjection::Install(L"UWorldNotifyControlMessageHello", 0x8C48FD, MlnUWorldNotifyControlMessageHello, Indexer);
+    BinaryInjection::Install(L"UWorldNotifyControlMessageNetspeed", 0x8C4B96, MlnUWorldNotifyControlMessageNetspeed, Indexer);
+    BinaryInjection::Install(L"UWorldNotifyControlMessageLogin", 0x8C4FA2, MlnUWorldNotifyControlMessageLogin, Indexer);
+    BinaryInjection::Install(L"UWorldNotifyControlMessageFailure", 0x8C4559, MlnUWorldNotifyControlMessageFailure, Indexer);
+    BinaryInjection::Install(L"UWorldNotifyControlMessageUses", 0x8C43D7, MlnUWorldNotifyControlMessageUses, Indexer);
+    BinaryInjection::Install(L"UWorldNotifyControlMessageHave", 0x8C4C39, MlnUWorldNotifyControlMessageHave, Indexer);
+    BinaryInjection::Install(L"UWorldNotifyControlMessageJoin", 0x8C518B, MlnUWorldNotifyControlMessageJoin, Indexer);
+    BinaryInjection::Install(L"UWorldNotifyControlMessageAbort", 0x8C4DAE, MlnUWorldNotifyControlMessageAbort, Indexer);
+    BinaryInjection::Install(L"UWorldNotifyControlMessageUnload", 0x8C4309, MlnUWorldNotifyControlMessageUnload, Indexer);
+    BinaryInjection::Install(L"UWorldNotifyControlMessageUnknown19", 0x8C42B3, MlnUWorldNotifyControlMessageUnknown19, Indexer);
+    BinaryInjection::Install(L"UWorldNotifyControlMessageUnknown21", 0x8C57B2, MlnUWorldNotifyControlMessageUnknown21, Indexer);
 
-    MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageWelcome", 0x660814, MlnUNetPendingLevelNotifyControlMessageWelcome, Indexer);
-    MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageUpgrade", 0x65F99C, MlnUNetPendingLevelNotifyControlMessageUpgrade, Indexer);
-    MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageChallenge", 0x6600F7, MlnUNetPendingLevelNotifyControlMessageChallenge, Indexer);
-    MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageFailure", 0x65FF4C, MlnUNetPendingLevelNotifyControlMessageFailure, Indexer);
-    MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageUses", 0x65FB11, MlnUNetPendingLevelNotifyControlMessageUses, Indexer);
-    MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageDlMngr", 0x66075A, MlnUNetPendingLevelNotifyControlMessageDlMngr, Indexer);
-    MiddleIntercept::Install(L"UNetPendingLevelNotifyControlMessageUnload", 0x65FF1B, MlnUNetPendingLevelNotifyControlMessageUnload, Indexer);
+    BinaryInjection::Install(L"UNetPendingLevelNotifyControlMessageWelcome", 0x660814, MlnUNetPendingLevelNotifyControlMessageWelcome, Indexer);
+    BinaryInjection::Install(L"UNetPendingLevelNotifyControlMessageUpgrade", 0x65F99C, MlnUNetPendingLevelNotifyControlMessageUpgrade, Indexer);
+    BinaryInjection::Install(L"UNetPendingLevelNotifyControlMessageChallenge", 0x6600F7, MlnUNetPendingLevelNotifyControlMessageChallenge, Indexer);
+    BinaryInjection::Install(L"UNetPendingLevelNotifyControlMessageFailure", 0x65FF4C, MlnUNetPendingLevelNotifyControlMessageFailure, Indexer);
+    BinaryInjection::Install(L"UNetPendingLevelNotifyControlMessageUses", 0x65FB11, MlnUNetPendingLevelNotifyControlMessageUses, Indexer);
+    BinaryInjection::Install(L"UNetPendingLevelNotifyControlMessageDlMngr", 0x66075A, MlnUNetPendingLevelNotifyControlMessageDlMngr, Indexer);
+    BinaryInjection::Install(L"UNetPendingLevelNotifyControlMessageUnload", 0x65FF1B, MlnUNetPendingLevelNotifyControlMessageUnload, Indexer);
 
 #endif // !_FINAL_RELEASE
 }

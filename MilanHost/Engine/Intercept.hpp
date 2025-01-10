@@ -14,32 +14,63 @@
 #include "Containers/vector.hpp"
 
 
+
+// ! Unreal Function interception logic.
+// ========================================
+
 /**
- * @brief       Slightly overengineered way to declaratively hook an @ref UFunction.
+ * Provides an interface for declaratively hooking an @c UFunction by its package-class-function name triple.
+ */
+class FunctionNamedIntercept
+{
+    struct TargetDescriptor
+    {
+        SFXName Package; SFXName Class; SFXName Function;
+        inline bool operator==(TargetDescriptor const& Other) const
+        {
+            return Package == Other.Package && Class == Other.Class && Function == Other.Function;
+        }
+    };
+
+    std::unique_ptr<TargetDescriptor> FunctionDescriptor{};
+
+    static TArray<FunctionNamedIntercept*> RegisteredIntercepts;
+
+public:
+
+    FunctionNamedIntercept();
+    bool Applies(UStruct* Node, wchar_t const* PackageName, wchar_t const* ClassName, wchar_t const* FunctionName);
+
+    static void InvalidateAllRegistered();
+    static void CleanupRegistered();
+};
+
+/**
+ * Provides an interface for declaratively hooking an @c UFunction by caching its pointer looked up by full name.
+ * 
  * @warning     This @em will slow down execution to a crawl if the function cannot be found.
  *              Prefer good old string comparison for speculatively hooking @ref UFunction calls.
  */
-class FunctionInterceptLegacy
+class FunctionStructIntercept
 {
     UStruct* TargetNode{ nullptr };
     wchar_t const* TargetFullName{ nullptr };
 
     // Can't use ::game::vector here because it would pre-allocate
     // in dynamic initializer, i.e. before we have the GMalloc pointer.
-    static TArray<FunctionInterceptLegacy*> RegisteredIntercepts;
+    static TArray<FunctionStructIntercept*> RegisteredIntercepts;
 
 public:
 
-    FunctionInterceptLegacy();
+    FunctionStructIntercept();
     bool Applies(UStruct* Node, wchar_t const* FullName);
 
     static void InvalidateAllRegistered();
     static void CleanupRegistered();
-
 };
 
 
-// ! Mid-function intercept logic.
+// ! Binary injection logic.
 // ========================================
 
 /**
@@ -89,10 +120,10 @@ private:
 #ifndef _FINAL_RELEASE
 
 /**
- * @brief       Primitive for setting interception of a native function at an arbitrary place.
+ * @brief       Primitive for interception of a native function at an arbitrary place.
  * @remarks     This basically handles most of the dirty work for setting up code caves.
  */
-class MiddleIntercept : public NonCopyable
+class BinaryInjection : public NonCopyable
 {
     /** Brief description of this intercept. */
     FString Label{ L"" };
@@ -108,8 +139,8 @@ class MiddleIntercept : public NonCopyable
 
 public:
 
-    MiddleIntercept(wchar_t const* InLabel, void* InAddress, void* InStubFunction, CaveIndexer* InCaveIndexer);
-    ~MiddleIntercept() noexcept;
+    BinaryInjection(wchar_t const* InLabel, void* InAddress, void* InStubFunction, CaveIndexer* InCaveIndexer);
+    ~BinaryInjection() noexcept;
 
     static void Install(wchar_t const* InLabel, int InRVA, void* InStubFunction, CaveIndexer& InCaveIndexer);
 

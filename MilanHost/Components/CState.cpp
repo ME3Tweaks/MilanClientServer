@@ -52,7 +52,7 @@ void CState::Terminate(::LESDK::Initializer& Context)
     MILAN_UNUSED(Context);
     MILAN_DEBUGW(ELOG_Teardown, L"component '%s' terminating", k_typeName);
 
-    FunctionInterceptLegacy::CleanupRegistered();
+    FunctionStructIntercept::CleanupRegistered();
     ::ecsm::uninit_state();
 }
 
@@ -65,7 +65,7 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
 {
     MILAN_UNUSED_3(Context, Stack, Result);
 
-    static FunctionInterceptLegacy SFXSaveManagerMP_SaveRecordsImpl{};
+    static FunctionStructIntercept SFXSaveManagerMP_SaveRecordsImpl{};
     if (SFXSaveManagerMP_SaveRecordsImpl.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.SaveRecordsImpl"))
     {
         MILAN_TRACEW(ELOG_MultiProfile, L"intercepted SFXGame.SFXSaveManagerMP.SaveRecordsImpl:");
@@ -89,7 +89,7 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
     MILAN_UNUSED_3(Context, Stack, Result);
 
     // This needs to be done after ProcessInternal is called so that OnlineSave and friends will have been created.
-    static FunctionInterceptLegacy SFXSaveManagerMP_Initialize{};
+    static FunctionStructIntercept SFXSaveManagerMP_Initialize{};
     if (SFXSaveManagerMP_Initialize.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.Initialize"))
     {
         MILAN_TRACEW(ELOG_MultiProfile, L"intercepted SFXGame.SFXSaveManagerMP.Initialize:");
