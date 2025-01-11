@@ -269,9 +269,7 @@ void DemoInterface::OnWndProc(HWND const hWnd, UINT const uMsg, WPARAM const wPa
 
 void DemoInterface::OnRender()
 {
-    bool bShouldRemain = true;
-    ImGui::ShowDemoWindow(&bShouldRemain);
-
-    if (!bShouldRemain)  [[unlikely]]
-        mb_active = !mb_active;
+    // There must've been a reason I had a local variable for this here,
+    // so if anything starts to behave weird just add a transient local boolean.
+    ImGui::ShowDemoWindow(&mb_active);
 }

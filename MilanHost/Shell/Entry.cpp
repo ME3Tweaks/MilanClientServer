@@ -209,6 +209,42 @@ void RegisterNonshipCommands()
             return true;
         });
 
+    Commands.RegisterCommand(L"dump", L"matexprs",
+        [](wchar_t const*)
+        {
+            MILAN_INFOW(ELOG_DevelUtils, L"Dumping UMaterialExpression infos...");
+
+            for (TypedObjectIterator<UClass, false, false> Iter{}; Iter; ++Iter)
+            {
+                if ((*Iter)->IsChildOf<UMaterialExpression>())
+                {
+                    UObject* const Default = (*Iter)->ClassDefaultObject;
+                    MILAN_CHECKW(Default->IsA<UMaterialExpression>(), L"strange cdo");
+
+                    auto const IntoRelative = [](void* const Pointer) -> std::ptrdiff_t
+                        {
+                            auto const Base = reinterpret_cast<BYTE*>(gp_sdkContext->ModuleBase);
+                            auto const Address = reinterpret_cast<BYTE*>(Pointer);
+                            return static_cast<std::ptrdiff_t>(Address - Base);
+                        };
+
+                    auto const __vftable = *reinterpret_cast<BYTE**>(Default);
+
+                    std::ptrdiff_t const Vftable = IntoRelative(__vftable);
+                    std::ptrdiff_t const VfCompile = IntoRelative(*reinterpret_cast<void**>(__vftable + 0x2B8));
+                    std::ptrdiff_t const Constructor = IntoRelative((*Iter)->ClassConstructor);
+                    std::ptrdiff_t const StaticConstructor = IntoRelative((*Iter)->ClassStaticConstructor);
+                    std::ptrdiff_t const StaticInitializer = IntoRelative((*Iter)->ClassStaticInitializer);
+
+                    MILAN_INFOW(ELOG_DevelUtils, L"%s / %s => Vftable = 0x%llx, Compile() = 0x%llx, Ctor = 0x%llx, StaticCtor = 0x%llx, StaticInit = 0x%llx",
+                        *(*Iter)->GetOutermost()->GetName(), *(*Iter)->GetName(), Vftable, VfCompile, Constructor, StaticConstructor, StaticInitializer);
+                    MILAN_UNUSED_5(Vftable, VfCompile, Constructor, StaticConstructor, StaticInitializer);
+                }
+            }
+
+            return true;
+        });
+
     Commands.RegisterCommand(L"dump", L"nativefuncs",
         [](wchar_t const*)
         {
