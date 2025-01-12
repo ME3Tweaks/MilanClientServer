@@ -4,6 +4,7 @@
 #include "Engine/Intercept.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfDecls.hpp"
+#include "Online/SFXOnlineHijacks.hpp"
 
 
 // ! Internal macros.

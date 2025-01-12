@@ -1,6 +1,7 @@
 #include <tlhelp32.h>
 
 #include "Base/Base.hpp"
+#include "Engine/ExtObject.hpp"
 #include "Engine/Intercept.hpp"
 
 
@@ -526,3 +527,43 @@ std::intptr_t BinaryInjection::GetMainBase() noexcept
 }
 
 #endif // !_FINAL_RELEASE
+
+
+// ! SFXOnlineUtils namespace.
+// ========================================
+
+UClass* HijackUtils::FindClass(SFXName const ClassName)
+{
+    for (TypedObjectIterator<UClass, false, false> Iter{}; Iter; ++Iter)
+    {
+        if ((*Iter)->Name == ClassName)
+            return *Iter;
+    }
+
+    return nullptr;
+}
+
+UFunction* HijackUtils::FindClassMethod(UClass* const Class, SFXName const FuncName)
+{
+    for (UField* Child = Class->Children; Child != nullptr; Child = Child->Next)
+    {
+        UFunction* const CheckFunction = Child->Cast<UFunction>();
+        if (CheckFunction != nullptr && CheckFunction->Name == FuncName)
+            return CheckFunction;
+    }
+
+    return nullptr;
+}
+
+void HijackUtils::InstallFunction(UFunction* const Target, void* const Hijack, void** Original)
+{
+    MILAN_CHECKW(Target != nullptr, L"");
+    MILAN_CHECKW(Hijack != nullptr, L"");
+
+    *Original = Target->Func;
+    Target->Func = Hijack;
+
+    static constexpr DWORD FUNC_Native = 0x400;
+    //if ((Target->FunctionFlags & FUNC_Native) == 0)
+    Target->FunctionFlags |= FUNC_Native;
+}

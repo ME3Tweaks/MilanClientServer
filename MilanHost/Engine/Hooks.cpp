@@ -14,6 +14,7 @@
 #include "Engine/Intercept.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfStream.hpp"
+#include "Online/SFXOnlineHijacks.hpp"
 #include "Shell/CmdArgs.hpp"
 
 
@@ -202,6 +203,15 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
         MILAN_DEBUGW(L"UObject::ProcessEvent: %s.%s", *ObjectName, *FunctionName);
     }
 #endif
+
+    // We can't do stuff in SFXOnlineFoundation on MilanHost initialization because classes might not have been fully loaded yet.
+    // And we can't place this logic in ProcessInternal so as to minimize the chance of replacing UFunction::Func right from under it.
+    static bool s_sfxOnlineInitialized = false;
+    if (!s_sfxOnlineInitialized && Function->GetOutermost()->Name == SFXName(L"SFXOnlineFoundation", 0))
+    {
+        SFXOnlineHijacks::InstallComponentBlazeGame();
+        s_sfxOnlineInitialized = true;
+    }
 
     COMPONENT(CProfilers).On_UObject_ProcessEvent(Context, Function, Parms, Result);
     COMPONENT(CRenderdoc).On_UObject_ProcessEvent(Context, Function, Parms, Result);

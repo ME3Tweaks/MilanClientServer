@@ -164,6 +164,47 @@ private:
 #endif // !_FINAL_RELEASE
 
 
+// ! UFunction hijacking.
+// ========================================
+
+namespace HijackUtils
+{
+    /**
+     * @brief   Searches for a class with the given name.
+     * @param   ClassName - Unique name of the class to look for.
+     * @return  The class instance if found, and @c nullptr otherwise.
+     */
+    UClass* FindClass(SFXName ClassName);
+
+    /**
+     * @brief   Searches the given class for a function with the given name.
+     * @param   Class - Class instance to search for a function.
+     * @param   FuncName - Unique name of the function to look for.
+     * @return  The function instance if found, or @c nullptr otherwise.
+     */
+    UFunction* FindClassMethod(UClass* Class, SFXName FuncName);
+
+    /**
+     * @brief   Hijacks a given @c UFunction, probably found using @c FindClassMethod, while preserving the original pointer.
+     * @param   Target - The @c UFunction instance to hijack, it will receive a new @c UFunction::Func pointer.
+     * @param   Hijack - Native function implementation that will replace @c Target's @c UFunction::Func pointer.
+     * @param   Original - Output place to store the original @c UFunction::Func pointer.
+     */
+    void InstallFunction(UFunction* Target, void* Hijack, void** Original);
+}
+
+#define DECLARE_HIJACK(type_, name)                                                         \
+    void MILAN_CONCAT(name, _Hook) (type_* Context, FFrame* Stack, void* Result);           \
+    decltype(MILAN_CONCAT(name, _Hook))* MILAN_CONCAT(name, _Original) = nullptr
+
+#define INSTALL_HIJACK(name, class_, func_) do { \
+        UFunction* const Target = HijackUtils::FindClassMethod(class_, SFXName(func_, 0));                              \
+        MILAN_CHECKW(Target != nullptr, L"failed to find function to hijack: %s.%s", class_, func_);                    \
+        HijackUtils::InstallFunction(Target, MILAN_CONCAT(name, _Hook), (void**)&MILAN_CONCAT(name, _Original));        \
+    } while (false)
+
+
+
 // ! UScript VM macros to write custom native functions.
 // ========================================
 
