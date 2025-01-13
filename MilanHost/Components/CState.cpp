@@ -69,6 +69,8 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
     if (SFXSaveManagerMP_SaveRecordsImpl.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.SaveRecordsImpl"))
     {
         MILAN_TRACEW(ELOG_MultiProfile, L"intercepted SFXGame.SFXSaveManagerMP.SaveRecordsImpl:");
+        [[maybe_unused]] auto const Object = Context->Cast<USFXSaveManagerMP>();
+        [[maybe_unused]] auto const Params = (USFXSaveManagerMP_execSaveRecordsImpl_Parms*)Stack->Locals;
 
         MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
         ::RelativeTimer ProfileTimer{};
@@ -77,7 +79,6 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
         Profile.Serialize(ProfileStream);
 
         MILAN_TRACEW(ELOG_MultiProfile, L"profile serialized in %.3f ms.", ProfileTimer.GetMilliseconds());
-
         ::WriteFileFull(static_cast<std::wstring_view>(Profile.GetProfilePath()), ProfileStream.View());
     }
 

@@ -301,8 +301,6 @@ void MPProfile::Serialize(IOutputStream& Stream) const
             int Reward = 0, RewardLevel = 0;
             AccomplishmentStorage->GetCurrentReward(&Reward, &RewardLevel);
 
-            // d00t:  Why is RewardLevel unused? It shouldn't matter, but are we missing something?
-
             ProfileSetting::Construct(i, Reward).Serialize(Stream);
             SettingsCount++;
         }

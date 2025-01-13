@@ -1,8 +1,8 @@
 diff --git a/Src/LESDK/LE3/Core_classes.hpp b/Src/LESDK/LE3/Core_classes.hpp
-index d2edb76..2f3529c 100644
+index d2edb76..fa4706e 100644
 --- a/Src/LESDK/LE3/Core_classes.hpp
 +++ b/Src/LESDK/LE3/Core_classes.hpp
-@@ -15,16 +15,199 @@
+@@ -15,16 +15,200 @@
  
  
  #ifdef _MSC_VER
@@ -20,6 +20,7 @@ index d2edb76..2f3529c 100644
 +
 +class UChannel;
 +class UPackage;
++class UProperty;
 +class UNetConnection;
 +
 +
@@ -202,7 +203,7 @@ index d2edb76..2f3529c 100644
  
  #define CONST_InvAspectRatio16x9                                 0.56249
  #define CONST_InvAspectRatio5x4                                  0.8
-@@ -262,16 +445,21 @@ public:
+@@ -262,16 +446,21 @@ public:
  	}
  
  	template<std::derived_from<UObject> T> T const* CastDirect() const requires requires { T::StaticClass(); } {
@@ -224,7 +225,32 @@ index d2edb76..2f3529c 100644
  	struct FVector TransformVectorByRotation ( struct FRotator const& SourceRotation, struct FVector const& SourceVector, unsigned long bInverse );
  	struct SFXName GetPackageName ( );
  	bool IsPendingKill ( );
-@@ -702,25 +890,32 @@ public:
+@@ -614,20 +803,20 @@ public:
+ 	virtual void VirtualFunction46 ( );																			// 0x7FF669E03820 (0x170)
+ 	virtual void VirtualFunction47 ( );																			// 0x7FF669E03820 (0x178)
+ 	virtual void VirtualFunction48 ( );																			// 0x7FF669E03820 (0x180)
+ 	virtual void VirtualFunction49 ( );																			// 0x7FF66A47A810 (0x188)
+ 	virtual void VirtualFunction50 ( );																			// 0x7FF66A47AD60 (0x190)
+ 	virtual void VirtualFunction51 ( );																			// 0x7FF669EBC920 (0x198)
+ 	virtual void VirtualFunction52 ( );																			// 0x7FF669E5B660 (0x1A0)
+ 	virtual void VirtualFunction53 ( );																			// 0x7FF669E03820 (0x1A8)
+-	virtual void VirtualFunction54 ( );																			// 0x7FF669E03820 (0x1B0)
+-	virtual void VirtualFunction55 ( );																			// 0x7FF669E03820 (0x1B8)
+-	virtual void VirtualFunction56 ( );																			// 0x7FF669E165A0 (0x1C0)
+-	virtual void VirtualFunction57 ( );																			// 0x7FF669EB5AF0 (0x1C8)
++    virtual void NetDirty ( class UProperty* Property );                                                        // 0x7FF669E03820 (0x1B0)
++    virtual void StripData ( int TargetPlatformType );                                                          // 0x7FF669E03820 (0x1B8)
++    virtual FString GetDescBrief ( );                                                                           // 0x7FF669E165A0 (0x1C0)
++    virtual FString& GetDescDetailed ( class FString& String, int Index );                                      // 0x7FF669EB5AF0 (0x1C8)
+ 	virtual void VirtualFunction58 ( );																			// 0x7FF669E13710 (0x1D0)
+ 	virtual void VirtualFunction59 ( );																			// 0x7FF669EB87B0 (0x1D8)
+ 	virtual void VirtualFunction60 ( );																			// 0x7FF669E14F30 (0x1E0)
+ 	virtual void VirtualFunction61 ( );																			// 0x7FF669EC5E80 (0x1E8)
+ 	virtual void VirtualFunction62 ( );																			// 0x7FF669E03820 (0x1F0)
+ 	virtual void VirtualFunction63 ( );																			// 0x7FF669E13710 (0x1F8)
+ 	virtual void VirtualFunction64 ( );																			// 0x7FF669E16570 (0x200)
+ 	virtual void VirtualFunction65 ( );																			// 0x7FF669E179C0 (0x208)
+@@ -702,25 +891,32 @@ public:
  
  };
  
@@ -258,7 +284,7 @@ index d2edb76..2f3529c 100644
  public:
  	unsigned char                                      UnknownData00[ 0x10 ];                            		// 0x0060 (0x0010) MISSED OFFSET
  
-@@ -1391,25 +1586,71 @@ public:
+@@ -1391,25 +1587,71 @@ public:
      DWORD                           ClassCastFlags;                     // 0x0104 (0x04) - NOT AUTO-GENERATED PROPERTY 
      DWORD                           ClassUnique;                        // 0x0108 (0x04) - NOT AUTO-GENERATED PROPERTY 
      UClass*                         ClassWithin;                        // 0x010C (0x08) - NOT AUTO-GENERATED PROPERTY 

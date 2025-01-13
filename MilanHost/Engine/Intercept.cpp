@@ -5,6 +5,15 @@
 #include "Engine/Intercept.hpp"
 
 
+// ! Located global variables.
+// ========================================
+
+UProperty**         pGProperty = nullptr;
+UObject**           pGPropObject = nullptr;
+BYTE**              pGPropAddr = nullptr;
+unsigned int*       pGRuntimeUCFlags = nullptr;
+
+
 // ! FunctionNamedIntercept implementation.
 // ========================================
 

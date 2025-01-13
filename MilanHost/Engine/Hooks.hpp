@@ -21,6 +21,9 @@
 // ! Globals and hook patterns.
 // ========================================
 
+#define GLOBAL_GPROPERTY_POSTRIP \
+    ::LESDK::Address::FromInstrRelative("48 8B 15 ?? ?? ?? ?? FF 90 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 48 8D 7C 24 ?? 48 85 C0 C7 44 24")
+
 #define GLOBAL_GPROPADDR_POSTRIP \
     ::LESDK::Address::FromInstrRelative("48 8B 35 ?? ?? ?? ?? 44 89 75 ?? 48 8B 43 28 0F B6 10")
 
@@ -125,14 +128,6 @@ extern bool gb_logProcessDelegate;
 extern bool gb_logProcessEvent;
 extern bool gb_logProcessInternal;
 extern bool gb_logSerializeObject;
-
-
-// ! Located global variables.
-// ========================================
-
-extern UObject**            pGPropObject;
-extern unsigned char**      pGPropAddr;
-extern unsigned int*        pGRuntimeUCFlags;
 
 
 // ! Miscellaneous functions / methods.

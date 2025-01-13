@@ -291,6 +291,55 @@ void RegisterNonshipCommands()
             return true;
         });
 
+    Commands.RegisterCommand(L"dump", L"objdesc",
+        [](wchar_t const* const InParams)
+        {
+            FString const Params{ InParams };
+
+            if (Params.Contains(L"detail", true))
+            {
+                for (TypedObjectIterator<UObject, true, false> Iter{}; Iter; ++Iter)
+                {
+                    UObject* const Object = *Iter;
+                    FString Detailed{};
+
+                    for (int i = 0; i < 16; ++i)
+                    {
+                        FString NewLine{};
+                        Object->GetDescDetailed(NewLine, i);
+
+                        if (!NewLine.Empty())
+                        {
+                            Detailed.Append(NewLine);
+                            Detailed.Append(L" / ");
+                        }
+                    }
+
+                    if (!Detailed.Empty())
+                    {
+                        // This is quite unsafe but will have to do until I add Erase().
+                        const_cast<wchar_t*>(Detailed.Chars())[Detailed.Length() - 3] = L'\0';
+                        MILAN_INFOW(L"%s: %s", *Object->GetFullName(), *Detailed);
+                    }
+                }
+            }
+            else
+            {
+                for (TypedObjectIterator<UObject, true, false> Iter{}; Iter; ++Iter)
+                {
+                    UObject* const Object = *Iter;
+                    FString const Brief = Object->GetDescBrief();
+
+                    if (!Brief.Empty())
+                    {
+                        MILAN_INFOW(L"%s: %s", *Object->GetFullName(), *Brief);
+                    }
+                }
+            }
+
+            return true;
+        });
+
     Commands.RegisterCommand(L"dump", L"onlinevers",
         [](wchar_t const*)
         {

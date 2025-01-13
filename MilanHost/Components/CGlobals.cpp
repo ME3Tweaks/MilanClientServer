@@ -117,6 +117,9 @@ void CGlobals::InitSDK(::LESDK::Initializer& Context)
 
 void CGlobals::InitGlobals(::LESDK::Initializer& Context)
 {
+    pGProperty = Context.ResolveTyped<UProperty*>(GLOBAL_GPROPERTY_POSTRIP);
+    LOG_SDK_GLOBAL(pGProperty, *pGProperty);
+
     pGPropAddr = Context.ResolveTyped<unsigned char*>(GLOBAL_GPROPADDR_POSTRIP);
     LOG_SDK_GLOBAL(pGPropAddr, *pGPropAddr);
 

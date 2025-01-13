@@ -25,11 +25,6 @@ bool gb_logProcessInternal = false;
 bool gb_logSerializeObject = false;
 
 
-UObject**           pGPropObject = nullptr;
-unsigned char**     pGPropAddr = nullptr;
-unsigned int*       pGRuntimeUCFlags = nullptr;
-
-
 t_WndProc* WndProc_orig = nullptr;
 LRESULT CALLBACK WndProc_hook(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
 {
@@ -259,7 +254,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
 #endif
 
     //// TODO: TEMPORARY CHECK: Delete this log once SFXOnlineFoundation situation is figured out.
-    //if (Stack->Node->GetOutermost()->Name == SFXName(L"SFXOnlineFoundation", 0))
+    //if (Stack->Node->Outer->Name == SFXName(L"SFXOnlineComponentBlazeGame", 0))
     //    MILAN_INFOW(ELOG_DevelUtils, L"ProcessInternal: %s", *Stack->Node->GetFullName());
 
     if (!COMPONENT(CState).On_UObject_ProcessInternal_Pre(Context, Stack, Result))

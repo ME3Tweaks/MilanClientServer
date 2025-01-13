@@ -14,6 +14,14 @@
 #include "Containers/vector.hpp"
 
 
+// ! Located global variables.
+// ========================================
+
+extern UProperty**          pGProperty;
+extern UObject**            pGPropObject;
+extern BYTE**               pGPropAddr;
+extern unsigned int*        pGRuntimeUCFlags;
+
 
 // ! Unreal Function interception logic.
 // ========================================
@@ -208,25 +216,263 @@ namespace HijackUtils
 // ! UScript VM macros to write custom native functions.
 // ========================================
 
-#define NATIVE_GET_NAME(NAME) \
-    SFXName NAME{}; \
-    Stack->Step(Stack->Object, &NAME);
+#define _NATIVE_DECLARE(TYPE, NAME, DEFAULT)        [[maybe_unused]] TYPE NAME{ DEFAULT }
+#define _NATIVE_CLEAR_ADDR()                        (*pGPropAddr) = nullptr
+#define _NATIVE_ADDR_OR(TYPE, NAME)                 (*pGPropAddr != nullptr) ? *(TYPE*)*pGPropAddr : NAME
+#define _NATIVE_STACK_STEP(NAME)                    Stack->Step(Stack->Object, &NAME)
+#define _NATIVE_OPT_BEGIN()                         (*pGRuntimeUCFlags) &= ~2
+#define _NATIVE_OPT_END(NAME, DEFAULT)              do { if ( ( (*pGRuntimeUCFlags) & 2 ) != 0 ) NAME = DEFAULT; } while (false)
+#define _NATIVE_DIRTY_PROP()                        do { if ( *pGPropObject != nullptr ) (*pGPropObject)->NetDirty(*pGProperty); } while (false)
 
-#define NATIVE_GET_NAME_OPTIONAL(NAME, DEFAULT) \
-    SFXName NAME = DEFAULT; \
-    (*pGRuntimeUCFlags) &= ~2; \
-    Stack->Step(Stack->Object, &NAME);
 
-#define NATIVE_GET_STRING(NAME) \
-    FString NAME{}; \
-    Stack->Step(Stack->Object, &NAME);
+#define NATIVE_GET_BYTE(NAME)                                       \
+    _NATIVE_DECLARE(BYTE, NAME, );                                  \
+    _NATIVE_STACK_STEP(NAME)
 
-#define NATIVE_GET_STRING_OPTIONAL(NAME, DEFAULT) \
-    FString NAME{ DEFAULT }; \
-    (*pGRuntimeUCFlags) &= ~2; \
-    Stack->Step(Stack->Object, &NAME);
+#define NATIVE_GET_BYTE_BYREF(NAME)                                 \
+    _NATIVE_DECLARE(BYTE, NAME##Local, );                           \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(BYTE&, NAME,                                    \
+        _NATIVE_ADDR_OR(BYTE, NAME##Local))
+
+#define NATIVE_GET_BYTE_OPTIONAL(NAME, DEFAULT)                     \
+    _NATIVE_DECLARE(BYTE, NAME, DEFAULT);                           \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_BYTE_OPTIONAL_BYREF(NAME, DEFAULT)               \
+    _NATIVE_DECLARE(BYTE, NAME##Local, DEFAULT);                    \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(BYTE&, NAME,                                    \
+        _NATIVE_ADDR_OR(BYTE, NAME##Local))
+
+
+#define NATIVE_GET_INT(NAME)                                        \
+    _NATIVE_DECLARE(std::int32_t, NAME, );                          \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_INT_BYREF(NAME)                                  \
+    _NATIVE_DECLARE(std::int32_t, NAME##Local, );                   \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(std::int32_t&, NAME,                            \
+        _NATIVE_ADDR_OR(std::int32_t, NAME##Local))
+
+#define NATIVE_GET_INT_OPTIONAL(NAME, DEFAULT)                      \
+    _NATIVE_DECLARE(std::int32_t, NAME, DEFAULT);                   \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_INT_OPTIONAL_BYREF(NAME, DEFAULT)                \
+    _NATIVE_DECLARE(std::int32_t, NAME##Local, DEFAULT);            \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(std::int32_t&, NAME,                            \
+        _NATIVE_ADDR_OR(std::int32_t, NAME##Local))
+
+
+#define NATIVE_GET_FLOAT(NAME)                                      \
+    _NATIVE_DECLARE(float, NAME, );                                 \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_FLOAT_BYREF(NAME)                                \
+    _NATIVE_DECLARE(float, NAME##Local, );                          \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(float&, NAME,                                   \
+        _NATIVE_ADDR_OR(float, NAME##Local))
+
+#define NATIVE_GET_FLOAT_OPTIONAL(NAME, DEFAULT)                    \
+    _NATIVE_DECLARE(float, NAME, DEFAULT);                          \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_FLOAT_OPTIONAL_BYREF(NAME, DEFAULT)              \
+    _NATIVE_DECLARE(float, NAME##Local, DEFAULT);                   \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(float&, NAME,                                   \
+        _NATIVE_ADDR_OR(float, NAME##Local))
+
+
+#define NATIVE_GET_NAME(NAME)                                       \
+    _NATIVE_DECLARE(SFXName, NAME, );                               \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_NAME_BYREF(NAME)                                 \
+    _NATIVE_DECLARE(SFXName, NAME##Local, );                        \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(SFXName&, NAME,                                 \
+        _NATIVE_ADDR_OR(SFXName, NAME##Local))
+
+#define NATIVE_GET_NAME_OPTIONAL(NAME, DEFAULT)                     \
+    _NATIVE_DECLARE(SFXName, NAME, DEFAULT);                        \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_NAME_OPTIONAL_BYREF(NAME, DEFAULT)               \
+    _NATIVE_DECLARE(SFXName, NAME##Local, DEFAULT);                 \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(SFXName&, NAME,                                 \
+        _NATIVE_ADDR_OR(SFXName, NAME##Local))
+
+
+#define NATIVE_GET_STRING(NAME)                                     \
+    _NATIVE_DECLARE(FString, NAME, );                               \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_STRING_BYREF(NAME)                               \
+    _NATIVE_DECLARE(FString, NAME##Local, );                        \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(FString&, NAME,                                 \
+        _NATIVE_ADDR_OR(FString, NAME##Local))
+
+#define NATIVE_GET_STRING_OPTIONAL(NAME, DEFAULT)                   \
+    _NATIVE_DECLARE(FString, NAME, DEFAULT);                        \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_STRING_OPTIONAL_BYREF(NAME, DEFAULT)             \
+    _NATIVE_DECLARE(FString, NAME##Local, DEFAULT);                 \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(FString&, NAME,                                 \
+        _NATIVE_ADDR_OR(FString, NAME##Local))
+
+
+#define NATIVE_GET_STRUCT(TYPE, NAME)                               \
+    _NATIVE_DECLARE(TYPE, NAME, );                                  \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_STRUCT_BYREF(TYPE, NAME)                         \
+    _NATIVE_DECLARE(TYPE, NAME##Local, );                           \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(TYPE&, NAME,                                    \
+        _NATIVE_ADDR_OR(TYPE, NAME##Local))
+
+#define NATIVE_GET_STRUCT_OPTIONAL(TYPE, NAME, DEFAULT)             \
+    _NATIVE_DECLARE(TYPE, NAME, );                                  \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME);                                       \
+    _NATIVE_OPT_END(NAME, DEFAULT)
+
+#define NATIVE_GET_STRUCT_OPTIONAL_BYREF(TYPE, NAME, DEFAULT)       \
+    _NATIVE_DECLARE(TYPE, NAME##Local, );                           \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(TYPE&, NAME,                                    \
+        _NATIVE_ADDR_OR(TYPE, NAME##Local));                        \
+    _NATIVE_OPT_END(NAME, DEFAULT)
+
+
+#define NATIVE_GET_OBJECT(TYPE, NAME)                               \
+    _NATIVE_DECLARE(TYPE*, NAME, nullptr);                          \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_OBJECT_BYREF(TYPE, NAME)                         \
+    _NATIVE_DECLARE(TYPE*, NAME##Local, nullptr);                   \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(TYPE*&, NAME,                                   \
+        _NATIVE_ADDR_OR(TYPE*, NAME##Local))
+
+#define NATIVE_GET_OBJECT_OPTIONAL(TYPE, NAME, DEFAULT)             \
+    _NATIVE_DECLARE(TYPE*, NAME, DEFAULT);                          \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_OBJECT_OPTIONAL_BYREF(TYPE, NAME, DEFAULT)       \
+    _NATIVE_DECLARE(TYPE*, NAME##Local, DEFAULT);                   \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(TYPE*&, NAME,                                   \
+        _NATIVE_ADDR_OR(TYPE*, NAME##Local))
+
+
+#define NATIVE_GET_DELEGATE(NAME)                                   \
+    _NATIVE_DECLARE(FScriptDelegate, NAME, );                       \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_DELEGATE_BYREF(NAME)                             \
+    _NATIVE_DECLARE(FScriptDelegate, NAME##Local, );                \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DECLARE(FScriptDelegate&, NAME,                         \
+        _NATIVE_ADDR_OR(FScriptDelegate, NAME##Local))
+
+#define NATIVE_GET_DELEGATE_OPTIONAL(NAME, DEFAULT)                 \
+    _NATIVE_DECLARE(FScriptDelegate, NAME, DEFAULT);                \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_DELEGATE_OPTIONAL_BYREF(NAME, DEFAULT)           \
+    _NATIVE_DECLARE(FScriptDelegate, NAME##Local, DEFAULT);         \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DECLARE(FScriptDelegate&, NAME,                         \
+        _NATIVE_ADDR_OR(FScriptDelegate, NAME##Local))
+
+
+#define NATIVE_GET_TARRAY(TYPE, NAME)                               \
+    _NATIVE_DECLARE(TArray<TYPE>, NAME, );                          \
+    _NATIVE_STACK_STEP(NAME)
+
+#define NATIVE_GET_TARRAY_OPTIONAL(TYPE, NAME, DEFAULT)             \
+    _NATIVE_DECLARE(TArray<TYPE>, NAME, );                          \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME);                                       \
+    _NATIVE_OPT_END(NAME, DEFAULT)
+
+#define NATIVE_GET_TARRAY_BYREF(TYPE, NAME)                         \
+    _NATIVE_DECLARE(TArray<TYPE>, NAME##Local, );                   \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(TArray<TYPE>&, NAME,                            \
+        _NATIVE_ADDR_OR(TArray<TYPE>, NAME##Local))
+
+#define NATIVE_GET_TARRAY_OPTIONAL_BYREF(TYPE, NAME, DEFAULT)       \
+    _NATIVE_DECLARE(TArray<TYPE>, NAME##Local, );                   \
+    _NATIVE_CLEAR_ADDR();                                           \
+    _NATIVE_OPT_BEGIN();                                            \
+    _NATIVE_STACK_STEP(NAME##Local);                                \
+    _NATIVE_DIRTY_PROP();                                           \
+    _NATIVE_DECLARE(TArray<TYPE>&, NAME,                            \
+        _NATIVE_ADDR_OR(TArray<TYPE>, NAME##Local));                \
+    _NATIVE_OPT_END(NAME, DEFAULT)
+
 
 #define NATIVE_FINISH() \
     Stack->Code++; \
-    if (*Stack->Code == 0x41) \
-        Stack->Step(Stack->Object, NULL);
+    if (*Stack->Code == 0x41) { \
+        Stack->Step(Stack->Object, NULL); \
+    } \
+    do {} while (false)
