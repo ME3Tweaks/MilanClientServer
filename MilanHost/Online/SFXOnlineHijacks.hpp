@@ -13,4 +13,5 @@
 namespace SFXOnlineHijacks
 {
     void InstallComponentBlazeGame();
+    void InstallComponentBlazeLogin();
 }

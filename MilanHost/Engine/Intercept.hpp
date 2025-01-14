@@ -205,12 +205,13 @@ namespace HijackUtils
     void MILAN_CONCAT(name, _Hook) (type_* Context, FFrame* Stack, void* Result);           \
     decltype(MILAN_CONCAT(name, _Hook))* MILAN_CONCAT(name, _Original) = nullptr
 
-#define INSTALL_HIJACK(name, class_, func_) do { \
-        UFunction* const Target = HijackUtils::FindClassMethod(class_, SFXName(func_, 0));                              \
-        MILAN_CHECKW(Target != nullptr, L"failed to find function to hijack: %s.%s", class_, func_);                    \
+#define INSTALL_HIJACK_EX(class_, name, func) do {                                                                      \
+        UFunction* const Target = HijackUtils::FindClassMethod(class_, SFXName(func, 0));                               \
+        MILAN_CHECKW(Target != nullptr, L"failed to find function to hijack: %s.%s", class_, func);                     \
         HijackUtils::InstallFunction(Target, MILAN_CONCAT(name, _Hook), (void**)&MILAN_CONCAT(name, _Original));        \
     } while (false)
 
+#define INSTALL_HIJACK(class_, name)    INSTALL_HIJACK_EX(class_, name, L"" #name)
 
 
 // ! UScript VM macros to write custom native functions.

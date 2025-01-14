@@ -205,6 +205,7 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     if (!s_sfxOnlineInitialized && Function->GetOutermost()->Name == SFXName(L"SFXOnlineFoundation", 0))
     {
         SFXOnlineHijacks::InstallComponentBlazeGame();
+        SFXOnlineHijacks::InstallComponentBlazeLogin();
         s_sfxOnlineInitialized = true;
     }
 
@@ -253,9 +254,8 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
 #endif
 
-    //// TODO: TEMPORARY CHECK: Delete this log once SFXOnlineFoundation situation is figured out.
-    //if (Stack->Node->Outer->Name == SFXName(L"SFXOnlineComponentBlazeGame", 0))
-    //    MILAN_INFOW(ELOG_DevelUtils, L"ProcessInternal: %s", *Stack->Node->GetFullName());
+    //if (IsFunctionWithin(Stack->Node, L"SFXOnlineComponentUnrealPlayer"))
+    //    MILAN_DEBUGW(ELOG_DevelUtils, L"%S: %s", __func__, *Stack->Node->GetFullName());
 
     if (!COMPONENT(CState).On_UObject_ProcessInternal_Pre(Context, Stack, Result))
     {

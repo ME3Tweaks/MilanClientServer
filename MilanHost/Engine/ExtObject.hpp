@@ -115,6 +115,25 @@ inline TArray<TKey> CollectMapKeys(TMap<TKey, TValue>& Map)
     return Out;
 }
 
+/**
+ * @brief   Checks if a given callable has a given name within its outer chain.
+ * @param   Struct - The checked function or state.
+ * @param   OuterName - The name to check for.
+ */
+inline bool IsFunctionWithin(UStruct* const Struct, wchar_t const* const OuterName)
+{
+    SFXName const OuterName_(OuterName, 0);
+    for (UObject* Outer = Struct->Outer; Outer; Outer = Outer->Outer)
+    {
+        if (Outer->Name == OuterName_)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 
 /** Some utilities for AActor and children. */
 namespace ActorUtils

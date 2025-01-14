@@ -1,5 +1,5 @@
 diff --git a/Src/LESDK/LE3/Core_classes.hpp b/Src/LESDK/LE3/Core_classes.hpp
-index d2edb76..fa4706e 100644
+index d2edb76..44e8f90 100644
 --- a/Src/LESDK/LE3/Core_classes.hpp
 +++ b/Src/LESDK/LE3/Core_classes.hpp
 @@ -15,16 +15,200 @@
@@ -225,7 +225,7 @@ index d2edb76..fa4706e 100644
  	struct FVector TransformVectorByRotation ( struct FRotator const& SourceRotation, struct FVector const& SourceVector, unsigned long bInverse );
  	struct SFXName GetPackageName ( );
  	bool IsPendingKill ( );
-@@ -614,20 +803,20 @@ public:
+@@ -614,33 +803,35 @@ public:
  	virtual void VirtualFunction46 ( );																			// 0x7FF669E03820 (0x170)
  	virtual void VirtualFunction47 ( );																			// 0x7FF669E03820 (0x178)
  	virtual void VirtualFunction48 ( );																			// 0x7FF669E03820 (0x180)
@@ -250,7 +250,22 @@ index d2edb76..fa4706e 100644
  	virtual void VirtualFunction63 ( );																			// 0x7FF669E13710 (0x1F8)
  	virtual void VirtualFunction64 ( );																			// 0x7FF669E16570 (0x200)
  	virtual void VirtualFunction65 ( );																			// 0x7FF669E179C0 (0x208)
-@@ -702,25 +891,32 @@ public:
+ 	virtual void VirtualFunction66 ( );																			// 0x7FF669E180A0 (0x210)
+ 	virtual void VirtualFunction67 ( );																			// 0x7FF669EB8600 (0x218)
+ 	virtual void VirtualFunction68 ( );																			// 0x7FF669EC0260 (0x220)
+ 	virtual void VirtualFunction69 ( );																			// 0x7FF669E59300 (0x228)
+ 	virtual void ProcessEvent ( class UFunction* pFunction, void* pParms, void* pResult = NULL );				// 0x7FF669E84F80 (0x230)
++    virtual void ProcessDelegate ( SFXName DelegateName,
++        FScriptDelegate const* pDelegate, void* pParms, void* pResult = NULL);                                  // 0x???????????? (0x238)
+ };
+ 
+ // Class Core.TextBuffer
+ // 0x0030 (0x0090 - 0x0060)
+ class UTextBuffer : public UObject
+ {
+ public:
+ 	unsigned char                                      UnknownData00[ 0x30 ];                            		// 0x0060 (0x0030) MISSED OFFSET
+@@ -702,25 +893,32 @@ public:
  
  };
  
@@ -284,7 +299,7 @@ index d2edb76..fa4706e 100644
  public:
  	unsigned char                                      UnknownData00[ 0x10 ];                            		// 0x0060 (0x0010) MISSED OFFSET
  
-@@ -1391,25 +1587,71 @@ public:
+@@ -1391,25 +1589,71 @@ public:
      DWORD                           ClassCastFlags;                     // 0x0104 (0x04) - NOT AUTO-GENERATED PROPERTY 
      DWORD                           ClassUnique;                        // 0x0108 (0x04) - NOT AUTO-GENERATED PROPERTY 
      UClass*                         ClassWithin;                        // 0x010C (0x08) - NOT AUTO-GENERATED PROPERTY 
