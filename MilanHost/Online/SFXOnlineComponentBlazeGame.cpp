@@ -34,11 +34,11 @@ namespace SFXOnlineComponentBlazeGame
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, ForceCleanUp);
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, IsReadyForConnections);
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, IsHostMigrationInProgress);
-    // TODO: CompleteHostMigration
-    // TODO: CancelHostMigration
-    // TODO: FailHostMigration
-    // TODO: ShowHostMigrationMsgBox
-    // TODO: HideHostMigrationMsgBox
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, CompleteHostMigration);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, CancelHostMigration);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, FailHostMigration);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, ShowHostMigrationMsgBox);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, HideHostMigrationMsgBox);
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, GetPlayerCount);
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, KickPlayer);
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, OnTick);
@@ -50,7 +50,7 @@ namespace SFXOnlineComponentBlazeGame
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, SetCallRestrictedFunctionMode);
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, PerformCallRestrictedFunction);
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, SetPlatformPresence);
-    // TODO: ShowPopup
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, ShowPopup);
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, OnConnectionError);
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, CancelFindOnlineGames);
 }
@@ -92,7 +92,11 @@ void SFXOnlineHijacks::InstallComponentBlazeGame()
     INSTALL_HIJACK(SearchedClass, ForceCleanUp);
     INSTALL_HIJACK(SearchedClass, IsReadyForConnections);
     INSTALL_HIJACK(SearchedClass, IsHostMigrationInProgress);
-    // ...
+    INSTALL_HIJACK(SearchedClass, CompleteHostMigration);
+    INSTALL_HIJACK(SearchedClass, CancelHostMigration);
+    INSTALL_HIJACK(SearchedClass, FailHostMigration);
+    INSTALL_HIJACK(SearchedClass, ShowHostMigrationMsgBox);
+    INSTALL_HIJACK(SearchedClass, HideHostMigrationMsgBox);
     INSTALL_HIJACK(SearchedClass, GetPlayerCount);
     INSTALL_HIJACK(SearchedClass, KickPlayer);
     INSTALL_HIJACK(SearchedClass, OnTick);
@@ -104,7 +108,7 @@ void SFXOnlineHijacks::InstallComponentBlazeGame()
     INSTALL_HIJACK(SearchedClass, SetCallRestrictedFunctionMode);
     INSTALL_HIJACK(SearchedClass, PerformCallRestrictedFunction);
     INSTALL_HIJACK(SearchedClass, SetPlatformPresence);
-    // ...
+    INSTALL_HIJACK(SearchedClass, ShowPopup);
     INSTALL_HIJACK(SearchedClass, OnConnectionError);
     INSTALL_HIJACK(SearchedClass, CancelFindOnlineGames);
 }
@@ -140,6 +144,7 @@ void SFXOnlineComponentBlazeGame::OnInitialize_Hook(USFXOnlineComponentBlazeGame
 {
     MILAN_UNUSED_3(Context, Stack, Result);
     MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::OnInitialize - oOnlineSubsystem = ???");
+    MILAN_BREAK_ATTACHED();  // never seen this be called
     OnInitialize_Original(Context, Stack, Result);
 }
 
@@ -147,6 +152,7 @@ void SFXOnlineComponentBlazeGame::OnRelease_Hook(USFXOnlineComponentBlazeGame* c
 {
     MILAN_UNUSED_3(Context, Stack, Result);
     MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::OnRelease - oOnlineSubsystem = ???");
+    MILAN_BREAK_ATTACHED();  // never seen this be called
     OnRelease_Original(Context, Stack, Result);
 }
 
@@ -568,9 +574,62 @@ void SFXOnlineComponentBlazeGame::IsHostMigrationInProgress_Hook(USFXOnlineCompo
 
     NATIVE_FINISH();
 
-    // Ghidra decomp:  (virtual call inlined)
-
     *(UBOOL*)Result = Context->m_HostMigrationInProgress;
+}
+
+void SFXOnlineComponentBlazeGame::CompleteHostMigration_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //CompleteHostMigration_Original(Context, Stack, Result);
+
+    NATIVE_GET_INT(bLocalPlayerIsHost);
+    NATIVE_GET_INT(bIsInLobby);
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::CompleteHostMigration - bLocalPlayerIsHost = %d, bIsInLobby = %d",
+        bLocalPlayerIsHost, bIsInLobby);
+}
+
+void SFXOnlineComponentBlazeGame::CancelHostMigration_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //CancelHostMigration_Original(Context, Stack, Result);
+
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::CancelHostMigration");
+}
+
+void SFXOnlineComponentBlazeGame::FailHostMigration_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //FailHostMigration_Original(Context, Stack, Result);
+
+    NATIVE_GET_STRING(Reason);
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::FailHostMigration - Reason = %s", *Reason);
+}
+
+void SFXOnlineComponentBlazeGame::ShowHostMigrationMsgBox_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //ShowHostMigrationMsgBox_Original(Context, Stack, Result);
+
+    NATIVE_GET_INT(bIsInLobby);
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::ShowHostMigrationMsgBox - bIsInLobby = %d", bIsInLobby);
+}
+
+void SFXOnlineComponentBlazeGame::HideHostMigrationMsgBox_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //HideHostMigrationMsgBox_Original(Context, Stack, Result);
+
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::HideHostMigrationMsgBox");
 }
 
 void SFXOnlineComponentBlazeGame::GetPlayerCount_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
@@ -668,7 +727,7 @@ void SFXOnlineComponentBlazeGame::QuickMatch_Hook(USFXOnlineComponentBlazeGame* 
     MILAN_CHECKW(quickMatchSettings->IsA<USFXOnlineGameSettings>(), L"");
 
     USFXOnlineComponentBlazeGame_execOnQuickMatchComplete_Parms Parms{};
-    Parms.Result = EQMR_StartGame;
+    Parms.Result = EQMR_Failure;
 
     SFXName const NAME_OnQuickMatchComplete(L"OnQuickMatchComplete", 0);
     Context->ProcessDelegate(NAME_OnQuickMatchComplete, &Context->__OnQuickMatchComplete__Delegate, &Parms, nullptr);
@@ -677,7 +736,7 @@ void SFXOnlineComponentBlazeGame::QuickMatch_Hook(USFXOnlineComponentBlazeGame* 
         Context->ProcessDelegate(NAME_OnQuickMatchComplete, &Delegate, &Parms, nullptr);
 
     // Quick match search is kinda difficult to mock...
-    *(UBOOL*)Result = TRUE;
+    *(UBOOL*)Result = FALSE;
 }
 
 void SFXOnlineComponentBlazeGame::CanStartMPMatch_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
@@ -731,6 +790,27 @@ void SFXOnlineComponentBlazeGame::SetPlatformPresence_Hook(USFXOnlineComponentBl
     MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::SetPlatformPresence - presencePrivate = %d", presencePrivate);
 
     // Ghidra decomp:  does nothing.
+}
+
+void SFXOnlineComponentBlazeGame::ShowPopup_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_BREAK_ATTACHED();
+
+    // We'll preserve the code pointer to parse parameters,
+    // but leave engine's original implementation to handle the logic.
+    BYTE* const OrigInstruction = Stack->Code;
+
+    NATIVE_GET_INT(bodyStr);
+    NATIVE_GET_INT(bShowOkBtn);
+    NATIVE_GET_INT_OPTIONAL(bModal, FALSE);
+    NATIVE_GET_INT_OPTIONAL(bPauseGameplay, FALSE);
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::ShowPopup - bodyStr = $%d, bShowOkBtn = %d, bModal = %d, bPauseGameplay = %d",
+        bodyStr, bShowOkBtn, bModal, bPauseGameplay);
+
+    Stack->Code = OrigInstruction;
+    ShowPopup_Original(Context, Stack, Result);
 }
 
 void SFXOnlineComponentBlazeGame::OnConnectionError_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
