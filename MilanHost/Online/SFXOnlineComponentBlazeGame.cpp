@@ -32,9 +32,27 @@ namespace SFXOnlineComponentBlazeGame
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, GetResolvedConnectString);
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, OnHostAddressResolved);
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, ForceCleanUp);
-    // ...
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, IsReadyForConnections);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, IsHostMigrationInProgress);
+    // TODO: CompleteHostMigration
+    // TODO: CancelHostMigration
+    // TODO: FailHostMigration
+    // TODO: ShowHostMigrationMsgBox
+    // TODO: HideHostMigrationMsgBox
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, GetPlayerCount);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, KickPlayer);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, OnTick);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, OnMPGameStatusChange);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, IsPlaying);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, LeaveGame);
     DECLARE_HIJACK(USFXOnlineComponentBlazeGame, QuickMatch);
-    // ...
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, CanStartMPMatch);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, SetCallRestrictedFunctionMode);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, PerformCallRestrictedFunction);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, SetPlatformPresence);
+    // TODO: ShowPopup
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, OnConnectionError);
+    DECLARE_HIJACK(USFXOnlineComponentBlazeGame, CancelFindOnlineGames);
 }
 
 
@@ -72,8 +90,23 @@ void SFXOnlineHijacks::InstallComponentBlazeGame()
     INSTALL_HIJACK(SearchedClass, GetResolvedConnectString);
     INSTALL_HIJACK(SearchedClass, OnHostAddressResolved);
     INSTALL_HIJACK(SearchedClass, ForceCleanUp);
+    INSTALL_HIJACK(SearchedClass, IsReadyForConnections);
+    INSTALL_HIJACK(SearchedClass, IsHostMigrationInProgress);
     // ...
+    INSTALL_HIJACK(SearchedClass, GetPlayerCount);
+    INSTALL_HIJACK(SearchedClass, KickPlayer);
+    INSTALL_HIJACK(SearchedClass, OnTick);
+    INSTALL_HIJACK(SearchedClass, OnMPGameStatusChange);
+    INSTALL_HIJACK(SearchedClass, IsPlaying);
+    INSTALL_HIJACK(SearchedClass, LeaveGame);
     INSTALL_HIJACK(SearchedClass, QuickMatch);
+    INSTALL_HIJACK(SearchedClass, CanStartMPMatch);
+    INSTALL_HIJACK(SearchedClass, SetCallRestrictedFunctionMode);
+    INSTALL_HIJACK(SearchedClass, PerformCallRestrictedFunction);
+    INSTALL_HIJACK(SearchedClass, SetPlatformPresence);
+    // ...
+    INSTALL_HIJACK(SearchedClass, OnConnectionError);
+    INSTALL_HIJACK(SearchedClass, CancelFindOnlineGames);
 }
 
 
@@ -90,6 +123,17 @@ void SFXOnlineComponentBlazeGame::AllowMatchmaking_Hook(USFXOnlineComponentBlaze
     NATIVE_FINISH();
 
     MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::AllowMatchmaking - bAllow = %d, bUpdateServer = %d", bAllow, bUpdateServer);
+
+    // Ghidra decomp:
+
+    Context->bAllowMatchmaking = bAllow != 0;
+    if (Context->GameSettings != nullptr && bUpdateServer)
+    {
+        // Virtual call at 0x338 with (this, SFXName(L"Game", 0), TRUE).
+        //      Resolves to nop.
+    }
+
+    // End of ghidra decomp.
 }
 
 void SFXOnlineComponentBlazeGame::OnInitialize_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
@@ -147,8 +191,13 @@ void SFXOnlineComponentBlazeGame::CanMigrate_Hook(USFXOnlineComponentBlazeGame* 
 void SFXOnlineComponentBlazeGame::HostMigrationMsgBoxCallback_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
 {
     MILAN_UNUSED_3(Context, Stack, Result);
-    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::HostMigrationMsgBoxCallback - bAPressed = ???, Context = ???");
-    HostMigrationMsgBoxCallback_Original(Context, Stack, Result);
+    //HostMigrationMsgBoxCallback_Original(Context, Stack, Result);
+
+    NATIVE_GET_INT(bAPressed);
+    NATIVE_GET_INT(nContext);
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::HostMigrationMsgBoxCallback - bAPressed = %d, Context = %d", bAPressed, nContext);
 }
 
 void SFXOnlineComponentBlazeGame::IsLocalPlayer_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
@@ -177,15 +226,33 @@ void SFXOnlineComponentBlazeGame::UpdateGameProtocolVersion_Hook(USFXOnlineCompo
 void SFXOnlineComponentBlazeGame::ValidateDLCMasterList_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
 {
     MILAN_UNUSED_3(Context, Stack, Result);
-    ValidateDLCMasterList_Original(Context, Stack, Result);
-    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::ValidateDLCMasterList => %s", ((FString*)Result)->Chars());
+    //ValidateDLCMasterList_Original(Context, Stack, Result);
+
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::ValidateDLCMasterList");
+
+    // Ghidra decomp:
+    //      FString MasterList{};
+    //      Virtual call at 0x2F0 with (this, &MasterList) -> &MasterList.
+    //          Resolves to: MasterList->Clear();
+    //      If &MasterList != Result    // notice it's a pointer comparison
+    //          Result->Assign(MasterList)
+    // End of ghidra decomp.
+
+    *(FString*)Result = FString{};
 }
 
 void SFXOnlineComponentBlazeGame::IsInvalidHost_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
 {
     MILAN_UNUSED_3(Context, Stack, Result);
-    IsInvalidHost_Original(Context, Stack, Result);
-    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::IsInvalidHost => %d", *(UBOOL*)Result);
+    //IsInvalidHost_Original(Context, Stack, Result);
+
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::IsInvalidHost");
+
+    *(UBOOL*)Result = FALSE;
 }
 
 void SFXOnlineComponentBlazeGame::CreateOnlineGame_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
@@ -376,8 +443,8 @@ void SFXOnlineComponentBlazeGame::DestroyOnlineGame_Hook(USFXOnlineComponentBlaz
     SFXName const NAME_OnDestroyOnlineGameComplete(L"OnDestroyOnlineGameComplete", 0);
     Context->ProcessDelegate(NAME_OnDestroyOnlineGameComplete, &Context->__OnDestroyOnlineGameComplete__Delegate, &Parms, nullptr);
 
-    // Add-/Clear- StartOnlineGameCompleteDelegate are nops
-    // and there is no internal array for delegates of this type.
+    // Ghidra decomp shows that the delegate array is copied before being executed.
+    // Also, the default delegate property (__OnDestroyOnlineGameComplete__Delegate) doesn't seem to be called.
 
     for (FScriptDelegate const& Delegate : Context->DestroyOnlineGameCompleteDelegates)
         Context->ProcessDelegate(NAME_OnDestroyOnlineGameComplete, &Delegate, &Parms, nullptr);
@@ -460,15 +527,118 @@ void SFXOnlineComponentBlazeGame::GetResolvedConnectString_Hook(USFXOnlineCompon
 void SFXOnlineComponentBlazeGame::OnHostAddressResolved_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
 {
     MILAN_UNUSED_3(Context, Stack, Result);
+    //OnHostAddressResolved_Original(Context, Stack, Result);
+
+    NATIVE_FINISH();
+
     MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::OnHostAddressResolved");
-    OnHostAddressResolved_Original(Context, Stack, Result);
+
+    *(UBOOL*)Result = TRUE;
 }
 
 void SFXOnlineComponentBlazeGame::ForceCleanUp_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
 {
     MILAN_UNUSED_3(Context, Stack, Result);
+    //ForceCleanUp_Original(Context, Stack, Result);
+
+    NATIVE_FINISH();
+
     MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::ForceCleanUp");
-    ForceCleanUp_Original(Context, Stack, Result);
+
+    *(UBOOL*)Result = TRUE;
+}
+
+void SFXOnlineComponentBlazeGame::IsReadyForConnections_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //IsReadyForConnections_Original(Context, Stack, Result);
+
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::IsReadyForConnections");
+
+    *(UBOOL*)Result = TRUE;
+}
+
+void SFXOnlineComponentBlazeGame::IsHostMigrationInProgress_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //IsHostMigrationInProgress_Original(Context, Stack, Result);
+    //MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::IsHostMigrationInProgress => %d", *(UBOOL*)Result);
+
+    NATIVE_FINISH();
+
+    // Ghidra decomp:  (virtual call inlined)
+
+    *(UBOOL*)Result = Context->m_HostMigrationInProgress;
+}
+
+void SFXOnlineComponentBlazeGame::GetPlayerCount_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //GetPlayerCount_Original(Context, Stack, Result);
+    //MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::GetPlayerCount => %d", *(INT*)Result);
+
+    NATIVE_FINISH();
+
+    *(INT*)Result = 0;  // TODO: This should probably return the number of currently registered players?..
+}
+
+void SFXOnlineComponentBlazeGame::KickPlayer_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //KickPlayer_Original(Context, Stack, Result);
+
+    NATIVE_GET_STRUCT(FUniqueNetId, PlayerID);
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::KickPlayer - PlayerId = %d-%d", PlayerID.Uid.A, PlayerID.Uid.B);
+
+    *(UBOOL*)Result = TRUE;
+}
+
+void SFXOnlineComponentBlazeGame::OnTick_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //OnTick_Original(Context, Stack, Result);
+
+    NATIVE_GET_OBJECT(USFXOnlineEvent, Event);
+    NATIVE_FINISH();
+
+    //MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::OnTick - Event = ...");
+}
+
+void SFXOnlineComponentBlazeGame::OnMPGameStatusChange_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //OnMPGameStatusChange_Original(Context, Stack, Result);
+
+    NATIVE_GET_OBJECT(USFXOnlineEvent, Event);
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::OnMPGameStatusChange - Event = ...");
+}
+
+void SFXOnlineComponentBlazeGame::IsPlaying_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //IsPlaying_Original(Context, Stack, Result);
+
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::IsPlaying");
+
+    *(UBOOL*)Result = TRUE;
+}
+
+void SFXOnlineComponentBlazeGame::LeaveGame_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //LeaveGame_Original(Context, Stack, Result);
+
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::LeaveGame");
 }
 
 /**
@@ -507,5 +677,90 @@ void SFXOnlineComponentBlazeGame::QuickMatch_Hook(USFXOnlineComponentBlazeGame* 
         Context->ProcessDelegate(NAME_OnQuickMatchComplete, &Delegate, &Parms, nullptr);
 
     // Quick match search is kinda difficult to mock...
+    *(UBOOL*)Result = TRUE;
+}
+
+void SFXOnlineComponentBlazeGame::CanStartMPMatch_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //CanStartMPMatch_Original(Context, Stack, Result);
+
+    NATIVE_GET_OBJECT(UOnlineGameSettings, NewGameSettings);
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::CanStartMPMatch - NewGameSettings = ...");
+    MILAN_CHECKW(NewGameSettings->IsA<USFXOnlineGameSettings>(), L"");
+
+    *(UBOOL*)Result = TRUE;
+}
+
+void SFXOnlineComponentBlazeGame::SetCallRestrictedFunctionMode_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //SetCallRestrictedFunctionMode_Original(Context, Stack, Result);
+
+    NATIVE_GET_INT(bEnable);
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::SetCallRestrictedFunctionMode - bEnable = %d", bEnable);
+
+    // Ghidra decomp:  does nothing.
+}
+
+void SFXOnlineComponentBlazeGame::PerformCallRestrictedFunction_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //PerformCallRestrictedFunction_Original(Context, Stack, Result);
+
+    NATIVE_FINISH();
+
+    //MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::PerformCallRestrictedFunction");
+
+    // Ghidra decomp:  does nothing.
+    *(UBOOL*)Result = TRUE;
+}
+
+void SFXOnlineComponentBlazeGame::SetPlatformPresence_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //SetPlatformPresence_Original(Context, Stack, Result);
+
+    NATIVE_GET_INT(presencePrivate);
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::SetPlatformPresence - presencePrivate = %d", presencePrivate);
+
+    // Ghidra decomp:  does nothing.
+}
+
+void SFXOnlineComponentBlazeGame::OnConnectionError_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //OnConnectionError_Original(Context, Stack, Result);
+
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::OnConnectionError");
+
+    // Ghidra decomp:  does nothing.
+    *(UBOOL*)Result = TRUE;
+}
+
+void SFXOnlineComponentBlazeGame::CancelFindOnlineGames_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
+{
+    MILAN_UNUSED_3(Context, Stack, Result);
+    //CancelFindOnlineGames_Original(Context, Stack, Result);
+
+    NATIVE_FINISH();
+
+    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::CancelFindOnlineGames");
+
+    USFXOnlineComponentBlazeGame_execOnCancelFindOnlineGamesComplete_Parms Parms{};
+    Parms.bWasSuccessful = TRUE;
+
+    SFXName const NAME_OnCancelFindOnlineGamesComplete(L"OnCancelFindOnlineGamesComplete", 0);
+    Context->ProcessDelegate(NAME_OnCancelFindOnlineGamesComplete, &Context->__OnCancelFindOnlineGamesComplete__Delegate, &Parms, nullptr);
+
+    // Ghidra decomp:  does nothing.
     *(UBOOL*)Result = TRUE;
 }
