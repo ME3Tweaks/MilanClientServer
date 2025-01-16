@@ -6,7 +6,9 @@
 set (PROJ_TARGET MilanCore)
 
 set (FFI_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/milan_ecsm_ffi.h)
+set (FFI_OUTPUT ${CMAKE_SOURCE_DIR}/Build/Cargo)
 set (FFI_CRATE client_ffi)
+set (FFI_BUILD cargo build -p ${FFI_CRATE} $<$<IN_LIST:$<CONFIG>,RELEASE;FINAL>:--release>)
 
 
 # Ensure an empty ffi header updated by cbindgen later during build.
@@ -16,33 +18,23 @@ file (TOUCH ${FFI_HEADER})
 
 # Import Rust crate as a CMake target and link it.
 
-corrosion_import_crate (
-  MANIFEST_PATH "${CMAKE_SOURCE_DIR}/Cargo.toml"
-  CRATE_TYPES "staticlib"
-  CRATES "${FFI_CRATE}"
+add_custom_target (${FFI_CRATE} ALL
+  COMMAND cargo build -p ${FFI_CRATE}
+    "$<$<IN_LIST:$<CONFIG>,RELEASE;FINAL>:--release>"
+  COMMAND_EXPAND_LISTS
+  USES_TERMINAL
+  VERBATIM
 )
-
-corrosion_add_target_local_rustflags ("${FFI_CRATE}" "-Cpanic=abort")
-# corrosion_set_cargo_flags ("${FFI_CRATE}" "--verbose")
 
 add_library (${PROJ_TARGET} INTERFACE ${FFI_HEADER})
 
 target_compile_definitions (${PROJ_TARGET} INTERFACE ${MILAN_COMPILE_DEFINITIONS})
 target_include_directories (${PROJ_TARGET} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries (${PROJ_TARGET} INTERFACE ${FFI_CRATE})
 
-
-# Group auto-generated cargo targets.
-# We should keep Solution Explorer clean :)
-
-get_property (CARGO_TARGETS
-  DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  PROPERTY BUILDSYSTEM_TARGETS
+add_dependencies (${PROJ_TARGET} ${FFI_CRATE})
+target_link_libraries (${PROJ_TARGET} INTERFACE
+  debug "${FFI_OUTPUT}/debug/${FFI_CRATE}.lib"
+  optimized "${FFI_OUTPUT}/release/${FFI_CRATE}.lib"
+  general ntdll ws2_32 userenv advapi32  # needed for rust stdlib
 )
-
-foreach (MY_CARGO_TARGET ${CARGO_TARGETS})
-  if (MY_CARGO_TARGET MATCHES "cargo-")
-    message ("-- Grouping auto-generated '${MY_CARGO_TARGET}' target")
-    set_target_properties (${MY_CARGO_TARGET} PROPERTIES FOLDER "[CARGO]")
-  endif ()
-endforeach ()
+set_target_properties (${FFI_CRATE} PROPERTIES FOLDER "[CARGO]")
