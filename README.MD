@@ -59,13 +59,10 @@ This listing assumes the standard CMake preset (`VisualStudio`).
 
 ```
 .cargo/                     - cargo configuration (required!)
-Build/                      - output directory
-  Cargo/                    - output for rust code
-  VisualStudio/             - output for c++ code
-    Projects/               - generated visual studio solution and projects
-    {DEBUG|RELEASE|FINAL}/  - directories for built artifacts
-    MilanBuildConfig.cmake  - workspace-wide build configuration
-    MilanTargetUtils.cmake  - auxiliary logic for adding cmake targets
+Build/                      - output directory, can safely be deleted between builds
+  Cargo/                    - output and temporary files for rust code
+  VisualStudio/             - generated visual studio solution and projects
+    {DEBUG|RELEASE|FINAL}/  - output for c++ code
 Crates/                     - local rust libraries
 MilanCore/                  - the rust library and a cmake target for linking it into c++ code
   client_core/              - ecsm implementation as a non-system library
@@ -74,11 +71,14 @@ MilanCore/                  - the rust library and a cmake target for linking it
 MilanHost/                  - the main milan client asi, written in c++
 MilanServer/                - server executable(s)
 NetworkProfiler/            - gui network profiler application
+Patching/                   - index and git diffs for locally patching submodules
 ThirdParty/                 - dependencies provided via submodules
-Utilities/                  - smaller asi plugins and/or tools
 Cargo.toml                  - workspace for all rust code in this project
 CMakeLists.txt              - workspace for all c++ code in this project
 CMakePresets.json           - cmake configuration / build presets
+MilanBuildConfig.cmake      - workspace-wide build configuration
+MilanPatchHooks.cmake       - cmake logic for locally patching submodules
+MilanTargetUtils.cmake      - auxiliary logic for adding cmake targets
 ```
 
 
@@ -89,15 +89,13 @@ all or parts of this project, in no particular order.
 
 ```
 General:
-  - Corrosion - v0.4.7 - MIT - Andrew Gaspar
   - ImGui - v1.91.3 - MIT - Omar Cornut
-  - ImPlot - #f156599 - MIT - Evan Pezent
   - RenderDoc API - #9f4f0e6 - MIT - Baldur Karlsson & Crytek
   - toml++ - v3.4.0 - MIT - Mark Gillard
   - Zydis - v4.1.0 - MIT - Florian Bernd & Joel Höner
 
 Network Profiler:
-  - CommunityToolkit.Mvvm - v8.3.2 - MIT - .NET Foundation and contributors
+  - CommunityToolkit.Mvvm - v8.4.0 - MIT - .NET Foundation and contributors
   - Microsoft.Xaml.Behaviors.Wpf - v1.1.135 - MIT - Microsoft
-  - ScottPlot.WPF - v5.0.39 - MIT - Scott Harden / Harden Technologies, LLC
+  - ScottPlot.WPF - v5.0.53 - MIT - Scott Harden / Harden Technologies, LLC
 ```

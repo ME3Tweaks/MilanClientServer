@@ -12,11 +12,4 @@ client_core = { path = "../client_core" }
 
 [build-dependencies]
 # This doesn't trim much, but at least we can avoid pulling clap.
-cbindgen = { version = "0.26.0", default-features = false }
-
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-strip = "debuginfo"
-panic = "abort"
+cbindgen = { version = "0.28.0", default-features = false }
