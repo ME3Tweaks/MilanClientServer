@@ -148,6 +148,9 @@ void UObject_CallFunction_hook(UObject* const Context, FFrame* const Stack, void
     }
 #endif
 
+    //if (IsFunctionWithinDerivedClass(Function, L"SFXOnlineComponentImageManager"))
+    //    MILAN_TRACEW(ELOG_DevelUtils, L"%S: %s", __func__, *Function->GetFullName());
+
     (*UObject_CallFunction_orig)(Context, Stack, Result, Function);
 }
 
@@ -204,10 +207,17 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     static bool s_sfxOnlineInitialized = false;
     if (!s_sfxOnlineInitialized && Function->GetOutermost()->Name == SFXName(L"SFXOnlineFoundation", 0))
     {
+        RelativeTimer HijackTimer{};
+
         SFXOnlineHijacks::InstallComponentBlazeGame();
         SFXOnlineHijacks::InstallComponentBlazeLogin();
         s_sfxOnlineInitialized = true;
+
+        MILAN_INFOW(ELOG_EngineHooks, L"Installed SFXOnlineFoundation hijacks in %3.2f ms", HijackTimer.GetMilliseconds());
     }
+
+    //if (IsFunctionWithinDerivedClass(Function, L"SFXOnlineComponentImageManager"))
+    //    MILAN_TRACEW(ELOG_DevelUtils, L"%S: %s", __func__, *Function->GetFullName());
 
     COMPONENT(CProfilers).On_UObject_ProcessEvent(Context, Function, Parms, Result);
     COMPONENT(CRenderdoc).On_UObject_ProcessEvent(Context, Function, Parms, Result);
@@ -254,8 +264,8 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
 #endif
 
-    //if (IsFunctionWithin(Stack->Node, L"SFXOnlineComponentUnrealPlayer"))
-    //    MILAN_DEBUGW(ELOG_DevelUtils, L"%S: %s", __func__, *Stack->Node->GetFullName());
+    //if (IsFunctionWithinDerivedClass(Stack->Node, L"SFXOnlineComponentImageManager"))
+    //    MILAN_TRACEW(ELOG_DevelUtils, L"%S: %s", __func__, *Stack->Node->GetFullName());
 
     if (!COMPONENT(CState).On_UObject_ProcessInternal_Pre(Context, Stack, Result))
     {

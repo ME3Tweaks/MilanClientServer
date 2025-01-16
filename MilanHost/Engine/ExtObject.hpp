@@ -126,9 +126,24 @@ inline bool IsFunctionWithin(UStruct* const Struct, wchar_t const* const OuterNa
     for (UObject* Outer = Struct->Outer; Outer; Outer = Outer->Outer)
     {
         if (Outer->Name == OuterName_)
-        {
             return true;
-        }
+    }
+
+    return false;
+}
+
+/**
+ * @brief   Checks if a given callable is defined in a class has a given name within its super chain.
+ * @param   Struct - The checked function or state.
+ * @param   OuterClassName - The class name to check for.
+ */
+inline bool IsFunctionWithinDerivedClass(UStruct* const Struct, wchar_t const* const SuperClassName)
+{
+    SFXName const SuperClassName_(SuperClassName, 0);
+    for (UClass* Class = Struct->Outer->Cast<UClass>(); Class; Class = (UClass*)Class->SuperField)
+    {
+        if (Class->Name == SuperClassName_)
+            return true;
     }
 
     return false;
