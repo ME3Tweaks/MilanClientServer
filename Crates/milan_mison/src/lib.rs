@@ -7,7 +7,7 @@
 //! contents of client / server communication for *Project Milan*. Originally designed
 //! based on MongoDB's BSON and EA's TDF.
 //!
-//! See [`mod@read`] and [`mod@write`] module-level documentation and crate-level
+//! See [`mod@decode`] and [`mod@encode`] module-level documentation and crate-level
 //! tests for usage examples. See the [`spec`] module for an embedded specification (.txt).
 
 
@@ -16,8 +16,8 @@ use std::str::FromStr;
 
 
 pub mod io;
-pub mod read;
-pub mod write;
+pub mod decode;
+pub mod encode;
 
 
 #[cfg(doc)]
@@ -29,8 +29,8 @@ pub mod spec {
 }
 
 
-pub use read::MiDecoder;
-pub use write::MiEncoder;
+pub use decode::MiDecoder;
+pub use encode::MiEncoder;
 
 
 /// Serializable value types.

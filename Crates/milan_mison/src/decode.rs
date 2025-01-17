@@ -2,7 +2,7 @@
 //!
 //! # Example
 //! ```rust
-//! # use milan_mison::read::*;
+//! # use milan_mison::decode::*;
 //! # fn example(slice: &[u8]) -> Result<(), ReadError> {
 //! // let slice: &[u8] = ...;
 //!
@@ -615,7 +615,7 @@ mod tests {
 
     #[test]
     fn test_array_read() {
-        let bytes = crate::write::tests::parse_hex(
+        let bytes = crate::encode::tests::parse_hex(
             "00 07 00 01 06 41 52 52 41 59 00 02 00 04 00 00 00 0C 00 03 04 00 00 00 02 00 00 00 04 00 00 00 08"
         );
 

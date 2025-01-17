@@ -3,8 +3,8 @@
 //! should be identical...
 
 use milan_mison::MiType;
-use milan_mison::read::{MiDecoder, MiElement, MiObject, MiValue, ReadError};
-use milan_mison::write::{MiEncoder, ObjectValueMarker, WriteError};
+use milan_mison::decode::{MiDecoder, MiElement, MiObject, MiValue, ReadError};
+use milan_mison::encode::{MiEncoder, ObjectValueMarker, WriteError};
 
 
 #[test]

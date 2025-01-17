@@ -2,7 +2,7 @@
 //!
 //! # Example
 //! ```rust
-//! # use milan_mison::write::*;
+//! # use milan_mison::encode::*;
 //! # fn example() -> Result<(), WriteError> {
 //! // Create a new encoder, in real scenarios it would probably be re-used.
 //! let mut encoder = MiEncoder::new();
@@ -54,7 +54,7 @@ pub use markers::{ArrayValueMarker, MapValueMarker, ObjectValueMarker};
 
 /// Traits implementing generic array / map builder construction.
 pub mod factories {
-    use crate::write::*;
+    use crate::encode::*;
 
     /// Trait for constructing [`MiArrayBuilder`] generically.
     pub trait MiArrayBuilderFactory<'a, Value> {
@@ -219,7 +219,7 @@ pub enum WriteError {
 /// this trait does not, because it is designed for usage with [`MiEncoder`] API,
 /// which provides special logic for handling values of those types.
 ///
-/// [`ReadValue`]: crate::read::ReadValue
+/// [`ReadValue`]: crate::decode::ReadValue
 pub trait WriteValue: Sized {
     /// Associated type marker.
     const MI_TYPE: MiType;

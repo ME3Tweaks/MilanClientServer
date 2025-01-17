@@ -3,7 +3,7 @@
 use std::cell::Cell;
 
 use crate::MiType;
-use crate::read::ReadError;
+use crate::decode::ReadError;
 
 
 /// Serial binary output over a vector.

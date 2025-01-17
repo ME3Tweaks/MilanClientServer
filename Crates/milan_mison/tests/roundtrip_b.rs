@@ -4,8 +4,8 @@
 use std::fmt::Write;
 
 use milan_mison::MiType;
-use milan_mison::read::{MiArrayView, MiDecoder, MiValue, ReadError};
-use milan_mison::write::{ArrayValueMarker, MiEncoder, WriteError};
+use milan_mison::decode::{MiArrayView, MiDecoder, MiValue, ReadError};
+use milan_mison::encode::{ArrayValueMarker, MiEncoder, WriteError};
 
 
 #[test]
