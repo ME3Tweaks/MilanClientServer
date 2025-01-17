@@ -52,7 +52,7 @@ pub enum ReadError {
     #[error("invalid name offset {offset}: {reason}")]
     BadNameRef { offset: u16, reason: &'static str },
     /// Invalid value serialization.
-    #[error("invalid value serialization of type {r#type}: {reason}")]
+    #[error("invalid value serialization of type {type}: {reason}")]
     BadValue { r#type: MiType, reason: &'static str },
     /// Unexpected end of buffer.
     #[error("unexpected end of buffer at {offset}, read {found} of {expected} byte(s)")]
@@ -188,7 +188,7 @@ pub enum MiValue<'a> {
     Guid(Uuid),
 }
 
-impl<'a> MiValue<'a> {
+impl MiValue<'_> {
     /// Map this value variant to its type marker.
     pub fn get_type(&self) -> MiType {
         match self {

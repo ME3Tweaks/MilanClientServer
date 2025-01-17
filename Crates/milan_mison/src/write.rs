@@ -285,7 +285,7 @@ impl WriteValue for bool {
 impl WriteValue for &str {
     const MI_TYPE: MiType = MiType::String;
     fn get_size(&self) -> usize {
-        4 + self.as_bytes().len() + 1
+        4 + self.len() + 1
     }
     fn write_value(&self, output: &mut impl OutputBufferLike) -> Result<(), WriteError> {
         let bytes = self.as_bytes();
@@ -560,7 +560,7 @@ impl<'a, Value> MiArrayBuilder<'a, Value> {
     }
 }
 
-impl<'a> MiArrayBuilder<'a, ArrayValueMarker> {
+impl MiArrayBuilder<'_, ArrayValueMarker> {
     /// Serializes an *array* value constructed by a `callback`, appending it to this array.
     pub fn push<Item, Callback>(&mut self, callback: Callback) -> Result<&mut Self, WriteError>
     where
@@ -573,7 +573,7 @@ impl<'a> MiArrayBuilder<'a, ArrayValueMarker> {
     }
 }
 
-impl<'a> MiArrayBuilder<'a, MapValueMarker> {
+impl MiArrayBuilder<'_, MapValueMarker> {
     /// Serializes a *map* value constructed by a `callback`, appending it to this array.
     pub fn push<Key, Value, Callback>(&mut self, callback: Callback) -> Result<&mut Self, WriteError>
     where
@@ -586,7 +586,7 @@ impl<'a> MiArrayBuilder<'a, MapValueMarker> {
     }
 }
 
-impl<'a> MiArrayBuilder<'a, ObjectValueMarker> {
+impl MiArrayBuilder<'_, ObjectValueMarker> {
     /// Serializes an *object* value constructed by a `callback`, appending it to this array.
     pub fn push<Callback>(&mut self, callback: Callback) -> Result<&mut Self, WriteError>
     where
@@ -598,7 +598,7 @@ impl<'a> MiArrayBuilder<'a, ObjectValueMarker> {
     }
 }
 
-impl<'a, Value: WriteValue> MiArrayBuilder<'a, Value> {
+impl<Value: WriteValue> MiArrayBuilder<'_, Value> {
     /// Serializes a *simple* value, appending it to this array.
     pub fn push(&mut self, value: Value) -> Result<&mut Self, WriteError> {
         value.write_value(self.encoder)?;
@@ -642,7 +642,7 @@ impl<'a, Key, Value> MiMapBuilder<'a, Key, Value> {
     }
 }
 
-impl<'a> MiMapBuilder<'a, ArrayValueMarker, ArrayValueMarker> {
+impl MiMapBuilder<'_, ArrayValueMarker, ArrayValueMarker> {
     /// Serializes a pair of *array* key and *array* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
     pub fn push<Key, Value, CbKey, CbValue>(
@@ -661,7 +661,7 @@ impl<'a> MiMapBuilder<'a, ArrayValueMarker, ArrayValueMarker> {
     }
 }
 
-impl<'a> MiMapBuilder<'a, ArrayValueMarker, MapValueMarker> {
+impl MiMapBuilder<'_, ArrayValueMarker, MapValueMarker> {
     /// Serializes a pair of *array* key and *map* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
     pub fn push<Key, ValueKey, ValueValue, CbKey, CbValue>(
@@ -680,7 +680,7 @@ impl<'a> MiMapBuilder<'a, ArrayValueMarker, MapValueMarker> {
     }
 }
 
-impl<'a> MiMapBuilder<'a, ArrayValueMarker, ObjectValueMarker> {
+impl MiMapBuilder<'_, ArrayValueMarker, ObjectValueMarker> {
     /// Serializes a pair of *array* key and *object* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
     pub fn push<Key, CbKey, CbValue>(
@@ -698,7 +698,7 @@ impl<'a> MiMapBuilder<'a, ArrayValueMarker, ObjectValueMarker> {
     }
 }
 
-impl<'a, Value: WriteValue> MiMapBuilder<'a, ArrayValueMarker, Value> {
+impl<Value: WriteValue> MiMapBuilder<'_, ArrayValueMarker, Value> {
     /// Serializes a pair of an *array* key and a *simple* `value`, key
     /// being constructed by the `key` callback, appending it to this map.
     pub fn push<Key, CbKey>(
@@ -715,7 +715,7 @@ impl<'a, Value: WriteValue> MiMapBuilder<'a, ArrayValueMarker, Value> {
     }
 }
 
-impl<'a> MiMapBuilder<'a, MapValueMarker, ArrayValueMarker> {
+impl MiMapBuilder<'_, MapValueMarker, ArrayValueMarker> {
     /// Serializes a pair of *map* key and *array* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
     pub fn push<KeyKey, KeyValue, Value, CbKey, CbValue>(
@@ -734,7 +734,7 @@ impl<'a> MiMapBuilder<'a, MapValueMarker, ArrayValueMarker> {
     }
 }
 
-impl<'a> MiMapBuilder<'a, MapValueMarker, MapValueMarker> {
+impl MiMapBuilder<'_, MapValueMarker, MapValueMarker> {
     /// Serializes a pair of *map* key and *map* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
     pub fn push<KeyKey, KeyValue, ValueKey, ValueValue, CbKey, CbValue>(
@@ -753,7 +753,7 @@ impl<'a> MiMapBuilder<'a, MapValueMarker, MapValueMarker> {
     }
 }
 
-impl<'a> MiMapBuilder<'a, MapValueMarker, ObjectValueMarker> {
+impl MiMapBuilder<'_, MapValueMarker, ObjectValueMarker> {
     /// Serializes a pair of *map* key and *object* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
     pub fn push<KeyKey, KeyValue, CbKey, CbValue>(
@@ -771,7 +771,7 @@ impl<'a> MiMapBuilder<'a, MapValueMarker, ObjectValueMarker> {
     }
 }
 
-impl<'a, Value: WriteValue> MiMapBuilder<'a, MapValueMarker, Value> {
+impl<Value: WriteValue> MiMapBuilder<'_, MapValueMarker, Value> {
     /// Serializes a pair of a *map* key and a *simple* `value`, key
     /// being constructed by the `key` callback, appending it to this map.
     pub fn push<KeyKey, KeyValue, CbKey>(
@@ -788,7 +788,7 @@ impl<'a, Value: WriteValue> MiMapBuilder<'a, MapValueMarker, Value> {
     }
 }
 
-impl<'a> MiMapBuilder<'a, ObjectValueMarker, ArrayValueMarker> {
+impl MiMapBuilder<'_, ObjectValueMarker, ArrayValueMarker> {
     /// Serializes a pair of *object* key and *array* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
     pub fn push<Value, CbKey, CbValue>(
@@ -806,7 +806,7 @@ impl<'a> MiMapBuilder<'a, ObjectValueMarker, ArrayValueMarker> {
     }
 }
 
-impl<'a> MiMapBuilder<'a, ObjectValueMarker, MapValueMarker> {
+impl MiMapBuilder<'_, ObjectValueMarker, MapValueMarker> {
     /// Serializes a pair of *object* key and *map* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
     pub fn push<ValueKey, ValueValue, CbKey, CbValue>(
@@ -824,7 +824,7 @@ impl<'a> MiMapBuilder<'a, ObjectValueMarker, MapValueMarker> {
     }
 }
 
-impl<'a> MiMapBuilder<'a, ObjectValueMarker, ObjectValueMarker> {
+impl MiMapBuilder<'_, ObjectValueMarker, ObjectValueMarker> {
     /// Serializes a pair of *object* key and *object* value, constructed
     /// by `key` and `value` callbacks respectively, appending it to this map.
     pub fn push<CbKey, CbValue>(
@@ -841,7 +841,7 @@ impl<'a> MiMapBuilder<'a, ObjectValueMarker, ObjectValueMarker> {
     }
 }
 
-impl<'a, Value: WriteValue> MiMapBuilder<'a, ObjectValueMarker, Value> {
+impl<Value: WriteValue> MiMapBuilder<'_, ObjectValueMarker, Value> {
     /// Serializes a pair of an *object* key and a *simple* `value`, key
     /// being constructed by the `key` callback, appending it to this map.
     pub fn push<CbKey>(
@@ -857,7 +857,7 @@ impl<'a, Value: WriteValue> MiMapBuilder<'a, ObjectValueMarker, Value> {
     }
 }
 
-impl<'a, Key: WriteValue> MiMapBuilder<'a, Key, ArrayValueMarker> {
+impl<Key: WriteValue> MiMapBuilder<'_, Key, ArrayValueMarker> {
     /// Serializes a pair of a *simple* `key` and an *array* value, value
     /// being constructed by the `value` callback, appending it to this map.
     pub fn push<Value, CbValue>(
@@ -874,7 +874,7 @@ impl<'a, Key: WriteValue> MiMapBuilder<'a, Key, ArrayValueMarker> {
     }
 }
 
-impl<'a, Key: WriteValue> MiMapBuilder<'a, Key, MapValueMarker> {
+impl<Key: WriteValue> MiMapBuilder<'_, Key, MapValueMarker> {
     /// Serializes a pair of a *simple* `key` and a *map* value, value
     /// being constructed by the `value` callback, appending it to this map.
     pub fn push<ValueKey, ValueValue, CbValue>(
@@ -891,7 +891,7 @@ impl<'a, Key: WriteValue> MiMapBuilder<'a, Key, MapValueMarker> {
     }
 }
 
-impl<'a, Key: WriteValue> MiMapBuilder<'a, Key, ObjectValueMarker> {
+impl<Key: WriteValue> MiMapBuilder<'_, Key, ObjectValueMarker> {
     /// Serializes a pair of a *simple* `key` and an *object* value, value
     /// being constructed by the `value` callback, appending it to this map.
     pub fn push<CbValue>(
@@ -907,7 +907,7 @@ impl<'a, Key: WriteValue> MiMapBuilder<'a, Key, ObjectValueMarker> {
     }
 }
 
-impl<'a, Key: WriteValue, Value: WriteValue> MiMapBuilder<'a, Key, Value> {
+impl<Key: WriteValue, Value: WriteValue> MiMapBuilder<'_, Key, Value> {
     /// Serializes a pair of a *simple* `key` and a *simple* `value`, appending it to this map.
     pub fn push(&mut self, key: Key, value: Value) -> Result<&mut Self, WriteError> {
         key.write_value(self.encoder)?;

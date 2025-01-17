@@ -5,7 +5,7 @@
 //!
 //! This crate implements *MISON*, a small binary format designed for serializing
 //! contents of client / server communication for *Project Milan*. Originally designed
-//! based on Mongo's BSON and EA's TDF.
+//! based on MongoDB's BSON and EA's TDF.
 //!
 //! See [`mod@read`] and [`mod@write`] module-level documentation and crate-level
 //! tests for usage examples. See the [`spec`] module for an embedded specification (.txt).
