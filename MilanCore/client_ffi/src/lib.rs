@@ -45,14 +45,14 @@ pub unsafe extern "C" fn init_state() {
 }
 
 
-/// Uninitializes the global state machine instance.
+/// Cleans up the global state machine instance.
 #[no_mangle]
 pub unsafe extern "C" fn uninit_state() {
     // ...
 }
 
 
-/// Ticks the the global state machine instance.
+/// Ticks the global state machine instance.
 /// Expected to be called exactly once per `UWorld::Tick`.
 #[no_mangle]
 pub unsafe extern "C" fn world_tick(_delta: c_float) {
