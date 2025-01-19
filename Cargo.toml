@@ -4,6 +4,7 @@ members = [
     "Crates/milan_mison",
     "Crates/milan_protocol",
     "Crates/milan_runtime",
+    "Crates/milan_schema",
     "MilanCore/client_core",
     "MilanCore/client_ffi",
 ]
