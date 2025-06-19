@@ -1,5 +1,0 @@
-[build]
-target-dir = "Build/Cargo"
-
-[cargo-new]
-vcs = "none"

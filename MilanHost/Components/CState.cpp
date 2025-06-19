@@ -5,43 +5,12 @@
 #include "Engine/Intercept.hpp"
 #include "Online/MPProfile.hpp"
 
-#include <milan_ecsm_ffi.h>
-
-
-void* ecsm_alloc(unsigned long long const size, unsigned long long const align)
-{
-    MILAN_UNUSED(align);
-    return (*GMalloc)->Malloc(static_cast<DWORD>(size), UN_DEFAULT_ALIGNMENT);
-}
-
-void* ecsm_realloc(void* const ptr, unsigned long long const size, unsigned long long const align)
-{
-    MILAN_UNUSED(align);
-    return (*GMalloc)->Realloc(ptr, static_cast<DWORD>(size), UN_DEFAULT_ALIGNMENT);
-}
-
-void ecsm_free(void* const ptr)
-{
-    (*GMalloc)->Free(ptr);
-}
-
-void ecsm_log(const char* const file, unsigned int const line, int const sev, const char* const msg)
-{
-    MILAN_CHECKW(gp_mainLogger != nullptr, L"");
-    ::CodePlaceA const Place{ .Func = "", .File = file, .Line = (int)line };
-    gp_mainLogger->WriteAnsi(Place, static_cast<ESeverity>(sev), ELOG_Client, msg);
-}
-
 
 // ! CState implementation.
 // ========================================
 
 bool CState::Initialize(::LESDK::Initializer& Context)
 {
-    ::ecsm::init_allocator(::ecsm_alloc, ::ecsm_realloc, ::ecsm_free);
-    ::ecsm::init_logger(::ecsm_log);
-    ::ecsm::init_state();
-
     MILAN_UNUSED(Context);
     MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
@@ -53,7 +22,6 @@ void CState::Terminate(::LESDK::Initializer& Context)
     MILAN_DEBUGW(ELOG_Teardown, L"component '%s' terminating", k_typeName);
 
     FunctionStructIntercept::CleanupRegistered();
-    ::ecsm::uninit_state();
 }
 
 void CState::On_VectoredException(void* const Address, DWORD const Code, _EXCEPTION_POINTERS* const Exceptions)
@@ -112,5 +80,4 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
 void CState::On_UWorld_Tick(UWorld* const Context, int const Unknown, float const Delta)
 {
     MILAN_UNUSED_3(Context, Unknown, Delta);
-    ::ecsm::world_tick(Delta);
 }

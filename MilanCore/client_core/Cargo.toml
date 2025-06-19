@@ -1,8 +1,0 @@
-[package]
-name = "client_core"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-milan_protocol = { path = "../../Crates/milan_protocol" }
-milan_runtime = { path = "../../Crates/milan_runtime" }

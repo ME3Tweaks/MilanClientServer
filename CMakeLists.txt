@@ -18,8 +18,6 @@ set_property (GLOBAL PROPERTY USER_FOLDERS ON)
 # ! Build options.
 # ========================================
 
-option (MILAN_BUILD_HOST "Build the client host target" ON)
-
 if (DEFINED ENV{MILAN_CMAKE_PRESET})
   set (MILAN_CMAKE_PRESET $ENV{MILAN_CMAKE_PRESET})
   message ("-- Environment selected preset: ${MILAN_CMAKE_PRESET}")
@@ -67,18 +65,12 @@ set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_EXTERNAL})
 
 add_subdirectory ("ThirdParty")
 
-if (MILAN_BUILD_HOST)
+set (CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
+set (CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
+set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
 
-  set (CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
-  set (CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
-  set (CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MILAN_OUTPUT_DIRECTORY_CLIENT})
-
-  set_property (GLOBAL PROPERTY VS_STARTUP_PROJECT MilanHost)
-
-  add_subdirectory ("MilanCore")
-  add_subdirectory ("MilanHost")
-
-endif ()
+add_subdirectory ("MilanHost")
+set_property (GLOBAL PROPERTY VS_STARTUP_PROJECT MilanHost)
 
 
 # ! Bogus target for freestanding files.

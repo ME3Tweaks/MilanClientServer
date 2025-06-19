@@ -1,6 +1,6 @@
 /**
  * @file        MilanHost/Components/CState.hpp
- * @header      Component for managing ECSM and associated host-side state.
+ * @header      Component for managing client state.
  */
 
 #pragma once

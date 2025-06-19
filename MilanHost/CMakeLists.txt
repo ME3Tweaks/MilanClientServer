@@ -67,7 +67,6 @@ set (PROJ_SOURCES
 )
 
 set (PROJ_LINKS
-  MilanCore
   LESDK-LE3
   ImGui renderdoc-api tomlplusplus Zydis
   d3d11.lib dxgi.lib dxguid.lib

@@ -5,12 +5,6 @@ You need to have the following installed when building on Windows:
 
    * Visual Studio 2022 with at least C++ workload and Windows 10 / 11 SDK.
       * You also need ".NET desktop development" workload to build the network profiler GUI.
-   * Reasonably up-to-date `stable-x86_64-pc-windows-msvc` Rust toolchain.
-
-Use the [official rustup-init tool](https://www.rust-lang.org/tools/install)
-to install Rust, when prompted go with the stable channel and standard installation.
-This will install compiler, standard library, and `cargo` - the build system and dependency
-management tool.
 
 
 ## How to build:
@@ -22,8 +16,6 @@ management tool.
 > .\Build\VisualStudio\Projects\MilanClient.sln
 ```
 
-Note that the client `MilanHost` ASI will invoke `cargo` as a part of its
-build process, but will only build the little subset of Rust code it requires.
 These commands **must** be run in Developer PowerShell / Command Prompt for VS 2022.
 
 > [!IMPORTANT]
@@ -37,9 +29,7 @@ These commands **must** be run in Developer PowerShell / Command Prompt for VS 2
 
 ### Are you building server code?
 
-```
-> cargo build [--release] [-p 'server_*']
-```
+(TODO: Document server building.)
 
 ### Are you building Network Profiler?
 
@@ -58,22 +48,14 @@ Open and build `./NetworkProfiler/NetworkProfiler.sln`.
 This listing assumes the standard CMake preset (`VisualStudio`).
 
 ```
-.cargo/                     - cargo configuration (required!)
 Build/                      - output directory, can safely be deleted between builds
-  Cargo/                    - output and temporary files for rust code
   VisualStudio/             - generated visual studio solution and projects
     {DEBUG|RELEASE|FINAL}/  - output for c++ code
-Crates/                     - local rust libraries
-MilanCore/                  - the rust library and a cmake target for linking it into c++ code
-  client_core/              - ecsm implementation as a non-system library
-  client_ffi/               - system library wrapping the ecsm interface for ffi
-  milan_ecsm_ffi.h          - auto-generated ffi bindings (git-ignored!)
 MilanHost/                  - the main milan client asi, written in c++
 MilanServer/                - server executable(s)
 NetworkProfiler/            - gui network profiler application
 Patching/                   - index and git diffs for locally patching submodules
 ThirdParty/                 - dependencies provided via submodules
-Cargo.toml                  - workspace for all rust code in this project
 CMakeLists.txt              - workspace for all c++ code in this project
 CMakePresets.json           - cmake configuration / build presets
 MilanBuildConfig.cmake      - workspace-wide build configuration

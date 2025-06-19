@@ -162,6 +162,8 @@ CaveIndexer::CaveIndexer(std::ptrdiff_t const MinSize)
 
 CaveIndexer::CCaveInfo const* CaveIndexer::GetForSize(std::ptrdiff_t const MinSize)
 {
+    MILAN_CHECKW(MinSize > 0, L"");
+
     if (MinSize <= IndexMaxSize)
     {
         MILAN_CHECKW(Caves.size() == Occupancy.size(), L"");
