@@ -14,7 +14,7 @@ public ref struct QueryResponse
     public Address Stun;
     public Address Turn;
 
-    public void Read(JsonObjectReader reader)
+    public void Read(ref JsonObjectReader reader)
     {
         Address match = new();
         Address stun = new();
@@ -43,7 +43,7 @@ public ref struct QueryResponse
         Turn = turn;
     }
 
-    public readonly void Write(JsonObjectWriter writer)
+    public readonly void Write(ref JsonObjectWriter writer)
     {
         Address match = Match;
         Address stun = Stun;

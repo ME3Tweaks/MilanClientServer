@@ -14,7 +14,7 @@ public ref struct QueryRequest
     public Version ContentVersion;
     public int GameIndex;
 
-    public void Read(JsonObjectReader reader)
+    public void Read(ref JsonObjectReader reader)
     {
         Version hostVersion = new();
         Version contentVersion = new();
@@ -39,7 +39,7 @@ public ref struct QueryRequest
         GameIndex = reader.GetInt("game");
     }
 
-    public readonly void Write(JsonObjectWriter writer)
+    public readonly void Write(ref JsonObjectWriter writer)
     {
         Version hostVersion = HostVersion;
         Version contentVersion = ContentVersion;

@@ -23,18 +23,6 @@ public struct FrameHeader
     /// </summary>
     public const uint NET_LENGTH_MAX = 16777215;
 
-    // TODO: Move `MAX_COMPONENT_COUNT` and `MAX_COMMAND_COUNT` out to `HandlerTable` or whatever.
-    //   These restrictions make sense but not at protocol level.
-
-    /// <summary>
-    /// Maximum allowed number of components registered.
-    /// </summary>
-    public const byte MAX_COMPONENT_COUNT = 1 << 6;
-    /// <summary>
-    /// Maximum allowed number of commands registered per component.
-    /// </summary>
-    public const byte MAX_COMMAND_COUNT = 1 << 6;
-
     /// <summary>
     /// Index of the component (i.e. group of commands).
     /// </summary>
@@ -57,6 +45,11 @@ public struct FrameHeader
     /// Serialized as a big-endian 32-bit unsigned integer.
     /// </summary>
     public uint Index;
+
+    /// <summary>
+    /// Shortcut to check if this frame has the <see cref="EFrameFlags.Notification"/> flag.
+    /// </summary>
+    public readonly bool IsNotification => Flags.HasFlag(EFrameFlags.Notification);
 
     /// <summary>
     /// Assigns frame length, checking for overflow.

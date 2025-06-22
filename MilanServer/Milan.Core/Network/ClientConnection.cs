@@ -20,8 +20,10 @@ public enum EServerMessage
 /// <summary>
 /// Connection to a client.
 /// </summary>
-public class ClientConnection
+public class ClientConnection : ISendingConnection
 {
+    readonly IHandlerRegistry _handlerRegistry;
+
     readonly TcpClient _client;
     readonly Stream _networkStream;
     readonly CancellationTokenSource _cancelTokenSource;
@@ -51,18 +53,14 @@ public class ClientConnection
 #endif
 
 
-    /// <summary>
-    /// Tries to retrieve the client's address.
-    /// </summary>
     public IPEndPoint? EndPoint => _client.Client.RemoteEndPoint as IPEndPoint;
-    /// <summary>
-    /// Checks if this connection is using TLS encryption.
-    /// </summary>
     public bool IsSecure => _networkStream is SslStream;
 
 
-    public ClientConnection(TcpClient client, Stream stream, CancellationTokenSource source)
+    public ClientConnection(IHandlerRegistry registry, TcpClient client, Stream stream, CancellationTokenSource source)
     {
+        _handlerRegistry = registry;
+
         _client = client;
         _networkStream = stream;
         _cancelTokenSource = source;
@@ -87,12 +85,28 @@ public class ClientConnection
             FrameHeader frameHeader = new();
             await frameHeader.ReadAsync(_networkStream, _frameHeaderBuffer.AsMemory(), cancelToken);
 
+            if (frameHeader.Index != _lastFrameIndex)
+                throw new InvalidOperationException("frame index mismatch");
+
             _frameBodyBuffer.ResizeNoCopy((int)frameHeader.Length);
             await _networkStream.ReadExactlyAsync(_frameBodyBuffer.AsMemory(), cancelToken);
 
-            Interlocked.Increment(ref _lastFrameIndex);
+            HandlerIndex handlerIndex = new(frameHeader.Component, frameHeader.Command);
 
-            // TODO: Handle request or notification based on `frameHeader`.
+            if (frameHeader.IsNotification)
+            {
+                NotificationHandlerDelegate handler = _handlerRegistry.GetNotificationHandler(handlerIndex)
+                    ?? throw new InvalidOperationException("invalid handler index");
+                await handler(new NotificationContext(this, _frameBodyBuffer.AsMemory()), cancelToken);
+            }
+            else
+            {
+                RequestHandlerDelegate handler = _handlerRegistry.GetRequestHandler(handlerIndex)
+                    ?? throw new InvalidOperationException("invalid handler index");
+                await handler(new RequestContext(this, frameHeader.Index, _frameBodyBuffer.AsMemory()), cancelToken);
+
+                Interlocked.Increment(ref _lastFrameIndex);
+            }
         }
 
         _networkStream.Close();
@@ -114,9 +128,6 @@ public class ClientConnection
         }
     }
 
-    /// <summary>
-    /// Signals to close the connection asynchronously.
-    /// </summary>
     public async Task CloseAsync()
     {
         await _cancelTokenSource.CancelAsync();
@@ -136,9 +147,6 @@ public class ClientConnection
         return header;
     }
 
-    public async Task SendBytesAsync(byte component, byte command, ReadOnlyMemory<byte> body)
-        => await SendBytesAsync(component, command, EServerMessage.Default, body);
-
     public async Task SendBytesAsync(byte component, byte command, EServerMessage msg, ReadOnlyMemory<byte> body)
     {
         FrameHeader frameHeader = MakeFrameHeader(component, command, msg is EServerMessage.Notification);
@@ -155,9 +163,6 @@ public class ClientConnection
             _outputSemaphore.Release();
         }
     }
-
-    public async Task SendJsonAsync(byte component, byte command, RefSingleAction<JsonObjectWriter> callback)
-        => await SendJsonAsync(component, command, EServerMessage.Default, callback);
 
     public async Task SendJsonAsync(byte component, byte command, EServerMessage msg, RefSingleAction<JsonObjectWriter> callback)
     {
