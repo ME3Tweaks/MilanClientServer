@@ -164,6 +164,21 @@ public class ClientConnection : ISendingConnection
         }
     }
 
+    public async Task SendEmptyAsync(byte component, byte command, EServerMessage msg)
+    {
+        FrameHeader frameHeader = MakeFrameHeader(component, command, msg is EServerMessage.Notification);
+
+        try
+        {
+            await _outputSemaphore.WaitAsync(_cancelTokenSource.Token);
+            await frameHeader.WriteAsync(_networkStream, _outputHeaderBuffer, _cancelTokenSource.Token);
+        }
+        finally
+        {
+            _outputSemaphore.Release();
+        }
+    }
+
     public async Task SendJsonAsync(byte component, byte command, EServerMessage msg, RefSingleAction<JsonObjectWriter> callback)
     {
         FrameHeader frameHeader = MakeFrameHeader(component, command, msg is EServerMessage.Notification);
@@ -171,8 +186,8 @@ public class ClientConnection : ISendingConnection
         try
         {
             await _outputSemaphore.WaitAsync(_cancelTokenSource.Token);
-
-            Debug.Assert(_outputBodyStream.Position == 0);
+            
+            _outputBodyStream.Seek(0, SeekOrigin.Begin);
             _outputBodyStream.SetLength(0);
 
             JsonPayloadWriter writer = new(_outputBodyStream, PRETTY_FORMAT_JSON);
@@ -180,7 +195,32 @@ public class ClientConnection : ISendingConnection
             writer.SetRootWith(callback);
             frameHeader.SetLength(_outputBodyStream.Length);
 
-            _outputBodyStream.Position = 0;
+            _outputBodyStream.Seek(0, SeekOrigin.Begin);
+
+            await frameHeader.WriteAsync(_networkStream, _outputHeaderBuffer, _cancelTokenSource.Token);
+            await _outputBodyStream.CopyToAsync(_networkStream, _cancelTokenSource.Token);
+        }
+        finally
+        {
+            _outputSemaphore.Release();
+        }
+    }
+
+    public async Task SendStreamAsync(byte component, byte command, EServerMessage msg, Action<Stream> callback)
+    {
+        FrameHeader frameHeader = MakeFrameHeader(component, command, msg is EServerMessage.Notification);
+
+        try
+        {
+            await _outputSemaphore.WaitAsync(_cancelTokenSource.Token);
+
+            _outputBodyStream.Seek(0, SeekOrigin.Begin);
+            _outputBodyStream.SetLength(0);
+
+            callback(_outputBodyStream);
+            frameHeader.SetLength(_outputBodyStream.Length);
+
+            _outputBodyStream.Seek(0, SeekOrigin.Begin);
 
             await frameHeader.WriteAsync(_networkStream, _outputHeaderBuffer, _cancelTokenSource.Token);
             await _outputBodyStream.CopyToAsync(_networkStream, _cancelTokenSource.Token);

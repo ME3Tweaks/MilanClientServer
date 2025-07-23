@@ -3,7 +3,7 @@ namespace Milan.Core.Network;
 /// <summary>
 /// An <see cref="IHandlerRegistry"/> implementation which stores handlers in a small table.
 /// </summary>
-public class TableHandlerRegistry() : IHandlerRegistry
+public sealed class TableHandlerRegistry : IHandlerRegistry
 {
     /// <summary>
     /// Maximum allowed number of components registered.
@@ -50,7 +50,11 @@ public class TableHandlerRegistry() : IHandlerRegistry
 
     #endregion
 
-    #region Handler registration.
+    #region IHandlerRegistry interface.
+
+    public NotificationHandlerDelegate? GetNotificationHandler(HandlerIndex index) => GetHandlerTriplet(index)?.Notification;
+    public RequestHandlerDelegate? GetRequestHandler(HandlerIndex index) => GetHandlerTriplet(index)?.Request;
+    public ResponseHandlerDelegate? GetResponseHandler(HandlerIndex index) => GetHandlerTriplet(index)?.Response;
 
     public void SetNotificationHandler(HandlerIndex index, NotificationHandlerDelegate handler)
         => UpdateHandlerTriplet(index, t => t with { Notification = handler });
@@ -58,14 +62,6 @@ public class TableHandlerRegistry() : IHandlerRegistry
         => UpdateHandlerTriplet(index, t => t with { Request = handler });
     public void SetResponseHandler(HandlerIndex index, ResponseHandlerDelegate handler)
         => UpdateHandlerTriplet(index, t => t with { Response = handler });
-
-    #endregion
-
-    #region IHandlerRegistry interface.
-
-    public NotificationHandlerDelegate? GetNotificationHandler(HandlerIndex index) => GetHandlerTriplet(index)?.Notification;
-    public RequestHandlerDelegate? GetRequestHandler(HandlerIndex index) => GetHandlerTriplet(index)?.Request;
-    public ResponseHandlerDelegate? GetResponseHandler(HandlerIndex index) => GetHandlerTriplet(index)?.Response;
 
     #endregion
 }

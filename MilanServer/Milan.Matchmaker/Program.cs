@@ -1,2 +1,5 @@
-﻿// See https://aka.ms/new-console-template for more information
-Console.WriteLine("Hello, World!");
+using Milan.Core.Components;
+using Milan.Core.Network;
+
+TableHandlerRegistry registry = new();
+Redirector.Register(registry);

@@ -32,4 +32,32 @@ public interface IHandlerRegistry
     /// <param name="index">Component and command indices.</param>
     /// <returns>A response handler delegate if found, and <c>null</c> otherwise.</returns>
     public ResponseHandlerDelegate? GetResponseHandler(HandlerIndex index);
+
+    /// <summary>
+    /// Assigns a notification handler to the given <see cref="HandlerIndex"/>.
+    /// </summary>
+    /// <param name="index">Component and command indices.</param>
+    /// <param name="handler">Notification handler.</param>
+    public void SetNotificationHandler(HandlerIndex index, NotificationHandlerDelegate handler);
+
+    /// <summary>
+    /// Assigns a request handler to the given <see cref="HandlerIndex"/>.
+    /// </summary>
+    /// <param name="index">Component and command indices.</param>
+    /// <param name="handler">Request handler.</param>
+    public void SetRequestHandler(HandlerIndex index, RequestHandlerDelegate handler);
+
+    /// <summary>
+    /// Assigns a response handler to the given <see cref="HandlerIndex"/>.
+    /// </summary>
+    /// <param name="index">Component and command indices.</param>
+    /// <param name="handler">Response handler.</param>
+    public void SetResponseHandler(HandlerIndex index, ResponseHandlerDelegate handler);
+
+    public void SetNotificationHandler(byte component, byte command, NotificationHandlerDelegate handler)
+        => SetNotificationHandler(new(component, command), handler);
+    public void SetRequestHandler(byte component, byte command, RequestHandlerDelegate handler)
+        => SetRequestHandler(new(component, command), handler);
+    public void SetResponseHandler(byte component, byte command, ResponseHandlerDelegate handler)
+        => SetResponseHandler(new(component, command), handler);
 }
