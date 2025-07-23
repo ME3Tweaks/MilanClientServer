@@ -1,5 +1,8 @@
 namespace Milan.Core.Network;
 
+/// <summary>
+/// An <see cref="IHandlerRegistry"/> implementation which stores handlers in a small table.
+/// </summary>
 public class TableHandlerRegistry() : IHandlerRegistry
 {
     /// <summary>
@@ -11,9 +14,18 @@ public class TableHandlerRegistry() : IHandlerRegistry
     /// </summary>
     public const byte MAX_COMMAND_COUNT = 1 << 6;
 
-    readonly PolymorphicHandler?[] _handlers = new PolymorphicHandler?[MAX_COMPONENT_COUNT * MAX_COMMAND_COUNT];
+    #region Handler storage.
 
-    PolymorphicHandler? GetPolymorphic(HandlerIndex index)
+    record struct HandlerTriplet(NotificationHandlerDelegate? Notification, RequestHandlerDelegate? Request, ResponseHandlerDelegate? Response);
+    readonly HandlerTriplet[] _handlers = new HandlerTriplet[MAX_COMPONENT_COUNT * MAX_COMMAND_COUNT];
+
+    /// <summary>
+    /// Internal implementation for <see cref="GetNotificationHandler(HandlerIndex)"/>,
+    /// <see cref="GetRequestHandler(HandlerIndex)"/>, and <see cref="GetResponseHandler(HandlerIndex)"/>.
+    /// </summary>
+    /// <param name="index">Component and command indices.</param>
+    /// <returns>Handler storage, or <c>null</c> if <paramref name="index"/> is out of bounds.</returns>
+    HandlerTriplet? GetHandlerTriplet(HandlerIndex index)
     {
 #if DEBUG
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index.Component, MAX_COMPONENT_COUNT, nameof(index));
@@ -26,16 +38,34 @@ public class TableHandlerRegistry() : IHandlerRegistry
         return _handlers[linearIndex];
     }
 
-    public NotificationHandlerDelegate? GetNotificationHandler(HandlerIndex index)
-        => (GetPolymorphic(index) as NotificationPolymorphicHandler)?.Delegate;
-    public RequestHandlerDelegate? GetRequestHandler(HandlerIndex index)
-        => (GetPolymorphic(index) as RequestPolymorphicHandler)?.Delegate;
-    public ResponseHandlerDelegate? GetResponseHandler(HandlerIndex index)
-        => (GetPolymorphic(index) as ResponsePolymorphicHandler)?.Delegate;
+    void UpdateHandlerTriplet(HandlerIndex index, Func<HandlerTriplet, HandlerTriplet> mutator)
+    {
+        // Index OOB in server initialization should always be fatal.
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index.Component, MAX_COMPONENT_COUNT, nameof(index));
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index.Command, MAX_COMMAND_COUNT, nameof(index));
+
+        int linearIndex = index.Component * MAX_COMMAND_COUNT + index.Command;
+        _handlers[linearIndex] = mutator(_handlers[linearIndex]);
+    }
+
+    #endregion
+
+    #region Handler registration.
+
+    public void SetNotificationHandler(HandlerIndex index, NotificationHandlerDelegate handler)
+        => UpdateHandlerTriplet(index, t => t with { Notification = handler });
+    public void SetRequestHandler(HandlerIndex index, RequestHandlerDelegate handler)
+        => UpdateHandlerTriplet(index, t => t with { Request = handler });
+    public void SetResponseHandler(HandlerIndex index, ResponseHandlerDelegate handler)
+        => UpdateHandlerTriplet(index, t => t with { Response = handler });
+
+    #endregion
+
+    #region IHandlerRegistry interface.
+
+    public NotificationHandlerDelegate? GetNotificationHandler(HandlerIndex index) => GetHandlerTriplet(index)?.Notification;
+    public RequestHandlerDelegate? GetRequestHandler(HandlerIndex index) => GetHandlerTriplet(index)?.Request;
+    public ResponseHandlerDelegate? GetResponseHandler(HandlerIndex index) => GetHandlerTriplet(index)?.Response;
+
+    #endregion
 }
-
-internal abstract record PolymorphicHandler;
-
-internal sealed record NotificationPolymorphicHandler(NotificationHandlerDelegate Delegate) : PolymorphicHandler;
-internal sealed record RequestPolymorphicHandler(RequestHandlerDelegate Delegate) : PolymorphicHandler;
-internal sealed record ResponsePolymorphicHandler(ResponseHandlerDelegate Delegate) : PolymorphicHandler;
