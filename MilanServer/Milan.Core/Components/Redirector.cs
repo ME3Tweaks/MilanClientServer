@@ -5,12 +5,12 @@ using Version = Milan.Core.Messages.Version;
 
 namespace Milan.Core.Components;
 
-public static class Redirector
+public static partial class Redirector
 {
     public const byte COMPONENT = 1;
 
-    public const byte COMMAND_QUERY = 4;
-    public const byte COMMAND_HEARTBEAT = 5;
+    public const byte COMMAND_QUERY = 1;
+    public const byte COMMAND_STATUS = 2;
 
     public static void Register(IHandlerRegistry registry)
     {
@@ -28,21 +28,21 @@ public static class Redirector
                 return;
             }
 
-            // TODO: Pull other components' address from config.
+            // TODO: Pull other components' addresses from config.
             QueryResponse response = new()
             {
-                Match = new(0, 0),
-                Stun = new(0, 0),
-                Turn = new(0, 0),
+                Match = new(Ip: 0, Port: 0),
+                Stun = new(Ip: 0, Port: 0),
+                Turn = new(Ip: 0, Port: 0),
             };
 
             await ctx.Connection.SendJsonAsync(COMPONENT, COMMAND_QUERY, response.Write);
         });
 
         // Used to tell if the redirector is still alive.
-        registry.SetRequestHandler(COMPONENT, COMMAND_HEARTBEAT, static async (ctx, token) =>
+        registry.SetRequestHandler(COMPONENT, COMMAND_STATUS, static async (ctx, token) =>
         {
-            await ctx.Connection.SendEmptyAsync(COMPONENT, COMMAND_HEARTBEAT);
+            await ctx.Connection.SendEmptyAsync(COMPONENT, COMMAND_STATUS);
         });
     }
 }

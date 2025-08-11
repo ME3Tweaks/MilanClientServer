@@ -19,12 +19,12 @@ public delegate Task ResponseHandlerDelegate(ResponseContext context, Cancellati
 /// <summary>
 /// Message-handling context provided to <see cref="NotificationHandlerDelegate"/>.
 /// </summary>
-public readonly struct NotificationContext(IConnection connection, ReadOnlyMemory<byte> body)
+public readonly struct NotificationContext(ISendingConnection connection, ReadOnlyMemory<byte> body)
 {
     /// <summary>
     /// Connection which received this notification.
     /// </summary>
-    public readonly IConnection Connection => connection;
+    public readonly ISendingConnection Connection => connection;
     /// <summary>
     /// Notification body contents.
     /// </summary>
@@ -83,6 +83,5 @@ public readonly struct ResponseContext(IConnection connection, uint frameIndex, 
     /// <summary>
     /// Local JSON reader over the response's contents.
     /// </summary>
-    /// <remarks>If you want to <em>write</em> JSON payloads, see <see cref="ISendingConnection"/> methods.</remarks>
     public readonly JsonPayloadReader JsonReader => new(body.Span);
 }

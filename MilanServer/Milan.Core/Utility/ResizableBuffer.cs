@@ -21,4 +21,10 @@ public struct ResizableBuffer(int len = 0)
 
     public readonly Memory<byte> AsMemory() => _array.AsMemory(0, _length);
     public readonly Span<byte> AsSpan() => _array.AsSpan(0, _length);
+
+    public static implicit operator Memory<byte>(ResizableBuffer buffer) => buffer.AsMemory();
+    public static implicit operator Span<byte>(ResizableBuffer buffer) => buffer.AsSpan();
+
+    public static implicit operator ReadOnlyMemory<byte>(ResizableBuffer buffer) => buffer.AsMemory();
+    public static implicit operator ReadOnlySpan<byte>(ResizableBuffer buffer) => buffer.AsSpan();
 }
