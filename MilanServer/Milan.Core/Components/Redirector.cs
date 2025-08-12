@@ -1,48 +1,57 @@
 using Milan.Core.Messages.Redirector;
 using Milan.Core.Network;
+using Milan.Generators;
 
 using Version = Milan.Core.Messages.Version;
 
 namespace Milan.Core.Components;
 
-public static partial class Redirector
-{
-    public const byte COMPONENT = 1;
 
+/// <summary>
+/// Redirector component handles the initial communication from client to server,
+/// allowing or rejecting the client's admitted version, and sending relevant addresses
+/// for the actual game servers.
+/// </summary>
+[Component(Id = 1)]
+public partial class RedirectorComponent : IComponent
+{
     public const byte COMMAND_QUERY = 1;
     public const byte COMMAND_STATUS = 2;
 
-    public static void Register(IHandlerRegistry registry)
+    /// <summary>
+    /// Checks client's version and shares other server components' information.
+    /// </summary>
+    [RequestHandler(Id = COMMAND_QUERY)]
+    public async Task HandleQueryRequest(RequestContext ctx, CancellationToken token)
     {
-        // Checks client's version and shares other server components' information.
-        registry.SetRequestHandler(COMPONENT, COMMAND_QUERY, static async (ctx, token) =>
+        QueryRequest request = new();
+        ctx.JsonReader.GetRootWith(request.Read);
+
+        // TODO: Pull compatible versions from config.
+        if (request.HostVersion != new Version(1, 2, 3))
         {
-            QueryRequest request = new();
-            ctx.JsonReader.GetRootWith(request.Read);
+            // TODO: Log version mismatch. (as warning?)
+            await ctx.Connection.CloseAsync();
+            return;
+        }
 
-            // TODO: Pull compatible versions from config.
-            if (request.HostVersion != new Version(1, 2, 3))
-            {
-                // TODO: Log version mismatch. (as warning?)
-                await ctx.Connection.CloseAsync();
-                return;
-            }
-
-            // TODO: Pull other components' addresses from config.
-            QueryResponse response = new()
-            {
-                Match = new(Ip: 0, Port: 0),
-                Stun = new(Ip: 0, Port: 0),
-                Turn = new(Ip: 0, Port: 0),
-            };
-
-            await ctx.Connection.SendJsonAsync(COMPONENT, COMMAND_QUERY, response.Write);
-        });
-
-        // Used to tell if the redirector is still alive.
-        registry.SetRequestHandler(COMPONENT, COMMAND_STATUS, static async (ctx, token) =>
+        // TODO: Pull other components' addresses from config.
+        QueryResponse response = new()
         {
-            await ctx.Connection.SendEmptyAsync(COMPONENT, COMMAND_STATUS);
-        });
+            Match = new(Ip: 0, Port: 0),
+            Stun = new(Ip: 0, Port: 0),
+            Turn = new(Ip: 0, Port: 0),
+        };
+
+        await ctx.Connection.SendJsonAsync(COMPONENT, COMMAND_QUERY, response.Write);
+    }
+
+    /// <summary>
+    /// Used to tell if the redirector is still alive.
+    /// </summary>
+    [RequestHandler(Id = COMMAND_STATUS)]
+    public async Task HandleStatusRequest(RequestContext ctx, CancellationToken token)
+    {
+        await ctx.Connection.SendEmptyAsync(COMPONENT, COMMAND_STATUS);
     }
 }

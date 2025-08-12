@@ -5,7 +5,11 @@ namespace Milan.Core.Network;
 /// </summary>
 /// <param name="Component">Index of a server component.</param>
 /// <param name="Command">Index of a command within the <c>Component</c>.</param>
-public readonly record struct HandlerIndex(byte Component, byte Command);
+public readonly record struct HandlerIndex(byte Component, byte Command)
+{
+    public static implicit operator HandlerIndex((byte, byte) pair)
+        => new(pair.Item1, pair.Item2);
+}
 
 /// <summary>
 /// Interface for resolving a message handler.
@@ -53,11 +57,4 @@ public interface IHandlerRegistry
     /// <param name="index">Component and command indices.</param>
     /// <param name="handler">Response handler.</param>
     public void SetResponseHandler(HandlerIndex index, ResponseHandlerDelegate handler);
-
-    public void SetNotificationHandler(byte component, byte command, NotificationHandlerDelegate handler)
-        => SetNotificationHandler(new(component, command), handler);
-    public void SetRequestHandler(byte component, byte command, RequestHandlerDelegate handler)
-        => SetRequestHandler(new(component, command), handler);
-    public void SetResponseHandler(byte component, byte command, ResponseHandlerDelegate handler)
-        => SetResponseHandler(new(component, command), handler);
 }

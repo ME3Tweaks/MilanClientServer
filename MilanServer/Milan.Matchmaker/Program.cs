@@ -2,4 +2,5 @@ using Milan.Core.Components;
 using Milan.Core.Network;
 
 TableHandlerRegistry registry = new();
-Redirector.Register(registry);
+new RedirectorComponent().Register(registry);
+new HeartbeatComponent().Register(registry);

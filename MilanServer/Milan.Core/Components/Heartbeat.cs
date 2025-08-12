@@ -1,25 +1,28 @@
 using Milan.Core.Messages.Heartbeat;
 using Milan.Core.Network;
+using Milan.Generators;
 
 namespace Milan.Core.Components;
 
-public static class Heartbeat
-{
-    public const byte COMPONENT = 2;
 
+/// <summary>
+/// Heartbeat component allows client to communicate to the server that it's still connected.
+/// Communication from server to client is handled using the <see cref="ClientConnection"/> tick mechanism.
+/// </summary>
+[Component(Id = 2)]
+public partial class HeartbeatComponent : IComponent
+{
     public const byte COMMAND_CLIENT_ALIVE = 1;
     public const byte COMMAND_SERVER_ALIVE = 2;
 
-    public static void Register(IHandlerRegistry registry)
+    [NotificationHandler(Id = COMMAND_CLIENT_ALIVE)]
+    public async Task HandleClientAliveNotification(NotificationContext ctx, CancellationToken token)
     {
-        registry.SetNotificationHandler(COMPONENT, COMMAND_CLIENT_ALIVE, static async (ctx, token) =>
-        {
-            ClientAliveNotification clientNotification = new();
-            ctx.JsonReader.GetRootWith(clientNotification.Read);
+        ClientAliveNotification clientNotification = new();
+        ctx.JsonReader.GetRootWith(clientNotification.Read);
 
-            // TODO: Update context connection's client-side heartbeat timer.
+        // TODO: Update context connection's client-side heartbeat timer.
 
-            await Task.CompletedTask;
-        });
+        await Task.CompletedTask;
     }
 }
