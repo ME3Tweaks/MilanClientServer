@@ -118,11 +118,11 @@ public partial class {component.Class}
 {{
     public const byte COMPONENT = {component.Id};
 
-    public byte Id => {component.Id};
-    public string Name => ""{component.Name}"";
+    public override byte Id => {component.Id};
+    public override string Name => ""{component.Name}"";
 ");
             source.Append($@"
-    public void Register(Milan.Core.Network.IHandlerRegistry registry)
+    public override void Register(Milan.Core.Network.IHandlerRegistry registry)
     {{
 ");
             foreach (var (name, id) in notificationHandlers)
@@ -136,7 +136,7 @@ public partial class {component.Class}
 ");
 
             source.Append($@"
-    public IEnumerable<Milan.Core.Network.NotificationHandlerDelegate> NotificationHandlers
+    public override IEnumerable<Milan.Core.Network.NotificationHandlerDelegate> NotificationHandlers
     {{
         get
         {{
@@ -149,7 +149,7 @@ public partial class {component.Class}
 ");
 
             source.Append($@"
-    public IEnumerable<Milan.Core.Network.RequestHandlerDelegate> RequestHandlers
+    public override IEnumerable<Milan.Core.Network.RequestHandlerDelegate> RequestHandlers
     {{
         get
         {{
@@ -162,7 +162,7 @@ public partial class {component.Class}
 ");
 
             source.Append($@"
-    public IEnumerable<Milan.Core.Network.ResponseHandlerDelegate> ResponseHandlers
+    public override IEnumerable<Milan.Core.Network.ResponseHandlerDelegate> ResponseHandlers
     {{
         get
         {{

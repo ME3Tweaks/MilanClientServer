@@ -10,7 +10,8 @@ namespace Milan.Core.Components;
 /// Communication from server to client is handled using the <see cref="ClientConnection"/> tick mechanism.
 /// </summary>
 [Component(Id = 2)]
-public partial class HeartbeatComponent : IComponent
+public partial class HeartbeatComponent(IServiceProvider serviceProvider)
+    : BaseComponent<HeartbeatComponent>(serviceProvider)
 {
     public const byte COMMAND_CLIENT_ALIVE = 1;
     public const byte COMMAND_SERVER_ALIVE = 2;

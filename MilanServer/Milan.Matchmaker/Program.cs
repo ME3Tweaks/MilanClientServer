@@ -1,6 +1,12 @@
-using Milan.Core.Components;
-using Milan.Core.Network;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Milan.Core.Server;
+using Milan.Matchmaker;
 
-TableHandlerRegistry registry = new();
-new RedirectorComponent().Register(registry);
-new HeartbeatComponent().Register(registry);
+HostApplicationBuilder hostAppBuilder = Host.CreateApplicationBuilder(args);
+hostAppBuilder.Services.AddHostedService<ServerWorker>();
+
+// Services:
+hostAppBuilder.Services.AddSingleton<IHandlerRegistrant, MatchmakerHandlerRegistrant>();
+
+hostAppBuilder.Build().Run();

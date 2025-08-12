@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Milan.Core.Messages.Redirector;
 using Milan.Core.Network;
 using Milan.Generators;
@@ -13,7 +14,8 @@ namespace Milan.Core.Components;
 /// for the actual game servers.
 /// </summary>
 [Component(Id = 1)]
-public partial class RedirectorComponent : IComponent
+public partial class RedirectorComponent(IServiceProvider serviceProvider)
+    : BaseComponent<RedirectorComponent>(serviceProvider)
 {
     public const byte COMMAND_QUERY = 1;
     public const byte COMMAND_STATUS = 2;
@@ -30,7 +32,9 @@ public partial class RedirectorComponent : IComponent
         // TODO: Pull compatible versions from config.
         if (request.HostVersion != new Version(1, 2, 3))
         {
-            // TODO: Log version mismatch. (as warning?)
+            Logger.LogWarning("unsupported client '{ip}' host version '{version}'",
+                ctx.Connection.EndPoint, request.HostVersion);
+
             await ctx.Connection.CloseAsync();
             return;
         }
