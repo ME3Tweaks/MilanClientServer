@@ -23,20 +23,20 @@ public sealed class ServerWorker(ILogger<ServerWorker> logger,
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("starting (Milan) ServerWorker");
+        logger.LogInformation("Starting (Milan) ServerWorker...");
 
         handlerRegistrant.RegisterHandlers(_handlerRegistry);
-        logger.LogInformation("registered handlers");
+        logger.LogInformation("Handlers registered.");
 
         if (_workerOptions.EnableSecureConnection)
         {
-            logger.LogError("secure connections not yet implemented");
+            logger.LogError("Secure connections not yet implemented.");
             throw new NotImplementedException();
         }
 
         TcpListener listener = new(IPAddress.Any, 23000);
         listener.Start();
-        logger.LogInformation("started listening at '{endpoint}'", listener.LocalEndpoint);
+        logger.LogInformation("Listening at '{endpoint}'.", listener.LocalEndpoint);
 
         _connections.EnsureCapacity(16);
         while (!stoppingToken.IsCancellationRequested)
@@ -58,7 +58,7 @@ public sealed class ServerWorker(ILogger<ServerWorker> logger,
                 }
                 else
                 {
-                    logger.LogWarning("connection to '{client}' terminated: too many connections ({count})",
+                    logger.LogWarning("Connection to '{client}' terminated: too many connections ({count}).",
                         client.Client.RemoteEndPoint, _connections.Count);
                     client.Close();
                 }

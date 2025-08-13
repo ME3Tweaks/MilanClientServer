@@ -51,7 +51,7 @@ public sealed partial class RedirectorComponent(IServiceProvider serviceProvider
 
         if (!CheckCompatibleHost(request.HostVersion) || !CheckCompatibleContent(request.ContentVersion))
         {
-            Logger.LogWarning("unsupported client '{ip}' host '{hostVersion}' or content '{contentVersion}' versions",
+            Logger.LogWarning("Unsupported client '{ip}' version(s): host '{hostVersion}' or content '{contentVersion}'.",
                 ctx.Connection.EndPoint, request.HostVersion, request.ContentVersion);
 
             await ctx.Connection.CloseAsync();

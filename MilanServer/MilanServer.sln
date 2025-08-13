@@ -3,13 +3,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36119.2
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Milan.Matchmaker", "Milan.Matchmaker\Milan.Matchmaker.csproj", "{5EC39563-A8BC-497D-83F2-3DD0494699E2}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Milan.Core", "Milan.Core\Milan.Core.csproj", "{36A49907-39F9-45B1-85D5-0311F0123A29}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Milan.Core.Tests", "Milan.Core.Tests\Milan.Core.Tests.csproj", "{C9E688CE-1DC4-4C8C-9D0B-1045B68DACCE}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Milan.Generators", "Milan.Generators\Milan.Generators.csproj", "{A3520BC3-BBEF-47C2-8BFF-BADA179B6499}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Milan.GameServer", "Milan.GameServer\Milan.GameServer.csproj", "{1F299B47-9320-484A-B36D-771D06285B22}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,10 +17,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{5EC39563-A8BC-497D-83F2-3DD0494699E2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{5EC39563-A8BC-497D-83F2-3DD0494699E2}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{5EC39563-A8BC-497D-83F2-3DD0494699E2}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{5EC39563-A8BC-497D-83F2-3DD0494699E2}.Release|Any CPU.Build.0 = Release|Any CPU
 		{36A49907-39F9-45B1-85D5-0311F0123A29}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{36A49907-39F9-45B1-85D5-0311F0123A29}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{36A49907-39F9-45B1-85D5-0311F0123A29}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -33,6 +29,10 @@ Global
 		{A3520BC3-BBEF-47C2-8BFF-BADA179B6499}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A3520BC3-BBEF-47C2-8BFF-BADA179B6499}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A3520BC3-BBEF-47C2-8BFF-BADA179B6499}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1F299B47-9320-484A-B36D-771D06285B22}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1F299B47-9320-484A-B36D-771D06285B22}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1F299B47-9320-484A-B36D-771D06285B22}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1F299B47-9320-484A-B36D-771D06285B22}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

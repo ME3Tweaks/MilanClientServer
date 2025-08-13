@@ -5,24 +5,23 @@ FROM mcr.microsoft.com/dotnet/runtime:9.0 AS base
 USER $APP_UID
 WORKDIR /app
 
-
 # This stage is used to build the service project
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["Milan.Matchmaker/Milan.Matchmaker.csproj", "Milan.Matchmaker/"]
-RUN dotnet restore "./Milan.Matchmaker/Milan.Matchmaker.csproj"
+COPY ["Milan.GameServer/Milan.GameServer.csproj", "Milan.GameServer/"]
+RUN dotnet restore "./Milan.GameServer/Milan.GameServer.csproj"
 COPY . .
-WORKDIR "/src/Milan.Matchmaker"
-RUN dotnet build "./Milan.Matchmaker.csproj" -c $BUILD_CONFIGURATION -o /app/build
+WORKDIR "/src/Milan.GameServer"
+RUN dotnet build "./Milan.GameServer.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 # This stage is used to publish the service project to be copied to the final stage
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./Milan.Matchmaker.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "./Milan.GameServer.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 # This stage is used in production or when running from VS in regular mode (Default when not using the Debug configuration)
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "Milan.Matchmaker.dll"]
+ENTRYPOINT ["dotnet", "Milan.GameServer.dll"]

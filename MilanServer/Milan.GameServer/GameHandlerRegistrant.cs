@@ -1,0 +1,32 @@
+using Microsoft.Extensions.Logging;
+using Milan.Core.Components;
+using Milan.Core.Network;
+using Milan.Core.Server;
+
+namespace Milan.GameServer;
+
+public sealed class GameHandlerRegistrant(ILogger<GameHandlerRegistrant> logger,
+    IServiceProvider serviceProvider, IServerRoleProvider roleProvider)
+        : IHandlerRegistrant
+{
+    public void RegisterHandlers(IHandlerRegistry registry)
+    {
+        logger.LogInformation("Registering handlers for role '{role}'.", roleProvider.Role);
+
+        if (roleProvider.Role == ServerRole.Redirector)
+            new RedirectorComponent(serviceProvider).Register(registry);
+
+        if (roleProvider.Role is ServerRole.Matchmaking)
+        {
+#if DEBUG
+            // Debug builds support redirector for DX.
+            new RedirectorComponent(serviceProvider).Register(registry);
+#endif
+
+            // TODO: Register all the fun components.
+        }
+
+        // Heartbeat is registered for all roles.
+        new HeartbeatComponent(serviceProvider).Register(registry);
+    }
+}
