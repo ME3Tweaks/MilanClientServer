@@ -20,14 +20,13 @@ public sealed class ServerWorker(ILogger<ServerWorker> logger,
 
     readonly Lock _connectionLock = new();
     readonly List<ClientConnection> _connections = [];
-    readonly CancellationTokenSource _connectionCancelTokenSource = new();
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("starting (Milan) ServerWorker");
 
         handlerRegistrant.RegisterHandlers(_handlerRegistry);
-        logger.LogDebug("registered handlers");
+        logger.LogInformation("registered handlers");
 
         if (_workerOptions.EnableSecureConnection)
         {
@@ -36,11 +35,13 @@ public sealed class ServerWorker(ILogger<ServerWorker> logger,
         }
 
         TcpListener listener = new(IPAddress.Any, 23000);
+        listener.Start();
+        logger.LogInformation("started listening at '{endpoint}'", listener.LocalEndpoint);
 
         _connections.EnsureCapacity(16);
-        while (!_connectionCancelTokenSource.IsCancellationRequested)
+        while (!stoppingToken.IsCancellationRequested)
         {
-            TcpClient client = await listener.AcceptTcpClientAsync(_connectionCancelTokenSource.Token);
+            TcpClient client = await listener.AcceptTcpClientAsync(stoppingToken);
 
             lock (_connectionLock)
             {
@@ -50,7 +51,8 @@ public sealed class ServerWorker(ILogger<ServerWorker> logger,
                     ClientConnection connection = new(
                         _handlerRegistry,
                         OnClientTick, CLIENT_TICK_INTERVAL,
-                        client, client.GetStream(), _connectionCancelTokenSource.Token);
+                        client, client.GetStream(), stoppingToken);
+
                     _connections.Add(connection);
                     _ = connection.ServeAsync().ContinueWith(_ => _connections.Remove(connection));
                 }
