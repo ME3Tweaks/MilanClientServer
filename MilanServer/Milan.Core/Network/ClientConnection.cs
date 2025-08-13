@@ -32,7 +32,13 @@ public class ClientConnection : ISendingConnection, IDisposable
     readonly IHandlerRegistry _handlerRegistry;
     readonly TcpClient _client;
     readonly Stream _networkStream;
-    readonly CancellationTokenSource _cancelTokenSource;
+    readonly CancellationToken _outerCancelToken;
+    readonly CancellationTokenSource _innerCancelSource;
+
+    /// <summary>
+    /// This is the <see cref="CancellationTokenSource"/> you want to use throughout the client!
+    /// </summary>
+    readonly CancellationTokenSource _cancelSource;
 
     readonly AsyncTickHandler _tickHandler;
     readonly long _tickSeconds;
@@ -63,12 +69,18 @@ public class ClientConnection : ISendingConnection, IDisposable
 
 
     public ClientConnection(IHandlerRegistry registry, AsyncTickHandler tick, long interval,
-        TcpClient client, Stream stream, CancellationTokenSource source)
+        TcpClient client, Stream stream, CancellationToken token)
     {
         _handlerRegistry = registry;
         _client = client;
         _networkStream = stream;
-        _cancelTokenSource = source;
+        _outerCancelToken = token;
+        _innerCancelSource = new CancellationTokenSource();
+
+        // We need to combine the outer worker-owned cancel token which can be used by the worker
+        // with the inner connection-owned cancel token which can be used by the connection, so that this
+        // connection can gracefully signal its own cancellation without bringing down other connections with it.
+        _cancelSource = CancellationTokenSource.CreateLinkedTokenSource(_outerCancelToken, _innerCancelSource.Token);
 
         _tickHandler = tick;
         _tickSeconds = interval;
@@ -86,18 +98,17 @@ public class ClientConnection : ISendingConnection, IDisposable
     /// </summary>
     public async Task ServeAsync()
     {
-        CancellationToken cancelToken = _cancelTokenSource.Token;
-        Task tickTask = TickAsync(cancelToken);
-        while (!cancelToken.IsCancellationRequested)
+        Task tickTask = TickAsync(_cancelSource.Token);
+        while (!_cancelSource.Token.IsCancellationRequested)
         {
             FrameHeader frameHeader = new();
-            await frameHeader.ReadAsync(_networkStream, _frameHeaderBuffer, cancelToken);
+            await frameHeader.ReadAsync(_networkStream, _frameHeaderBuffer, _cancelSource.Token);
 
             if (frameHeader.Index != _lastFrameIndex)
                 throw new InvalidOperationException("frame index mismatch");
 
             _frameBodyBuffer.ResizeNoCopy((int)frameHeader.Length);
-            await _networkStream.ReadExactlyAsync(_frameBodyBuffer, cancelToken);
+            await _networkStream.ReadExactlyAsync(_frameBodyBuffer, _cancelSource.Token);
 
             HandlerIndex handlerIndex = new(frameHeader.Component, frameHeader.Command);
 
@@ -105,13 +116,13 @@ public class ClientConnection : ISendingConnection, IDisposable
             {
                 NotificationHandlerDelegate handler = _handlerRegistry.GetNotificationHandler(handlerIndex)
                     ?? throw new InvalidOperationException("invalid handler index");
-                await handler(new NotificationContext(this, _frameBodyBuffer), cancelToken);
+                await handler(new NotificationContext(this, _frameBodyBuffer), _cancelSource.Token);
             }
             else
             {
                 RequestHandlerDelegate handler = _handlerRegistry.GetRequestHandler(handlerIndex)
                     ?? throw new InvalidOperationException("invalid handler index");
-                await handler(new RequestContext(this, frameHeader.Index, _frameBodyBuffer), cancelToken);
+                await handler(new RequestContext(this, frameHeader.Index, _frameBodyBuffer), _cancelSource.Token);
 
                 Interlocked.Increment(ref _lastFrameIndex);
             }
@@ -138,7 +149,7 @@ public class ClientConnection : ISendingConnection, IDisposable
     /// <param name="force">Whether to force connection closure at callsite.</param>
     public void Close(bool force = false)
     {
-        _cancelTokenSource.Cancel();
+        _innerCancelSource.Cancel();
 
         if (force)
         {
@@ -154,7 +165,7 @@ public class ClientConnection : ISendingConnection, IDisposable
 
     public async Task CloseAsync()
     {
-        await _cancelTokenSource.CancelAsync();
+        await _innerCancelSource.CancelAsync();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -178,9 +189,9 @@ public class ClientConnection : ISendingConnection, IDisposable
 
         try
         {
-            await _outputSemaphore.WaitAsync(_cancelTokenSource.Token);
-            await frameHeader.WriteAsync(_networkStream, _outputHeaderBuffer, _cancelTokenSource.Token);
-            await _networkStream.WriteAsync(body, _cancelTokenSource.Token);
+            await _outputSemaphore.WaitAsync(_cancelSource.Token);
+            await frameHeader.WriteAsync(_networkStream, _outputHeaderBuffer, _cancelSource.Token);
+            await _networkStream.WriteAsync(body, _cancelSource.Token);
         }
         finally
         {
@@ -194,8 +205,8 @@ public class ClientConnection : ISendingConnection, IDisposable
 
         try
         {
-            await _outputSemaphore.WaitAsync(_cancelTokenSource.Token);
-            await frameHeader.WriteAsync(_networkStream, _outputHeaderBuffer, _cancelTokenSource.Token);
+            await _outputSemaphore.WaitAsync(_cancelSource.Token);
+            await frameHeader.WriteAsync(_networkStream, _outputHeaderBuffer, _cancelSource.Token);
         }
         finally
         {
@@ -209,7 +220,7 @@ public class ClientConnection : ISendingConnection, IDisposable
 
         try
         {
-            await _outputSemaphore.WaitAsync(_cancelTokenSource.Token);
+            await _outputSemaphore.WaitAsync(_cancelSource.Token);
             
             _outputBodyStream.Seek(0, SeekOrigin.Begin);
             _outputBodyStream.SetLength(0);
@@ -221,8 +232,8 @@ public class ClientConnection : ISendingConnection, IDisposable
 
             _outputBodyStream.Seek(0, SeekOrigin.Begin);
 
-            await frameHeader.WriteAsync(_networkStream, _outputHeaderBuffer, _cancelTokenSource.Token);
-            await _outputBodyStream.CopyToAsync(_networkStream, _cancelTokenSource.Token);
+            await frameHeader.WriteAsync(_networkStream, _outputHeaderBuffer, _cancelSource.Token);
+            await _outputBodyStream.CopyToAsync(_networkStream, _cancelSource.Token);
         }
         finally
         {
@@ -236,7 +247,7 @@ public class ClientConnection : ISendingConnection, IDisposable
 
         try
         {
-            await _outputSemaphore.WaitAsync(_cancelTokenSource.Token);
+            await _outputSemaphore.WaitAsync(_cancelSource.Token);
 
             _outputBodyStream.Seek(0, SeekOrigin.Begin);
             _outputBodyStream.SetLength(0);
@@ -246,8 +257,8 @@ public class ClientConnection : ISendingConnection, IDisposable
 
             _outputBodyStream.Seek(0, SeekOrigin.Begin);
 
-            await frameHeader.WriteAsync(_networkStream, _outputHeaderBuffer, _cancelTokenSource.Token);
-            await _outputBodyStream.CopyToAsync(_networkStream, _cancelTokenSource.Token);
+            await frameHeader.WriteAsync(_networkStream, _outputHeaderBuffer, _cancelSource.Token);
+            await _outputBodyStream.CopyToAsync(_networkStream, _cancelSource.Token);
         }
         finally
         {
@@ -275,7 +286,8 @@ public class ClientConnection : ISendingConnection, IDisposable
             {
                 _client.Dispose();
                 _networkStream.Dispose();
-                _cancelTokenSource.Dispose();
+                _innerCancelSource.Dispose();
+                _cancelSource.Dispose();
                 _outputSemaphore.Dispose();
                 _outputBodyStream.Dispose();
             }

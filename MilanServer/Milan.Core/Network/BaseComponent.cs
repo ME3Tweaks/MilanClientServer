@@ -11,7 +11,7 @@ public abstract class BaseComponent<T>(IServiceProvider serviceProvider)
     /// <summary>
     /// Injected logger dependency.
     /// </summary>
-    protected ILogger<T> Logger { get; } = serviceProvider.GetService<ILogger<T>>()!;
+    protected ILogger<T> Logger { get; } = serviceProvider.GetRequiredService<ILogger<T>>();
 
 
     /// <summary>
