@@ -18,8 +18,8 @@ public sealed class ServerWorker(ILogger<ServerWorker> logger,
     readonly TableHandlerRegistry _handlerRegistry = new();
     readonly ServerWorkerOptions _workerOptions = workerOptions.Value;
 
-    readonly Lock _connectionLock = new();
-    readonly List<ClientConnection> _connections = [];
+    long _maxActiveConnections = 0;
+    long _activeConnections = 0;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -34,40 +34,48 @@ public sealed class ServerWorker(ILogger<ServerWorker> logger,
             throw new NotImplementedException();
         }
 
-        TcpListener listener = new(IPAddress.Any, 23000);
+        _maxActiveConnections = _workerOptions.MaxActiveConnections;
+
+        var address = IPAddress.Parse(_workerOptions.Ip);
+        using TcpListener listener = new(address, _workerOptions.Port);
+
         listener.Start();
         logger.LogInformation("Listening at '{endpoint}'.", listener.LocalEndpoint);
 
-        _connections.EnsureCapacity(16);
         while (!stoppingToken.IsCancellationRequested)
         {
             TcpClient client = await listener.AcceptTcpClientAsync(stoppingToken);
+            logger.LogDebug("Accepted connection to '{endpoint}'.", client.Client.RemoteEndPoint);
 
-            lock (_connectionLock)
+            if (_maxActiveConnections > 0 && Interlocked.Increment(ref _activeConnections) >= _maxActiveConnections)
             {
-                uint maxConnections = _workerOptions.MaxConnections;
-                if (maxConnections == 0 || maxConnections <= _connections.Count)
-                {
-                    ClientConnection connection = new(
-                        _handlerRegistry,
-                        OnClientTick, CLIENT_TICK_INTERVAL,
-                        client, client.GetStream(), stoppingToken);
+                logger.LogWarning("Terminating connection to '{endpoint}': too many clients ({connections})...",
+                    client.Client.RemoteEndPoint, _activeConnections);
 
-                    _connections.Add(connection);
-                    _ = connection.ServeAsync().ContinueWith(_ => _connections.Remove(connection));
-                }
-                else
-                {
-                    logger.LogWarning("Connection to '{client}' terminated: too many connections ({count}).",
-                        client.Client.RemoteEndPoint, _connections.Count);
-                    client.Close();
-                }
+                Interlocked.Decrement(ref _activeConnections);
+                client.Close();
+                continue;
+            }
+
+            ClientConnection connection = new(
+                _handlerRegistry,
+                ClientTickHandler, CLIENT_TICK_SEC,
+                client, client.GetStream(), stoppingToken);
+            _ = connection.ServeAsync().ContinueWith(onCloseConnection, stoppingToken);
+
+            void onCloseConnection(Task _)
+            {
+                logger.LogDebug("Closed connection to '{endpoint}'.", connection.EndPoint);
+                Interlocked.Decrement(ref _activeConnections);
             }
         }
+
+        listener.Stop();
+        logger.LogInformation("Listening loop stopped.");
     }
 
-    const long CLIENT_TICK_INTERVAL = 5;
-    async Task OnClientTick(ClientConnection connection, CancellationToken token)
+    const long CLIENT_TICK_SEC = 5;
+    async Task ClientTickHandler(ClientConnection connection, CancellationToken token)
     {
         await Task.CompletedTask;
     }

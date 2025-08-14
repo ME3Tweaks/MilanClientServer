@@ -1,9 +1,13 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Milan.Core.Messages;
 using Milan.Core.Messages.Redirector;
 using Milan.Core.Network;
+using Milan.Core.Options;
 using Milan.Generators;
-
+using System.Net;
+using System.Net.Sockets;
 using Version = Milan.Core.Messages.Version;
 
 namespace Milan.Core.Components;
@@ -15,16 +19,48 @@ namespace Milan.Core.Components;
 /// for the actual game servers.
 /// </summary>
 [Component(Id = 1)]
-public sealed partial class RedirectorComponent(IServiceProvider serviceProvider)
-    : BaseComponent<RedirectorComponent>(serviceProvider)
+public sealed partial class RedirectorComponent : BaseComponent<RedirectorComponent>
 {
     public const byte COMMAND_QUERY = 1;
     public const byte COMMAND_STATUS = 2;
 
-    // TODO: Pull other components' addresses from config.
     Address _addressMatchmaker;
-    Address _addressSTUN;
-    Address _addressTURN;
+    Address _addressStun;
+    Address _addressTurn;
+
+    public RedirectorComponent(IServiceProvider serviceProvider) : base(serviceProvider)
+    {
+        var options = serviceProvider.GetRequiredService<IOptions<RedirectorOptions>>().Value;
+
+        static Address? fromEndpoint(RedirectorOptionsAddress address)
+        {
+            if (string.IsNullOrWhiteSpace(address.Ip))
+                return null;
+
+            var addr = IPAddress.Parse(address.Ip);
+            if (addr.AddressFamily is not AddressFamily.InterNetwork)
+                throw new InvalidDataException($"unsupported ip address family");
+            var ip = BitConverter.ToUInt32(addr.GetAddressBytes());
+
+            return new(ip, address.Port);
+        }
+
+        try
+        {
+            _addressMatchmaker = fromEndpoint(options.Matchmaking) ?? new();
+            _addressStun = fromEndpoint(options.STUN) ?? new();
+            _addressTurn = fromEndpoint(options.TURN) ?? new();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError("Failed to parse one or more " +
+                "redirector addresses: {exception}.", ex.Message);
+        }
+
+        Logger.LogDebug("Matchmaker address is {address}.", _addressMatchmaker);
+        Logger.LogDebug("STUN address is {address}.", _addressStun);
+        Logger.LogDebug("TURN address is {address}.", _addressTurn);
+    }
 
     bool CheckCompatibleHost(Version host)
     {
@@ -61,8 +97,8 @@ public sealed partial class RedirectorComponent(IServiceProvider serviceProvider
         QueryResponse response = new()
         {
             Match = _addressMatchmaker,
-            Stun = _addressSTUN,
-            Turn = _addressTURN,
+            Stun = _addressStun,
+            Turn = _addressTurn,
         };
 
         await ctx.Connection.SendJsonAsync(COMPONENT, COMMAND_QUERY, response.Write);

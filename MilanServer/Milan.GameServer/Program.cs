@@ -49,6 +49,7 @@ appBuilder.Logging
 
 // Configuration options:
 appBuilder.Services.Configure<ServerWorkerOptions>(appBuilder.Configuration.GetSection("ServerWorker"));
+appBuilder.Services.Configure<RedirectorOptions>(appBuilder.Configuration.GetSection("Redirector"));
 
 // Server initialization and loop:
 appBuilder.Services.AddHostedService<ServerWorker>();

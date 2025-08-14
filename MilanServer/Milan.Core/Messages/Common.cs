@@ -7,6 +7,8 @@ namespace Milan.Core.Messages;
 /// </summary>
 public record struct Address(uint Ip, ushort Port)
 {
+    public Address() : this(0, 0) {}
+
     public void Read(ref JsonObjectReader reader)
     {
         Ip = (uint)reader.GetInt("ip");

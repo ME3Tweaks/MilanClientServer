@@ -130,6 +130,7 @@ public class ClientConnection : ISendingConnection, IDisposable
 
         await tickTask;
         await _networkStream.FlushAsync();
+
         _networkStream.Close();
         _client.Close();
     }
