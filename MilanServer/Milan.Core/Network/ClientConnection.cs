@@ -21,14 +21,6 @@ public enum EServerMessage
 /// </summary>
 public class ClientConnection : ISendingConnection, IDisposable
 {
-    /// <summary>
-    /// Type for a delegate to run on a connection "tick",
-    /// provided by the connection's owner at construction time.
-    /// </summary>
-    /// <param name="connection">Connection calling the handler.</param>
-    /// <param name="token">Cancellation token owned by <see cref="ServeAsync"/> loop.</param>
-    public delegate Task AsyncTickHandler(ClientConnection connection, CancellationToken token);
-
     readonly IHandlerRegistry _handlerRegistry;
     readonly TcpClient _client;
     readonly Stream _networkStream;
@@ -40,7 +32,7 @@ public class ClientConnection : ISendingConnection, IDisposable
     /// </summary>
     readonly CancellationTokenSource _cancelSource;
 
-    readonly AsyncTickHandler _tickHandler;
+    readonly AsyncTickHandler<ClientConnection> _tickHandler;
     readonly long _tickSeconds;
 
     readonly ResizableBuffer _frameHeaderBuffer;
@@ -67,8 +59,8 @@ public class ClientConnection : ISendingConnection, IDisposable
     public const bool PRETTY_FORMAT_JSON = false;
 #endif
 
-
-    public ClientConnection(IHandlerRegistry registry, AsyncTickHandler tick, long interval,
+    public ClientConnection(IHandlerRegistry registry,
+        AsyncTickHandler<ClientConnection> tick, long interval,
         TcpClient client, Stream stream, CancellationToken token)
     {
         _handlerRegistry = registry;

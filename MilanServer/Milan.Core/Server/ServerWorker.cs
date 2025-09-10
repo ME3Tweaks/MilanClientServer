@@ -11,8 +11,11 @@ namespace Milan.Core.Server;
 /// <summary>
 /// Sets up and executes the server loop.
 /// </summary>
-public sealed class ServerWorker(ILogger<ServerWorker> logger,
-    IHandlerRegistrant handlerRegistrant, IOptions<ServerWorkerOptions> workerOptions)
+public sealed class ServerWorker(
+    ILogger<ServerWorker> logger,
+    IHandlerRegistrant handlerRegistrant,
+    IOptions<ServerWorkerOptions> workerOptions,
+    IAsyncTickHandler<ClientConnection> tickHandler)
         : BackgroundService
 {
     readonly TableHandlerRegistry _handlerRegistry = new();
@@ -47,6 +50,9 @@ public sealed class ServerWorker(ILogger<ServerWorker> logger,
             TcpClient client = await listener.AcceptTcpClientAsync(stoppingToken);
             logger.LogDebug("Accepted connection to '{endpoint}'.", client.Client.RemoteEndPoint);
 
+            // Connection counter needs to be incremented and decremented atomically
+            // because normal connection closure decrements it in the continuation below.
+
             if (_maxActiveConnections > 0 && Interlocked.Increment(ref _activeConnections) >= _maxActiveConnections)
             {
                 logger.LogWarning("Terminating connection to '{endpoint}': too many clients ({connections})...",
@@ -59,7 +65,7 @@ public sealed class ServerWorker(ILogger<ServerWorker> logger,
 
             ClientConnection connection = new(
                 _handlerRegistry,
-                ClientTickHandler, CLIENT_TICK_SEC,
+                tickHandler.TickAsync, tickHandler.Interval,
                 client, client.GetStream(), stoppingToken);
             _ = connection.ServeAsync().ContinueWith(onCloseConnection, stoppingToken);
 
@@ -72,11 +78,5 @@ public sealed class ServerWorker(ILogger<ServerWorker> logger,
 
         listener.Stop();
         logger.LogInformation("Listening loop stopped.");
-    }
-
-    const long CLIENT_TICK_SEC = 5;
-    async Task ClientTickHandler(ClientConnection connection, CancellationToken token)
-    {
-        await Task.CompletedTask;
     }
 }

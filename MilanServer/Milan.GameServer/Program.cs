@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Milan.Core.Network;
 using Milan.Core.Options;
 using Milan.Core.Server;
 using Milan.GameServer;
@@ -56,6 +57,7 @@ appBuilder.Services.AddHostedService<ServerWorker>();
 
 // Dependent services:
 appBuilder.Services.AddSingleton<IHandlerRegistrant, GameHandlerRegistrant>();
+appBuilder.Services.AddSingleton<IAsyncTickHandler<ClientConnection>, ClientTickHandler>();
 appBuilder.Services.AddSingleton<IServerRoleProvider, GameServerRoleProvider>(_ => new(cliServerRole));
 
 appBuilder.Build().Run();
