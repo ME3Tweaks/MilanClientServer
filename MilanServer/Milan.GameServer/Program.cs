@@ -6,6 +6,8 @@ using Milan.Core.Network;
 using Milan.Core.Options;
 using Milan.Core.Server;
 using Milan.GameServer;
+using Serilog;
+using Serilog.Sinks.SystemConsole.Themes;
 
 
 var cliResult = Cli.ParseChecked(args);
@@ -39,14 +41,20 @@ builderSettings.Configuration.AddEnvironmentVariables(prefix: "MILAN");
 
 HostApplicationBuilder appBuilder = Host.CreateApplicationBuilder(builderSettings);
 
-appBuilder.Logging
-    .ClearProviders()
-    .AddSimpleConsole(options =>
-    {
-        options.IncludeScopes = true;
-        options.SingleLine = true;
-        options.TimestampFormat = "HH:mm:ss.fff ";
-    });
+appBuilder.Logging.ClearProviders();
+appBuilder.Services.AddSerilog((services, loggerConfiguraton) => loggerConfiguraton
+#if DEBUG
+    .MinimumLevel.Verbose()
+#else
+    .MinimumLevel.Information()
+#endif
+    .WriteTo.Console(
+        theme: SystemConsoleTheme.Literate,
+        outputTemplate: "[{Timestamp:HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .WriteTo.File(
+        path: "./Milan.GameServer-.log",
+        rollingInterval: RollingInterval.Day,
+        outputTemplate: "[{Timestamp:HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}"));
 
 // Configuration options:
 appBuilder.Services.Configure<ServerWorkerOptions>(appBuilder.Configuration.GetSection("ServerWorker"));
@@ -56,8 +64,9 @@ appBuilder.Services.Configure<RedirectorOptions>(appBuilder.Configuration.GetSec
 appBuilder.Services.AddHostedService<ServerWorker>();
 
 // Dependent services:
-appBuilder.Services.AddSingleton<IHandlerRegistrant, GameHandlerRegistrant>();
+// TODO: See this should be a server-local class possibly deriving from Milan.Network.ClientTickHandler.
 appBuilder.Services.AddSingleton<IAsyncTickHandler<ClientConnection>, ClientTickHandler>();
+appBuilder.Services.AddSingleton<IHandlerRegistrant, GameHandlerRegistrant>();
 appBuilder.Services.AddSingleton<IServerRoleProvider, GameServerRoleProvider>(_ => new(cliServerRole));
 
 appBuilder.Build().Run();

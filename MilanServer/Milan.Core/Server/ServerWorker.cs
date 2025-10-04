@@ -42,11 +42,13 @@ public sealed class ServerWorker(
         var address = IPAddress.Parse(_workerOptions.Ip);
         using TcpListener listener = new(address, _workerOptions.Port);
 
-        listener.Start();
         logger.LogInformation("Listening at '{endpoint}'.", listener.LocalEndpoint);
+        listener.Start();
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            // TODO: See if we need to handle OperationCanceledException here.
+
             TcpClient client = await listener.AcceptTcpClientAsync(stoppingToken);
             logger.LogDebug("Accepted connection to '{endpoint}'.", client.Client.RemoteEndPoint);
 
@@ -67,13 +69,12 @@ public sealed class ServerWorker(
                 _handlerRegistry,
                 tickHandler.TickAsync, tickHandler.Interval,
                 client, client.GetStream(), stoppingToken);
-            _ = connection.ServeAsync().ContinueWith(onCloseConnection, stoppingToken);
 
-            void onCloseConnection(Task _)
-            {
-                logger.LogDebug("Closed connection to '{endpoint}'.", connection.EndPoint);
-                Interlocked.Decrement(ref _activeConnections);
-            }
+            _ = connection.ServeAsync().ContinueWith(t =>
+                {
+                    logger.LogDebug("Closed connection to '{endpoint}'.", connection.EndPoint);
+                    Interlocked.Decrement(ref _activeConnections);
+                }, stoppingToken);
         }
 
         listener.Stop();
