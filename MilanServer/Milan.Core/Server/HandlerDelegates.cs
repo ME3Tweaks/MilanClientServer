@@ -1,6 +1,6 @@
 using Milan.Core.Payload;
 
-namespace Milan.Core.Network;
+namespace Milan.Core.Server;
 
 /// <summary>
 /// Signature for a notification handler.

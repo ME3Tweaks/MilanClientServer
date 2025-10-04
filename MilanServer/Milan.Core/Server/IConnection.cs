@@ -2,7 +2,7 @@ using Milan.Core.Payload;
 using Milan.Core.Utility;
 using System.Net;
 
-namespace Milan.Core.Network;
+namespace Milan.Core.Server;
 
 /// <summary>
 /// Common interface for a network connection.

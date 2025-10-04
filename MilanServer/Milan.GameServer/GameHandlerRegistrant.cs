@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Milan.Core.Components;
-using Milan.Core.Network;
 using Milan.Core.Server;
 
 namespace Milan.GameServer;

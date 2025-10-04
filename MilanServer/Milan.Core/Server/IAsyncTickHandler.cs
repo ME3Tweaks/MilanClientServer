@@ -1,4 +1,4 @@
-namespace Milan.Core.Network;
+namespace Milan.Core.Server;
 
 /// <summary>
 /// Type for a delegate to run on a connection "tick",

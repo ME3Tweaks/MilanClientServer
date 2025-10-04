@@ -1,5 +1,5 @@
 using Milan.Core.Messages.Heartbeat;
-using Milan.Core.Network;
+using Milan.Core.Server;
 using Milan.Generators;
 
 namespace Milan.Core.Components;

@@ -1,3 +1,4 @@
+using Milan.Core.Network;
 using Milan.Core.Payload;
 using Milan.Core.Utility;
 using System.Net;
@@ -5,7 +6,7 @@ using System.Net.Security;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 
-namespace Milan.Core.Network;
+namespace Milan.Core.Server;
 
 /// <summary>
 /// Sets whether a server-originating message is a notification.

@@ -1,3 +1,5 @@
+using Milan.Core.Server;
+
 namespace Milan.Core.Network;
 
 public sealed class ClientTickHandler : IAsyncTickHandler<ClientConnection>

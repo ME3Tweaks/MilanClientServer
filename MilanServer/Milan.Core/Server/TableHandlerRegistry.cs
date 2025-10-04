@@ -1,4 +1,4 @@
-namespace Milan.Core.Network;
+namespace Milan.Core.Server;
 
 /// <summary>
 /// An <see cref="IHandlerRegistry"/> implementation which stores handlers in a small table.

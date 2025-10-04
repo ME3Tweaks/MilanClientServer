@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Milan.Core.Network;
+namespace Milan.Core.Server;
 
 /// <summary>
 /// Base for all server component types.

@@ -1,4 +1,4 @@
-namespace Milan.Core.Network;
+namespace Milan.Core.Server;
 
 /// <summary>
 /// Unique identifier for a registered message handler.

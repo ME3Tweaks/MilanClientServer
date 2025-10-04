@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Milan.Core.Network;
 using Milan.Core.Options;
 using System.Net;
 using System.Net.Sockets;
