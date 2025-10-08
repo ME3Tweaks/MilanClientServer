@@ -15,7 +15,7 @@ public sealed class ServerTickWorker(
         : BackgroundService
 {
     /// <summary>
-    /// Default interval, in seconds, for server-side periodic tasks.
+    /// Default interval, in seconds, for periodic tasks.
     /// </summary>
     public const long TICK_INTERVAL_SEC = 5;
 
@@ -37,11 +37,18 @@ public sealed class ServerTickWorker(
     {
         logger.LogInformation("Starting ServerTickWorker...");
 
-        await TickEveryoneAsync(token);
-
-        using PeriodicTimer timer = new(TimeSpan.FromSeconds(TICK_INTERVAL_SEC));
-        while (await timer.WaitForNextTickAsync(token) && !token.IsCancellationRequested)
+        try
+        {
             await TickEveryoneAsync(token);
+
+            using PeriodicTimer timer = new(TimeSpan.FromSeconds(TICK_INTERVAL_SEC));
+            while (await timer.WaitForNextTickAsync(token) && !token.IsCancellationRequested)
+                await TickEveryoneAsync(token);
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogWarning("ServerTickWorker suffered an OperationCanceledException, terminating.");
+        }
 
         logger.LogInformation("Ticking loop stopped.");
     }

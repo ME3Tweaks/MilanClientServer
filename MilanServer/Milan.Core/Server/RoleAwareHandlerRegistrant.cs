@@ -1,15 +1,14 @@
 using Microsoft.Extensions.Logging;
 using Milan.Core.Components;
-using Milan.Core.Server;
 
-namespace Milan.GameServer;
+namespace Milan.Core.Server;
 
 /// <summary>
 /// Registers handlers based on the server's role,
 /// retrieved from the resolved <see cref="IServerRoleProvider"/>.
 /// </summary>
-public class GameHandlerRegistrant(
-    ILogger<GameHandlerRegistrant> logger,
+public class RoleAwareHandlerRegistrant(
+    ILogger<RoleAwareHandlerRegistrant> logger,
     IServiceProvider serviceProvider,
     IServerRoleProvider roleProvider)
         : IHandlerRegistrant

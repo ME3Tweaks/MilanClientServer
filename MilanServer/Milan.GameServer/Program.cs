@@ -74,7 +74,7 @@ appBuilder.Services.Configure<ServerWorkerOptions>(appBuilder.Configuration.GetS
 appBuilder.Services.Configure<RedirectorOptions>(appBuilder.Configuration.GetSection("Redirector"));
 
 // Dependent services:
-appBuilder.Services.AddSingleton<IHandlerRegistrant, GameHandlerRegistrant>();
+appBuilder.Services.AddSingleton<IHandlerRegistrant, RoleAwareHandlerRegistrant>();
 appBuilder.Services.AddSingleton<IHandlerRegistry, TableHandlerRegistry>();
 appBuilder.Services.AddSingleton<IServerRoleProvider>(_ => new StaticRoleProvider(cliServerRole));
 appBuilder.Services.AddSingleton<ChannelReader<ClientStateMessage>>(_ => clientStateChannel.Reader);

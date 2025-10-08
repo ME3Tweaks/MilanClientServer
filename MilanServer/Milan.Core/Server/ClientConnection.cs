@@ -148,9 +148,9 @@ public class ClientConnection : ISendingConnection, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogError("Client connection to '{address}' suffered an exception: {exception}", EndPoint, ex);
+            _logger.LogError("ClientConnection to '{address}' suffered an exception: {exception}", EndPoint, ex);
 #if DEBUG
-            _logger.LogWarning("Call stack of last exception on client connection to '{address}': {callstack}", EndPoint, ex.StackTrace);
+            _logger.LogWarning("Call stack of last exception on ClientConnection to '{address}': {callstack}", EndPoint, ex.StackTrace);
 #endif
         }
 

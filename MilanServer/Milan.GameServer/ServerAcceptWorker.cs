@@ -47,39 +47,44 @@ public sealed class ServerAcceptWorker(
         logger.LogInformation("Listening at '{endpoint}'.", listener.LocalEndpoint);
         listener.Start();
 
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            // TODO: See if we need to handle OperationCanceledException here.
-
-            TcpClient client = await listener.AcceptTcpClientAsync(stoppingToken);
-            logger.LogDebug("Accepted connection to '{endpoint}'.", client.Client.RemoteEndPoint);
-
-            // Connection counter needs to be incremented and decremented atomically
-            // because normal connection closure decrements it in the continuation below.
-
-            if (_maxActiveConnections > 0 && Interlocked.Increment(ref _activeConnections) >= _maxActiveConnections)
+            while (!stoppingToken.IsCancellationRequested)
             {
-                logger.LogWarning("Terminating connection to '{endpoint}': too many clients ({connections})...",
-                    client.Client.RemoteEndPoint, _activeConnections);
+                TcpClient client = await listener.AcceptTcpClientAsync(stoppingToken);
+                logger.LogDebug("Accepted connection to '{endpoint}'.", client.Client.RemoteEndPoint);
 
-                Interlocked.Decrement(ref _activeConnections);
-                client.Close();
-                continue;
-            }
+                // Connection counter needs to be incremented and decremented atomically
+                // because normal connection closure decrements it in the continuation below.
 
-            ClientConnection connection = new(
-                client,
-                client.GetStream(),
-                clientStateWriter,
-                clientLogger,
-                handlerRegistry,
-                stoppingToken);
+                if (_maxActiveConnections > 0 && Interlocked.Increment(ref _activeConnections) >= _maxActiveConnections)
+                {
+                    logger.LogWarning("Terminating connection to '{endpoint}': too many clients ({connections})...",
+                        client.Client.RemoteEndPoint, _activeConnections);
+                    Interlocked.Decrement(ref _activeConnections);
 
-            _ = connection.ServeAsync().ContinueWith(t =>
+                    client.Close();
+                    continue;
+                }
+
+                ClientConnection connection = new(
+                    client,
+                    client.GetStream(),
+                    clientStateWriter,
+                    clientLogger,
+                    handlerRegistry,
+                    stoppingToken);
+
+                _ = connection.ServeAsync().ContinueWith(t =>
                 {
                     logger.LogDebug("Closed connection to '{endpoint}'.", connection.EndPoint);
                     Interlocked.Decrement(ref _activeConnections);
                 }, stoppingToken);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogWarning("ServerAcceptWorker suffered an OperationCanceledException, terminating.");
         }
 
         listener.Stop();
