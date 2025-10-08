@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Milan.Core.Network;
 using Milan.Core.Payload;
 using Milan.Core.Utility;
@@ -5,6 +6,7 @@ using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 
 namespace Milan.Core.Server;
 
@@ -18,23 +20,35 @@ public enum EServerMessage
 }
 
 /// <summary>
+/// Used to ferry connection open/close status between server workers.
+/// </summary>
+public readonly record struct ClientStateMessage(ClientConnection Connection, bool Closing);
+
+/// <summary>
+/// Type for a delegate to run on a connection "tick",
+/// provided by the connection's owner at construction time.
+/// </summary>
+/// <param name="connection">Connection calling the handler.</param>
+/// <param name="token">Cancellation token owned by the connection loop.</param>
+public delegate Task ClientTickHandler(ClientConnection connection, CancellationToken token);
+
+/// <summary>
 /// Connection to a client.
 /// </summary>
 public class ClientConnection : ISendingConnection, IDisposable
 {
+    readonly ChannelWriter<ClientStateMessage> _stateWriter;
     readonly IHandlerRegistry _handlerRegistry;
     readonly TcpClient _client;
     readonly Stream _networkStream;
     readonly CancellationToken _outerCancelToken;
     readonly CancellationTokenSource _innerCancelSource;
 
+    readonly ILogger<ClientConnection> _logger;
     /// <summary>
     /// This is the <see cref="CancellationTokenSource"/> you want to use throughout the client!
     /// </summary>
     readonly CancellationTokenSource _cancelSource;
-
-    readonly AsyncTickHandler<ClientConnection> _tickHandler;
-    readonly long _tickSeconds;
 
     readonly ResizableBuffer _frameHeaderBuffer;
     readonly ResizableBuffer _frameBodyBuffer;
@@ -60,23 +74,28 @@ public class ClientConnection : ISendingConnection, IDisposable
     public const bool PRETTY_FORMAT_JSON = false;
 #endif
 
-    public ClientConnection(IHandlerRegistry registry,
-        AsyncTickHandler<ClientConnection> tick, long interval,
-        TcpClient client, Stream stream, CancellationToken token)
+    public ClientConnection(
+        TcpClient client,
+        Stream clientStream,
+        ChannelWriter<ClientStateMessage> stateWriter,
+        ILogger<ClientConnection> logger,
+        IHandlerRegistry registry,
+        CancellationToken token)
     {
+        // TODO(low): Consider replacing some arguments with an IServiceProvider.
+
+        _stateWriter = stateWriter;
         _handlerRegistry = registry;
         _client = client;
-        _networkStream = stream;
+        _networkStream = clientStream;
         _outerCancelToken = token;
         _innerCancelSource = new CancellationTokenSource();
+        _logger = logger;
 
         // We need to combine the outer worker-owned cancel token which can be used by the worker
         // with the inner connection-owned cancel token which can be used by the connection, so that this
         // connection can gracefully signal its own cancellation without bringing down other connections with it.
         _cancelSource = CancellationTokenSource.CreateLinkedTokenSource(_outerCancelToken, _innerCancelSource.Token);
-
-        _tickHandler = tick;
-        _tickSeconds = interval;
 
         _frameHeaderBuffer = new(len: FrameHeader.NET_SERIAL_SIZE);
         _frameBodyBuffer = new(len: INITIAL_BODY_CAPACITY);
@@ -91,66 +110,83 @@ public class ClientConnection : ISendingConnection, IDisposable
     /// </summary>
     public async Task ServeAsync()
     {
-        Task tickTask = TickAsync(_cancelSource.Token);
-        while (!_cancelSource.Token.IsCancellationRequested)
+        try
         {
-            FrameHeader frameHeader = new();
-            await frameHeader.ReadAsync(_networkStream, _frameHeaderBuffer, _cancelSource.Token);
+            await OnOpenAsync(_cancelSource.Token);
 
-            if (frameHeader.Index != _lastFrameIndex)
-                throw new InvalidOperationException("frame index mismatch");
-
-            _frameBodyBuffer.ResizeNoCopy((int)frameHeader.Length);
-            await _networkStream.ReadExactlyAsync(_frameBodyBuffer, _cancelSource.Token);
-
-            HandlerIndex handlerIndex = new(frameHeader.Component, frameHeader.Command);
-
-            if (frameHeader.IsNotification)
+            while (!_cancelSource.Token.IsCancellationRequested)
             {
-                NotificationHandlerDelegate handler = _handlerRegistry.GetNotificationHandler(handlerIndex)
-                    ?? throw new InvalidOperationException("invalid handler index");
-                await handler(new NotificationContext(this, _frameBodyBuffer), _cancelSource.Token);
-            }
-            else
-            {
-                RequestHandlerDelegate handler = _handlerRegistry.GetRequestHandler(handlerIndex)
-                    ?? throw new InvalidOperationException("invalid handler index");
-                await handler(new RequestContext(this, frameHeader.Index, _frameBodyBuffer), _cancelSource.Token);
+                FrameHeader frameHeader = new();
+                await frameHeader.ReadAsync(_networkStream, _frameHeaderBuffer, _cancelSource.Token);
 
-                Interlocked.Increment(ref _lastFrameIndex);
+                if (frameHeader.Index != _lastFrameIndex)
+                    throw new InvalidOperationException("frame index mismatch");
+
+                _frameBodyBuffer.ResizeNoCopy((int)frameHeader.Length);
+                await _networkStream.ReadExactlyAsync(_frameBodyBuffer, _cancelSource.Token);
+
+                HandlerIndex handlerIndex = new(frameHeader.Component, frameHeader.Command);
+
+                if (frameHeader.IsNotification)
+                {
+                    NotificationHandlerDelegate handler = _handlerRegistry.GetNotificationHandler(handlerIndex)
+                        ?? throw new InvalidOperationException("invalid handler index");
+                    await handler(new NotificationContext(this, _frameBodyBuffer), _cancelSource.Token);
+                }
+                else
+                {
+                    RequestHandlerDelegate handler = _handlerRegistry.GetRequestHandler(handlerIndex)
+                        ?? throw new InvalidOperationException("invalid handler index");
+                    await handler(new RequestContext(this, frameHeader.Index, _frameBodyBuffer), _cancelSource.Token);
+
+                    Interlocked.Increment(ref _lastFrameIndex);
+                }
             }
+
+            await OnCloseAsync(_cancelSource.Token);
+            await _networkStream.FlushAsync();
         }
-
-        await tickTask;
-        await _networkStream.FlushAsync();
+        catch (Exception ex)
+        {
+            _logger.LogError("Client connection to '{address}' suffered an exception: {exception}", EndPoint, ex);
+#if DEBUG
+            _logger.LogWarning("Call stack of last exception on client connection to '{address}': {callstack}", EndPoint, ex.StackTrace);
+#endif
+        }
 
         _networkStream.Close();
         _client.Close();
     }
 
-    async Task TickAsync(CancellationToken token)
-    {
-        await _tickHandler(this, token);
-
-        using var tickTimer = new PeriodicTimer(TimeSpan.FromSeconds(_tickSeconds));
-        while (await tickTimer.WaitForNextTickAsync(token))
-            await _tickHandler(this, token);
-    }
-
     /// <summary>
-    /// Signals to close the connection.
+    /// Invokes server tick callback with the correct cancellation token source.
     /// </summary>
-    /// <param name="force">Whether to force connection closure at callsite.</param>
-    public void Close(bool force = false)
+    public async Task TickAsync()
     {
-        _innerCancelSource.Cancel();
-
-        if (force)
-        {
-            _networkStream.Close();
-            _client.Close();
-        }
+        // TODO(high): Use linked cancel token between ServerAcceptWorker & ServerTickWorker.
+        await OnTickAsync(_cancelSource.Token);
     }
+
+    #region Connection lifecycle hooks.
+
+    private async Task OnOpenAsync(CancellationToken token)
+    {
+        await _stateWriter.WriteAsync(new ClientStateMessage { Connection = this, Closing = false }, token);
+        // ...
+    }
+
+    private async Task OnCloseAsync(CancellationToken token)
+    {
+        await _stateWriter.WriteAsync(new ClientStateMessage { Connection = this, Closing = true }, token);
+        // ...
+    }
+
+    private async Task OnTickAsync(CancellationToken token)
+    {
+        await Task.CompletedTask;
+    }
+
+    #endregion
 
     #region IConnection / ISendingConnection implementation.
 

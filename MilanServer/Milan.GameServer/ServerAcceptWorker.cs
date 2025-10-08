@@ -2,22 +2,25 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Milan.Core.Options;
+using Milan.Core.Server;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading.Channels;
 
-namespace Milan.Core.Server;
+namespace Milan.GameServer;
 
 /// <summary>
-/// Sets up and executes the server loop.
+/// Sets up and executes the main server loop (accepting and dispatching connections).
 /// </summary>
-public sealed class ServerWorker(
-    ILogger<ServerWorker> logger,
+public sealed class ServerAcceptWorker(
+    ILogger<ServerAcceptWorker> logger,
+    ILogger<ClientConnection> clientLogger,
     IHandlerRegistrant handlerRegistrant,
+    IHandlerRegistry handlerRegistry,
     IOptions<ServerWorkerOptions> workerOptions,
-    IAsyncTickHandler<ClientConnection> tickHandler)
+    ChannelWriter<ClientStateMessage> clientStateWriter)
         : BackgroundService
 {
-    readonly TableHandlerRegistry _handlerRegistry = new();
     readonly ServerWorkerOptions _workerOptions = workerOptions.Value;
 
     long _maxActiveConnections = 0;
@@ -25,9 +28,9 @@ public sealed class ServerWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("Starting (Milan) ServerWorker...");
+        logger.LogInformation("Starting ServerAcceptWorker...");
 
-        handlerRegistrant.RegisterHandlers(_handlerRegistry);
+        handlerRegistrant.RegisterHandlers(handlerRegistry);
         logger.LogInformation("Handlers registered.");
 
         if (_workerOptions.EnableSecureConnection)
@@ -39,7 +42,7 @@ public sealed class ServerWorker(
         _maxActiveConnections = _workerOptions.MaxActiveConnections;
 
         var address = IPAddress.Parse(_workerOptions.Ip);
-        using TcpListener listener = new(address, _workerOptions.Port);
+        using var listener = new TcpListener(address, _workerOptions.Port);
 
         logger.LogInformation("Listening at '{endpoint}'.", listener.LocalEndpoint);
         listener.Start();
@@ -65,9 +68,12 @@ public sealed class ServerWorker(
             }
 
             ClientConnection connection = new(
-                _handlerRegistry,
-                tickHandler.TickAsync, tickHandler.Interval,
-                client, client.GetStream(), stoppingToken);
+                client,
+                client.GetStream(),
+                clientStateWriter,
+                clientLogger,
+                handlerRegistry,
+                stoppingToken);
 
             _ = connection.ServeAsync().ContinueWith(t =>
                 {

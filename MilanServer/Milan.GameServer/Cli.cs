@@ -12,7 +12,7 @@ public static class Cli
     {
         RootCommand rootCommand = new(description: "Project Milan Game Server");
 
-        Option<ServerRole> serverRoleOption = new("--role", "-r")
+        Option<EServerRole> serverRoleOption = new("--role", "-r")
         {
             Description = "Subset of components this server instance should provide.",
         };

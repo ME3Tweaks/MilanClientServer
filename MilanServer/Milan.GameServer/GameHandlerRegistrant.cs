@@ -4,7 +4,11 @@ using Milan.Core.Server;
 
 namespace Milan.GameServer;
 
-public sealed class GameHandlerRegistrant(
+/// <summary>
+/// Registers handlers based on the server's role,
+/// retrieved from the resolved <see cref="IServerRoleProvider"/>.
+/// </summary>
+public class GameHandlerRegistrant(
     ILogger<GameHandlerRegistrant> logger,
     IServiceProvider serviceProvider,
     IServerRoleProvider roleProvider)
@@ -14,11 +18,11 @@ public sealed class GameHandlerRegistrant(
     {
         logger.LogInformation("Registering handlers for role {role}.", roleProvider.Role);
 
-        if (roleProvider.Role is ServerRole.Redirector)
+        if (roleProvider.Role is EServerRole.Redirector)
         {
             new RedirectorComponent(serviceProvider).Register(registry);
         }
-        else if (roleProvider.Role is ServerRole.Matchmaking)
+        else if (roleProvider.Role is EServerRole.Matchmaking)
         {
 #if DEBUG
             // Debug builds support redirector for DX.
