@@ -47,7 +47,7 @@ public sealed class ServerTickWorker(
         }
         catch (OperationCanceledException)
         {
-            logger.LogWarning("ServerTickWorker suffered an OperationCanceledException, terminating.");
+            logger.LogWarning("ServerTickWorker caught an OperationCanceledException, terminating.");
         }
 
         logger.LogInformation("Ticking loop stopped.");

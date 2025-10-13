@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -13,12 +14,11 @@ namespace Milan.GameServer;
 /// Sets up and executes the main server loop (accepting and dispatching connections).
 /// </summary>
 public sealed class ServerAcceptWorker(
+    IServiceProvider serviceProvider,
     ILogger<ServerAcceptWorker> logger,
-    ILogger<ClientConnection> clientLogger,
     IHandlerRegistrant handlerRegistrant,
     IHandlerRegistry handlerRegistry,
-    IOptions<ServerWorkerOptions> workerOptions,
-    ChannelWriter<ClientStateMessage> clientStateWriter)
+    IOptions<ServerWorkerOptions> workerOptions)
         : BackgroundService
 {
     readonly ServerWorkerOptions _workerOptions = workerOptions.Value;
@@ -35,7 +35,7 @@ public sealed class ServerAcceptWorker(
 
         if (_workerOptions.EnableSecureConnection)
         {
-            logger.LogError("Secure connections not yet implemented.");
+            logger.LogCritical("Secure connections not yet implemented.");
             throw new NotImplementedException();
         }
 
@@ -67,24 +67,35 @@ public sealed class ServerAcceptWorker(
                     continue;
                 }
 
-                ClientConnection connection = new(
-                    client,
-                    client.GetStream(),
-                    clientStateWriter,
-                    clientLogger,
-                    handlerRegistry,
-                    stoppingToken);
+                IServiceScope scope = serviceProvider.CreateScope();
+                ClientConnection connection = new(serviceProvider, scope,
+                    client, client.GetStream(), handlerRegistry, stoppingToken);
 
-                _ = connection.ServeAsync().ContinueWith(t =>
+                _ = connection.ServeAsync().ContinueWith(serveTask =>
                 {
-                    logger.LogDebug("Closed connection to '{endpoint}'.", connection.EndPoint);
                     Interlocked.Decrement(ref _activeConnections);
-                }, stoppingToken);
+                    scope.Dispose();
+
+                    if (serveTask.Exception is AggregateException aggregateException)
+                    {
+                        aggregateException.Handle(exception =>
+                        {
+                            logger.LogError("Exception on a connection to '{endpoint}': {message}", connection.EndPoint, exception?.Message);
+#if DEBUG
+                            logger.LogError("Exception stack trace: {stacktrace}", exception?.StackTrace);
+#endif
+
+                            return true;
+                        });
+                    }
+
+                    logger.LogDebug("Closed connection to '{endpoint}'.", connection.EndPoint);
+                }, TaskContinuationOptions.ExecuteSynchronously);
             }
         }
         catch (OperationCanceledException)
         {
-            logger.LogWarning("ServerAcceptWorker suffered an OperationCanceledException, terminating.");
+            logger.LogWarning("ServerAcceptWorker caught an OperationCanceledException, terminating.");
         }
 
         listener.Stop();

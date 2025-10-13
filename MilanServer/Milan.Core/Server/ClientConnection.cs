@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Milan.Core.Network;
 using Milan.Core.Payload;
@@ -37,14 +38,14 @@ public delegate Task ClientTickHandler(ClientConnection connection, Cancellation
 /// </summary>
 public class ClientConnection : ISendingConnection, IDisposable
 {
-    readonly ChannelWriter<ClientStateMessage> _stateWriter;
-    readonly IHandlerRegistry _handlerRegistry;
     readonly TcpClient _client;
     readonly Stream _networkStream;
+    readonly ChannelWriter<ClientStateMessage> _stateWriter;
+    readonly ILogger<ClientConnection> _logger;
+    readonly IHandlerRegistry _handlerRegistry;
     readonly CancellationToken _outerCancelToken;
     readonly CancellationTokenSource _innerCancelSource;
 
-    readonly ILogger<ClientConnection> _logger;
     /// <summary>
     /// This is the <see cref="CancellationTokenSource"/> you want to use throughout the client!
     /// </summary>
@@ -75,22 +76,20 @@ public class ClientConnection : ISendingConnection, IDisposable
 #endif
 
     public ClientConnection(
+        IServiceProvider serviceProvider,
+        IServiceScope serviceScope,
         TcpClient client,
-        Stream clientStream,
-        ChannelWriter<ClientStateMessage> stateWriter,
-        ILogger<ClientConnection> logger,
+        Stream stream,
         IHandlerRegistry registry,
         CancellationToken token)
     {
-        // TODO(low): Consider replacing some arguments with an IServiceProvider.
-
-        _stateWriter = stateWriter;
-        _handlerRegistry = registry;
         _client = client;
-        _networkStream = clientStream;
+        _networkStream = stream;
+        _stateWriter = serviceProvider.GetRequiredService<ChannelWriter<ClientStateMessage>>();
+        _logger = serviceProvider.GetRequiredService<ILogger<ClientConnection>>();
+        _handlerRegistry = registry;
         _outerCancelToken = token;
         _innerCancelSource = new CancellationTokenSource();
-        _logger = logger;
 
         // We need to combine the outer worker-owned cancel token which can be used by the worker
         // with the inner connection-owned cancel token which can be used by the connection, so that this
@@ -110,6 +109,10 @@ public class ClientConnection : ISendingConnection, IDisposable
     /// </summary>
     public async Task ServeAsync()
     {
+        // Exceptions in this method are expected to be handled by the caller.
+        // The only responsibility of this method is to flush and close the client stream,
+        // having done its best to send out some indication of the closing connection to the client.
+
         try
         {
             await OnOpenAsync(_cancelSource.Token);
@@ -142,20 +145,20 @@ public class ClientConnection : ISendingConnection, IDisposable
                     Interlocked.Increment(ref _lastFrameIndex);
                 }
             }
-
-            await OnCloseAsync(_cancelSource.Token);
-            await _networkStream.FlushAsync();
         }
-        catch (Exception ex)
+        finally
         {
-            _logger.LogError("ClientConnection to '{address}' suffered an exception: {exception}", EndPoint, ex);
-#if DEBUG
-            _logger.LogWarning("Call stack of last exception on ClientConnection to '{address}': {callstack}", EndPoint, ex.StackTrace);
-#endif
+            try
+            {
+                await OnCloseAsync(_cancelSource.Token);
+                await _networkStream.FlushAsync();
+            }
+            finally
+            {
+                _networkStream.Close();
+                _client.Close();
+            }
         }
-
-        _networkStream.Close();
-        _client.Close();
     }
 
     /// <summary>
