@@ -31,7 +31,7 @@ public sealed class ServerAcceptWorker(
         logger.LogInformation("Starting ServerAcceptWorker...");
 
         handlerRegistrant.RegisterHandlers(handlerRegistry);
-        logger.LogInformation("Handlers registered.");
+        logger.LogInformation("All handlers registered.");
 
         if (_workerOptions.EnableSecureConnection)
         {
@@ -44,7 +44,7 @@ public sealed class ServerAcceptWorker(
         var address = IPAddress.Parse(_workerOptions.Ip);
         using var listener = new TcpListener(address, _workerOptions.Port);
 
-        logger.LogInformation("Listening at '{endpoint}'.", listener.LocalEndpoint);
+        logger.LogInformation("Listening at {endpoint}.", listener.LocalEndpoint);
         listener.Start();
 
         try

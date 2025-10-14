@@ -19,19 +19,19 @@ public class RoleAwareHandlerRegistrant(
 
         if (roleProvider.Role is EServerRole.Redirector)
         {
-            new RedirectorComponent(serviceProvider).Register(registry);
+            new RedirectorComponent(serviceProvider).RegisterWithLogging(registry);
         }
         else if (roleProvider.Role is EServerRole.Matchmaking)
         {
 #if DEBUG
             // Debug builds support redirector for DX.
-            new RedirectorComponent(serviceProvider).Register(registry);
+            new RedirectorComponent(serviceProvider).RegisterWithLogging(registry);
 #endif
 
             // TODO: Register all the fun components.
         }
 
         // Heartbeat is registered for all roles.
-        new HeartbeatComponent(serviceProvider).Register(registry);
+        new HeartbeatComponent(serviceProvider).RegisterWithLogging(registry);
     }
 }

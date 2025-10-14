@@ -34,9 +34,9 @@ HostApplicationBuilderSettings builderSettings = new()
     ContentRootPath = cliResult.GetRequiredValue<DirectoryInfo>("--dir").FullName,
 };
 
-builderSettings.Configuration.AddIniFile("milan.ini", optional: true, reloadOnChange: true);
+builderSettings.Configuration.AddIniFile("milan.ini", optional: false, reloadOnChange: false);
 #if DEBUG
-builderSettings.Configuration.AddIniFile("milan.devel.ini", optional: true, reloadOnChange: true);
+builderSettings.Configuration.AddIniFile("milan.devel.ini", optional: true, reloadOnChange: false);
 #endif // DEBUG
 builderSettings.Configuration.AddEnvironmentVariables(prefix: "MILAN");
 

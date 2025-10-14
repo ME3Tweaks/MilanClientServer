@@ -1,4 +1,5 @@
 using Milan.Core.Payload;
+using System.Net;
 
 namespace Milan.Core.Messages;
 
@@ -20,6 +21,8 @@ public record struct Address(uint Ip, ushort Port)
         writer.SetInt("ip", (int)Ip);
         writer.SetInt("ip", (int)Port);
     }
+
+    public readonly override string ToString() => $"{new IPAddress(Ip)}:{Port}";
 }
 
 /// <summary>
@@ -40,4 +43,5 @@ public record struct Version(int Major, int Minor, int Patch)
         writer.SetInt("minor", Minor);
         writer.SetInt("patch", Patch);
     }
+    public readonly override string ToString() => $"{Major}.{Minor}.{Patch}";
 }

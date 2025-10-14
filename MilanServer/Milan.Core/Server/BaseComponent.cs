@@ -28,6 +28,15 @@ public abstract class BaseComponent<T>(IServiceProvider serviceProvider)
     /// </summary>
     /// <param name="registry">The registry to receive this component's handlers.</param>
     public abstract void Register(IHandlerRegistry registry);
+    /// <summary>
+    /// Wraps the (usually) generated <see cref="Register(IHandlerRegistry)"/> with a logging message.
+    /// </summary>
+    /// <param name="registry">The registry to receive this component's handlers.</param>
+    public void RegisterWithLogging(IHandlerRegistry registry)
+    {
+        Register(registry);
+        Logger.LogInformation("Registered handlers for {component}.", Name);
+    }
 
     /// <summary>
     /// Retrieves registered notification handlers.
