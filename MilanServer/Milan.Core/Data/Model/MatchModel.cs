@@ -8,15 +8,15 @@ public sealed class MatchModel : BaseModel
     /// <summary>
     /// TLK ID of the map.
     /// </summary>
-    public int MapStrRef { get; set; }
+    public TlkStrRef Map { get; set; }
     /// <summary>
     /// TLK ID of the enemy faction.
     /// </summary>
-    public int FactionStrRef { get; set; }
+    public TlkStrRef Faction { get; set; }
     /// <summary>
-    /// Pre-defined difficulty level.
+    /// TLK ID of the difficulty level.
     /// </summary>
-    public EMatchDifficulty Difficulty { get; set; }
+    public TlkStrRef Difficulty { get; set; }
     /// <summary>
     /// Current state of the match's progress.
     /// </summary>
@@ -37,22 +37,6 @@ public sealed class MatchModel : BaseModel
     /// Match outcome, if any.
     /// </summary>
     public EMatchResult? Result { get; set; }
-}
-
-/// <summary>
-/// Match difficulty level, based on the original ME3 options.
-/// </summary>
-/// <remarks>
-/// TODO: Consider using some other indicator for difficulty
-/// in case we want to support player-defined difficulty levels,
-/// e.g. introduced by second-tier mods.
-/// </remarks>
-public enum EMatchDifficulty
-{
-    Bronze = 1,
-    Silver = 2,
-    Gold = 3,
-    Platinum = 4,
 }
 
 /// <summary>
