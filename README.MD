@@ -1,6 +1,11 @@
 MilanClientServer
 ===================
 
+> [!WARNING]
+> This document, and especially build instructions, may be a bit out of date.
+> The primary working branch now and for the foreseeable future is `server`.
+>
+
 You need to have the following installed when building on Windows:
 
    * Visual Studio 2022 with at least C++ workload and Windows 10 / 11 SDK.
