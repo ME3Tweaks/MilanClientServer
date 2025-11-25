@@ -5,6 +5,7 @@ using Milan.Core.Messages;
 using Milan.Core.Messages.Redirector;
 using Milan.Core.Options;
 using Milan.Core.Server;
+using Milan.Core.Utility;
 using Milan.Generators;
 using System.Net;
 using System.Net.Sockets;
@@ -30,19 +31,21 @@ public sealed partial class RedirectorComponent : BaseComponent<RedirectorCompon
 
     public RedirectorComponent(IServiceProvider serviceProvider) : base(serviceProvider)
     {
-        var options = serviceProvider.GetRequiredService<IOptions<RedirectorOptions>>().Value;
+        RedirectorComponentOptions options = serviceProvider.GetRequiredService<IOptions<RedirectorComponentOptions>>().Value;
 
-        static Address? fromEndpoint(RedirectorOptionsAddress address)
+        static Address? fromEndpoint(string address)
         {
-            if (string.IsNullOrWhiteSpace(address.Ip))
+            if (string.IsNullOrWhiteSpace(address))
                 return null;
 
-            var addr = IPAddress.Parse(address.Ip);
-            if (addr.AddressFamily is not AddressFamily.InterNetwork)
-                throw new InvalidDataException($"unsupported ip address family");
-            var ip = BitConverter.ToUInt32(addr.GetAddressBytes());
+            var endPoint = IPEndPoint.Parse(address);
+            if (endPoint.AddressFamily is not AddressFamily.InterNetwork)
+                throw new InvalidConfigurationException("unsupported ip address family");
 
-            return new(ip, address.Port);
+            return new(
+                Ip: BitConverter.ToUInt32(endPoint.Address.GetAddressBytes()),
+                Port: (ushort)endPoint.Port
+            );
         }
 
         try

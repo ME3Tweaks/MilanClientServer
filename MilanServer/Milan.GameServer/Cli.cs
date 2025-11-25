@@ -12,16 +12,21 @@ public static class Cli
     {
         RootCommand rootCommand = new(description: "Project Milan Game Server");
 
+        Option<bool> verboseOption = new("--verbose", "-V")
+        {
+            Description = "Emit more logs.",
+        };
         Option<EServerRole> serverRoleOption = new("--role", "-r")
         {
             Description = "Subset of components this server instance should provide.",
         };
         Option<DirectoryInfo> contentDirectoryOption = new("--dir", "-d")
         {
-            Description = "Directory with configuration files, logs, etc.",
+            Description = "Directory storing database, config files, logs, etc.",
             DefaultValueFactory = _ => new DirectoryInfo(Directory.GetCurrentDirectory()),
         };
 
+        rootCommand.Add(verboseOption);
         rootCommand.Add(serverRoleOption);
         rootCommand.Add(contentDirectoryOption);
 

@@ -4,8 +4,8 @@ namespace Milan.Core.Data.Repository;
 
 public interface IMatchRepository : IBaseRepository
 {
-    IEnumerable<MatchModel> GetAll();
-    MatchModel? GetById(int id);
-    void Insert(MatchModel match);
-    void Update(MatchModel match);
+    Task<IEnumerable<MatchModel>> GetAllAsync();
+    Task<MatchModel?> GetByIdAsync(int id);
+    Task InsertAsync(MatchModel match);
+    Task UpdateAsync(MatchModel match);
 }

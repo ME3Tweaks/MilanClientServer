@@ -1,7 +1,9 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Milan.Core.Data;
 using Milan.Core.Options;
 using Milan.Core.Server;
 using Milan.GameServer;
@@ -44,9 +46,17 @@ HostApplicationBuilder appBuilder = Host.CreateApplicationBuilder(builderSetting
 
 #if DEBUG
 LogEventLevel logMinimumLevel = LogEventLevel.Verbose;
+LogEventLevel efCoreMinimumLevel = LogEventLevel.Warning;
 #else // DEBUG
 LogEventLevel logMinimumLevel = LogEventLevel.Information;
+LogEventLevel efCoreMinimumLevel = LogEventLevel.Warning;
 #endif // DEBUG
+
+if (cliResult.GetValue<bool>("--verbose"))
+{
+    logMinimumLevel = LogEventLevel.Verbose;
+    efCoreMinimumLevel = LogEventLevel.Debug;
+}
 
 string logFilePath = cliServerRole switch
 {
@@ -58,6 +68,7 @@ string logFilePath = cliServerRole switch
 appBuilder.Logging.ClearProviders();
 appBuilder.Services.AddSerilog((services, loggerConfiguraton) => loggerConfiguraton
     .MinimumLevel.Is(logMinimumLevel)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", efCoreMinimumLevel)
     .WriteTo.Console(
         theme: SystemConsoleTheme.Literate,
         outputTemplate: "[{Timestamp:HH:mm:ss.fff} {Level:u3}] {Message:lj}{NewLine}{Exception}")
@@ -70,8 +81,9 @@ UnboundedChannelOptions clientStateChannelOptions = new() { SingleReader = true,
 Channel<ClientStateMessage> clientStateChannel = Channel.CreateUnbounded<ClientStateMessage>(clientStateChannelOptions);
 
 // Configuration options:
-appBuilder.Services.Configure<ServerWorkerOptions>(appBuilder.Configuration.GetSection("ServerWorker"));
-appBuilder.Services.Configure<RedirectorOptions>(appBuilder.Configuration.GetSection("Redirector"));
+appBuilder.Services.Configure<CommonDatabaseOptions>(appBuilder.Configuration.GetSection("Common:Database"));
+appBuilder.Services.Configure<ServerAcceptWorkerOptions>(appBuilder.Configuration.GetSection("GameServer:AcceptWorker"));
+appBuilder.Services.Configure<RedirectorComponentOptions>(appBuilder.Configuration.GetSection("GameServer:RedirectorComponent"));
 
 // Dependent services:
 appBuilder.Services.AddSingleton<IHandlerRegistrant, RoleAwareHandlerRegistrant>();
@@ -79,6 +91,14 @@ appBuilder.Services.AddSingleton<IHandlerRegistry, TableHandlerRegistry>();
 appBuilder.Services.AddSingleton<IServerRoleProvider>(_ => new StaticRoleProvider(cliServerRole));
 appBuilder.Services.AddSingleton<ChannelReader<ClientStateMessage>>(_ => clientStateChannel.Reader);
 appBuilder.Services.AddSingleton<ChannelWriter<ClientStateMessage>>(_ => clientStateChannel.Writer);
+appBuilder.Services.AddPooledDbContextFactory<MilanDatabaseContext>((serviceProvider, optionsBuilder) =>
+{
+    // Temporary use of SQLite provider.
+    // If for some reason we stick with SQLite,
+    // the data source obviously needs to be configured
+    // from milan.ini and overrides.
+    optionsBuilder.UseSqlite("Data Source=./milan.db");
+});
 
 // Server initialization and loops:
 appBuilder.Services.AddHostedService<ServerAcceptWorker>();

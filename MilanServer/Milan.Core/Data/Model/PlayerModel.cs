@@ -1,14 +1,20 @@
+using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations.Schema;
 namespace Milan.Core.Data.Model;
 
 /// <summary>
 /// Basic data of a registered player account.
 /// </summary>
-public sealed class PlayerModel : BaseModel
+[Table("Players")]
+[PrimaryKey(nameof(PlayerId))]
+public sealed class PlayerModel
 {
+    public int PlayerId { get; set; }
+
     /// <summary>
     /// Unique identifier used for public display.
     /// </summary>
-    public required string Username { get; set; }
+    public string Username { get; set; } = string.Empty;
     /// <summary>
     /// Reference to the <see cref="MatchModel"/> this player is currently playing.
     /// </summary>

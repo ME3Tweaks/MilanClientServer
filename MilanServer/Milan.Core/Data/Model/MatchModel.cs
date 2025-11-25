@@ -1,10 +1,19 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+
 namespace Milan.Core.Data.Model;
+
 
 /// <summary>
 /// Single game session.
 /// </summary>
-public sealed class MatchModel : BaseModel
+[Table("Matches")]
+[PrimaryKey(nameof(MatchId))]
+public sealed class MatchModel
 {
+    public int MatchId { get; set; }
+
     /// <summary>
     /// TLK ID of the map.
     /// </summary>
@@ -36,7 +45,7 @@ public sealed class MatchModel : BaseModel
     /// <summary>
     /// Match outcome, if any.
     /// </summary>
-    public EMatchResult? Result { get; set; }
+    public EMatchResult Result { get; set; }
 }
 
 /// <summary>
@@ -44,10 +53,17 @@ public sealed class MatchModel : BaseModel
 /// </summary>
 public enum EMatchState
 {
+    Unknown = 0,
     Lobby = 1,
     PreGame = 2,
     Game = 3,
     Complete = 4,
+}
+
+public class EMatchStateConverter : ValueConverter<EMatchState, int>
+{
+    // TODO: Use checked int->enum conversion.
+    public EMatchStateConverter() : base(f => (int)f, t => (EMatchState)t) {}
 }
 
 /// <summary>
@@ -55,7 +71,14 @@ public enum EMatchState
 /// </summary>
 public enum EMatchResult
 {
+    Unknown = 0,
     Victory = 1,
     DefeatToDeath = 2,
     DefeatToFailure = 3,
+}
+
+public class EMatchResultConverter : ValueConverter<EMatchResult, int>
+{
+    // TODO: Use checked int->enum conversion.
+    public EMatchResultConverter() : base(f => (int)f, t => (EMatchResult)t) { }
 }

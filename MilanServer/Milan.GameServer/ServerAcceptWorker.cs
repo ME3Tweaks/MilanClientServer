@@ -1,12 +1,14 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Milan.Core.Data;
 using Milan.Core.Options;
 using Milan.Core.Server;
+using Milan.Core.Utility;
 using System.Net;
 using System.Net.Sockets;
-using System.Threading.Channels;
 
 namespace Milan.GameServer;
 
@@ -18,10 +20,11 @@ public sealed class ServerAcceptWorker(
     ILogger<ServerAcceptWorker> logger,
     IHandlerRegistrant handlerRegistrant,
     IHandlerRegistry handlerRegistry,
-    IOptions<ServerWorkerOptions> workerOptions)
+    IDbContextFactory<MilanDatabaseContext> databaseContextFactory,
+    IOptions<ServerAcceptWorkerOptions> workerOptions)
         : BackgroundService
 {
-    readonly ServerWorkerOptions _workerOptions = workerOptions.Value;
+    readonly ServerAcceptWorkerOptions _workerOptions = workerOptions.Value;
 
     long _maxActiveConnections = 0;
     long _activeConnections = 0;
@@ -41,8 +44,19 @@ public sealed class ServerAcceptWorker(
 
         _maxActiveConnections = _workerOptions.MaxActiveConnections;
 
-        var address = IPAddress.Parse(_workerOptions.Ip);
-        using var listener = new TcpListener(address, _workerOptions.Port);
+        if (!TryParseEndPoint(_workerOptions.Address, out IPEndPoint endPoint))
+        {
+            logger.LogCritical($"invalid ServerAcceptWorker address: {_workerOptions.Address}");
+            throw new InvalidConfigurationException("invalid ServerAcceptWorker address");
+        }
+
+        using (var context = await databaseContextFactory.CreateDbContextAsync(stoppingToken))
+        {
+            logger.LogInformation("Initializing database context...");
+            await context.OnServerStart(stoppingToken);
+        }
+
+        using var listener = new TcpListener(endPoint);
 
         logger.LogInformation("Listening at {endpoint}.", listener.LocalEndpoint);
         listener.Start();
@@ -73,7 +87,9 @@ public sealed class ServerAcceptWorker(
 
                 _ = connection.ServeAsync().ContinueWith(serveTask =>
                 {
-                    Interlocked.Decrement(ref _activeConnections);
+                    if (_maxActiveConnections > 0)
+                        Interlocked.Decrement(ref _activeConnections);
+
                     scope.Dispose();
 
                     if (serveTask.Exception is AggregateException aggregateException)
@@ -100,5 +116,17 @@ public sealed class ServerAcceptWorker(
 
         listener.Stop();
         logger.LogInformation("Listening loop stopped.");
+    }
+
+    static bool TryParseEndPoint(string address, out IPEndPoint endPoint)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            endPoint = new IPEndPoint(0, 0);
+            return false;
+        }
+
+        endPoint = IPEndPoint.Parse(address);
+        return endPoint.AddressFamily is AddressFamily.InterNetwork;
     }
 }
