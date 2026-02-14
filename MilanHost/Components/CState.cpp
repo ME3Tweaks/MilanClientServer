@@ -64,16 +64,19 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
         MILAN_TRACEW(ELOG_MultiProfile, L"intercepted SFXGame.SFXSaveManagerMP.Initialize:");
 
         MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
+        if (Profile.CachedProfileExists()) {
+            ::game::vector<BYTE> ProfileBuffer{};
+            ::ReadFileFull(static_cast<std::wstring_view>(Profile.GetProfilePath()), ProfileBuffer);
 
-        ::game::vector<BYTE> ProfileBuffer{};
-        ::ReadFileFull(static_cast<std::wstring_view>(Profile.GetProfilePath()), ProfileBuffer);
+            ::RelativeTimer ProfileTimer{};
 
-        ::RelativeTimer ProfileTimer{};
-
-        MemoryInputStream ProfileStream{ std::move(ProfileBuffer) };
-        Profile.Deserialize(ProfileStream);
-
-        MILAN_TRACEW(ELOG_MultiProfile, L"profile deserialized in %.3f ms.", ProfileTimer.GetMilliseconds());
+            MemoryInputStream ProfileStream{ std::move(ProfileBuffer) };
+            Profile.Deserialize(ProfileStream);
+            MILAN_TRACEW(ELOG_MultiProfile, L"profile deserialized in %.3f ms.", ProfileTimer.GetMilliseconds());
+         }
+        else {
+            MILAN_TRACEW(ELOG_MultiProfile, L"No local cached MP_Profile found");
+        }
     }
 }
 
