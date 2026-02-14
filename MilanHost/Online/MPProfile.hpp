@@ -160,4 +160,5 @@ public:
 
     static FString GetProfilePathStatic();
     FString const& GetProfilePath() const noexcept;
+    bool CachedProfileExists();
 };

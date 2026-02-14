@@ -1,7 +1,7 @@
 #include <Shlobj.h>
 
 #include "Online/MPProfile.hpp"
-
+#include <filesystem>
 
 // ! ProfileSetting implementation.
 // ========================================
@@ -328,4 +328,9 @@ void MPProfile::Serialize(IOutputStream& Stream) const
 
     Stream.Seek(SeekOrigin::Begin, CountOffset);
     Stream.WriteNumeric<BIG, INT32>(SettingsCount);
+}
+
+bool MPProfile::CachedProfileExists()
+{
+    return std::filesystem::exists(*GetProfilePath());
 }
