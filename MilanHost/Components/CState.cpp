@@ -65,8 +65,15 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
 
         MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
 
+        auto profilePath = Profile.GetProfilePath();
+
         ::game::vector<BYTE> ProfileBuffer{};
-        ::ReadFileFull(static_cast<std::wstring_view>(Profile.GetProfilePath()), ProfileBuffer);
+        
+        if (!::ReadFileFull(static_cast<std::wstring_view>(profilePath), ProfileBuffer))
+        {
+            MILAN_WARNW(ELOG_MultiProfile, L"online profile file '%s' is empty or missing, skipping deserialization", profilePath.Chars());
+            return;
+        }
 
         ::RelativeTimer ProfileTimer{};
 

@@ -97,7 +97,7 @@ FString MPProfile::GetProfilePathStatic()
     WCHAR* DocumentPath = nullptr;
 
     ::SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &DocumentPath);
-    ProfilePath.AppendFormat(L"%s\\BioWare\\Mass Effect Legendary Edition\\Save\\ME3\\%s", DocumentPath, L"MP_Profile");
+    ProfilePath.AppendFormat(L"%s\\BioWare\\Mass Effect Legendary Edition\\Save\\LMP\\%s", DocumentPath, L"MP_Profile");
 
     ::CoTaskMemFree(DocumentPath);
     return *ProfilePath;

@@ -19,13 +19,14 @@
 #include "Components/CProfilers.hpp"
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
+#include "Components/CDirectories.hpp"
 #include "Engine/ExtObject.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "Shell/ClientConfig.hpp"
 #include "Shell/CmdArgs.hpp"
 
 
-SPI_PLUGINSIDE_SUPPORT(L"MilanHost", L"Project Milan Team", L"0.1.0", SPI_GAME_LE3, SPI_VERSION_ANY);
+SPI_PLUGINSIDE_SUPPORT(L"MilanHost", L"Project Milan Team", L"0.2.0", SPI_GAME_LE3, SPI_VERSION_ANY);
 SPI_PLUGINSIDE_POSTLOAD;
 SPI_PLUGINSIDE_SEQATTACH;
 
@@ -44,11 +45,10 @@ SPI_IMPLEMENT_ATTACH
     InitSDKBasics(*gp_sdkContext);
     InitGlobalConfig(k_configFilename);
 
-
     // Initialize subsystems / compontents.
     // ----------------------------------------
-
     gp_componentContainer->Initialize<COutput>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CDirectories>(*gp_sdkContext);
     gp_componentContainer->Initialize<CGlobals>(*gp_sdkContext);
     gp_componentContainer->Initialize<CCommands>(*gp_sdkContext);
     gp_componentContainer->Initialize<CProfilers>(*gp_sdkContext);
