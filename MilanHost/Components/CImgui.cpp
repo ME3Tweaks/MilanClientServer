@@ -1,3 +1,4 @@
+#ifdef WITH_IMGUI
 #include <backends/imgui_impl_win32.h>
 #include <backends/imgui_impl_dx11.h>
 
@@ -273,3 +274,4 @@ void DemoInterface::OnRender()
     // so if anything starts to behave weird just add a transient local boolean.
     ImGui::ShowDemoWindow(&mb_active);
 }
+#endif

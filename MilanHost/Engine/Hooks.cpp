@@ -4,7 +4,9 @@
 #include "Base/Logger.hpp"
 #include "Components/CCommands.hpp"
 #include "Components/CGlobals.hpp"
+#ifdef WITH_IMGUI
 #include "Components/CImgui.hpp"
+#endif
 #include "Components/COutput.hpp"
 #include "Components/CProfilers.hpp"
 #include "Components/CState.hpp"
@@ -24,7 +26,7 @@ bool gb_logProcessEvent = false;
 bool gb_logProcessInternal = false;
 bool gb_logSerializeObject = false;
 
-
+#ifdef WITH_IMGUI
 t_WndProc* WndProc_orig = nullptr;
 LRESULT CALLBACK WndProc_hook(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
 {
@@ -38,6 +40,7 @@ HRESULT IDXGISwapChain_Present_hook(IDXGISwapChain* const pChain, UINT const Syn
     if (COMPONENT(CImgui).On_SwapChainPresent(pChain, SyncInterval, Flags)) return S_OK;
     return IDXGISwapChain_Present_orig(pChain, SyncInterval, Flags);
 }
+#endif
 
 t_BioRequestExit* BioRequestExit_orig = nullptr;
 void BioRequestExit_hook(UBOOL const bForce, INT const ExitCode, INT const Unused)

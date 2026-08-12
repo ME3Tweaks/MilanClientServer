@@ -11,7 +11,9 @@
 #include "Base/Logger.hpp"
 #include "Components/CCommands.hpp"
 #include "Components/CGlobals.hpp"
+#ifdef WITH_IMGUI
 #include "Components/CImgui.hpp"
+#endif
 #include "Components/CNetworkProfiler.hpp"
 #include "Components/COutput.hpp"
 #include "Components/CProfilers.hpp"
@@ -50,7 +52,9 @@ SPI_IMPLEMENT_ATTACH
     gp_componentContainer->Initialize<CGlobals>(*gp_sdkContext);
     gp_componentContainer->Initialize<CCommands>(*gp_sdkContext);
     gp_componentContainer->Initialize<CProfilers>(*gp_sdkContext);
+#ifdef WITH_IMGUI
     gp_componentContainer->Initialize<CImgui>(*gp_sdkContext);
+#endif
     gp_componentContainer->Initialize<CState>(*gp_sdkContext);
 
 #ifndef _FINAL_RELEASE
@@ -112,7 +116,9 @@ void SingleDetachImpl()
 #endif
 
     gp_componentContainer->Terminate<CState>(*gp_sdkContext);
+#ifdef WITH_IMGUI
     gp_componentContainer->Terminate<CImgui>(*gp_sdkContext);
+#endif
     gp_componentContainer->Terminate<CProfilers>(*gp_sdkContext);
     gp_componentContainer->Terminate<CCommands>(*gp_sdkContext);
     gp_componentContainer->Terminate<CGlobals>(*gp_sdkContext);
@@ -149,7 +155,9 @@ void ReportConfigError()
 
 void SetupImguiInterfaces()
 {
+#ifdef WITH_IMGUI
     COMPONENT(CImgui).RegisterInterface(std::make_unique<DemoInterface>());
+#endif
 }
 
 void RegisterNonshipCommands()

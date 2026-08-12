@@ -1,3 +1,5 @@
+#ifdef WITH_IMGUI
+
 /**
  * @file        MilanHost/Components/CImgui.hpp
  * @header      Component for ImGui instance integration.
@@ -107,3 +109,4 @@ public:
 
     bool mb_active{ false };
 };
+#endif
