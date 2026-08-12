@@ -21,8 +21,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Components/CCommands.hpp
   ${PROJ_FOLDER}/Components/CGlobals.cpp
   ${PROJ_FOLDER}/Components/CGlobals.hpp
-  ${PROJ_FOLDER}/Components/CImgui.cpp
-  ${PROJ_FOLDER}/Components/CImgui.hpp
+  #${PROJ_FOLDER}/Components/CImgui.cpp
+  #${PROJ_FOLDER}/Components/CImgui.hpp
   ${PROJ_FOLDER}/Components/CNetworkProfiler.cpp
   ${PROJ_FOLDER}/Components/CNetworkProfiler.hpp
   ${PROJ_FOLDER}/Components/COutput.cpp
@@ -33,6 +33,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Components/CRenderdoc.hpp
   ${PROJ_FOLDER}/Components/CState.cpp
   ${PROJ_FOLDER}/Components/CState.hpp
+  ${PROJ_FOLDER}/Components/CDirectories.cpp
+  ${PROJ_FOLDER}/Components/CDirectories.hpp
   ${PROJ_FOLDER}/Containers/string.hpp
   ${PROJ_FOLDER}/Containers/unordered_map.hpp
   ${PROJ_FOLDER}/Containers/vector.hpp
@@ -95,7 +97,7 @@ if (DEFINED ENV{MILAN_GAME_WIN64})
 
   set (MILAN_GAME_WIN64 "$ENV{MILAN_GAME_WIN64}")
 
-  message ("-- User-provided Mass Effect 3 (LE) Win64 folder:")
+  message ("-- User-provided Mass Effect LMP Win64 folder:")
   message ("-- ${MILAN_GAME_WIN64}")
 
   set (COPY_SOURCE $<TARGET_FILE:${PROJ_TARGET}>)
