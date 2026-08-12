@@ -65,6 +65,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Shell/CmdArgs.hpp
   ${PROJ_FOLDER}/Shell/Entry.cpp
   ${PROJ_FOLDER}/Shell/Entry.hpp
+  ${PROJ_FOLDER}/Version/MilanHost.rc
+  ${PROJ_FOLDER}/Version/SharedVersion.h
   ${PROJ_FOLDER}/Milan.natvis
 )
 

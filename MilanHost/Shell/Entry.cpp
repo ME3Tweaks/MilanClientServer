@@ -24,9 +24,10 @@
 #include "Misc/GuidCacheUtils.hpp"
 #include "Shell/ClientConfig.hpp"
 #include "Shell/CmdArgs.hpp"
+#include "Version/SharedVersion.h"
 
 
-SPI_PLUGINSIDE_SUPPORT(L"MilanHost", L"Project Milan Team", L"0.2.0", SPI_GAME_LE3, SPI_VERSION_ANY);
+SPI_PLUGINSIDE_SUPPORT(ASI_NAME_NO_SPACE_W, DEVELOPER_W, L"" VERSION_STRING_W, SPI_GAME_LE3, SPI_VERSION_ANY);
 SPI_PLUGINSIDE_POSTLOAD;
 SPI_PLUGINSIDE_SEQATTACH;
 
