@@ -2,7 +2,6 @@
 
 #include "Online/MPProfile.hpp"
 
-
 // ! ProfileSetting implementation.
 // ========================================
 

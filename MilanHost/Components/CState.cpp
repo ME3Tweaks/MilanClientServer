@@ -75,12 +75,15 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
             return;
         }
 
-        ::RelativeTimer ProfileTimer{};
+            ::RelativeTimer ProfileTimer{};
 
-        MemoryInputStream ProfileStream{ std::move(ProfileBuffer) };
-        Profile.Deserialize(ProfileStream);
-
-        MILAN_TRACEW(ELOG_MultiProfile, L"profile deserialized in %.3f ms.", ProfileTimer.GetMilliseconds());
+            MemoryInputStream ProfileStream{ std::move(ProfileBuffer) };
+            Profile.Deserialize(ProfileStream);
+            MILAN_TRACEW(ELOG_MultiProfile, L"profile deserialized in %.3f ms.", ProfileTimer.GetMilliseconds());
+         }
+        else {
+            MILAN_TRACEW(ELOG_MultiProfile, L"No local cached MP_Profile found");
+        }
     }
 }
 
