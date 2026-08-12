@@ -9,8 +9,8 @@
 #include "Containers/vector.hpp"
 
 
-/** Reads contents of an entire file into a buffer. */
-void ReadFileFull(std::wstring_view InPath, ::game::vector<byte>& OutBuffer);
+/** Reads contents of an entire file into a buffer. Returns true if the file existed, false if it didn't or was not opened. */
+bool ReadFileFull(std::wstring_view InPath, ::game::vector<byte>& OutBuffer);
 /** Writes contents of an entire buffer into a file. */
 void WriteFileFull(std::wstring_view InPath, std::span<byte const> InBuffer);
 

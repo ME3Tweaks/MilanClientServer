@@ -6,18 +6,25 @@
 #include "Base/Logger.hpp"
 
 
-void ReadFileFull(std::wstring_view const InPath, ::game::vector<byte>& OutBuffer)
+bool ReadFileFull(std::wstring_view const InPath, ::game::vector<byte>& OutBuffer)
 {
     std::ifstream Stream{ InPath.data(), std::ios::binary | std::ios::ate };
-    MILAN_CHECKW(Stream.is_open(), L"failed to open file at %s", InPath.data());
+    // Check removed as we now use this to test for existence too before reading the buffer at callsite
+    //MILAN_CHECKW(Stream.is_open(), L"failed to open file at %s", InPath.data());
 
     std::streamsize const Length = Stream.tellg();
+
+    if (!Stream.is_open() || Length < 0) {
+        return false; // File didn't open
+    }
 
     OutBuffer.clear();
     OutBuffer.resize(static_cast<size_t>(Length));
 
     Stream.seekg(0, std::ios::beg);
     Stream.read(reinterpret_cast<char*>(OutBuffer.data()), Length);
+
+    return true;
 }
 
 void WriteFileFull(std::wstring_view const InPath, std::span<byte const> const InBuffer)
