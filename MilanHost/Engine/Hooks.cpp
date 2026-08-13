@@ -119,17 +119,37 @@ t_UObject_CallFunction* UObject_CallFunction_orig = nullptr;
 void UObject_CallFunction_hook(UObject* const Context, FFrame* const Stack, void* const Result, UFunction* const Function)
 {
 #ifndef _FINAL_RELEASE
+    // --- DEBUG CACHE BLOCK ---
+    // thread_local keeps these private per execution thread. 
+    // They persist across frames so you can inspect them anytime you break inside this thread.
+    static thread_local FString DebugContextName{};
+    static thread_local FString DebugFunctionName{};
+
+    DebugContextName.Clear();
+    DebugFunctionName.Clear();
+
+    if (Context)
+    {
+        Context->AppendName(DebugContextName, SFXName::k_formatBasic);
+    }
+    else
+    {
+        DebugContextName = L"None";
+    }
+
+    if (Function)
+    {
+        Function->AppendName(DebugFunctionName, SFXName::k_formatBasic);
+    }
+    else
+    {
+        DebugFunctionName = L"None";
+    }
+    // -------------------------
+
     if (gb_logCallFunction)
     {
-        static FString ObjectName{}, FunctionName{};
-
-        ObjectName.Clear();
-        FunctionName.Clear();
-
-        Context->AppendName(ObjectName, SFXName::k_formatBasic);
-        Function->AppendName(FunctionName, SFXName::k_formatBasic);
-
-        MILAN_TRACEW(L"UObject::CallFunction: %s.%s", *ObjectName, *FunctionName);
+        MILAN_TRACEW(L"UObject::CallFunction: %s.%s", *DebugContextName, *DebugFunctionName);
     }
 #endif
 
@@ -150,9 +170,6 @@ void UObject_CallFunction_hook(UObject* const Context, FFrame* const Stack, void
         MILAN_BREAK_ATTACHED();
     }
 #endif
-
-    //if (IsFunctionWithinDerivedClass(Function, L"SFXOnlineComponentImageManager"))
-    //    MILAN_TRACEW(ELOG_DevelUtils, L"%S: %s", __func__, *Function->GetFullName());
 
     (*UObject_CallFunction_orig)(Context, Stack, Result, Function);
 }
