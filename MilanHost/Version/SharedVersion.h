@@ -23,9 +23,9 @@
 
 
 // === Identification from automated ME3Tweaks tooling ====
-#define GAME_PREFIX_RC    "LE3"
+#define GAME_PREFIX_RC    "LMP"
 #define ASI_GROUP_ID_RC 501
-#define ASI_GAME_ID_RC 6
+#define ASI_GAME_ID_RC 8 // 7 is launcher, 8 is LMP
 
 
 // Constants for all ASIs - DO NOT CHANGE BELOW

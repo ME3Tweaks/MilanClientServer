@@ -112,7 +112,7 @@ if (DEFINED ENV{MILAN_GAME_WIN64})
   )
 
   set_target_properties (${PROJ_TARGET} PROPERTIES
-    VS_DEBUGGER_COMMAND "${MILAN_GAME_WIN64}/MassEffect3.exe"
+    VS_DEBUGGER_COMMAND "${MILAN_GAME_WIN64}/MassEffectMultiplayer.exe"
     VS_DEBUGGER_COMMAND_ARGUMENTS "-enableminidumps -nosplash -nomovie"
     VS_DEBUGGER_WORKING_DIRECTORY "${MILAN_GAME_WIN64}"
   )
