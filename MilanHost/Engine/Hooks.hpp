@@ -16,6 +16,44 @@
 
 #define ENABLE_GUIDCACHE_OVERRIDE 0
 
+// ! Hooking macros.
+// ========================================
+
+#define LOG_SDK_GLOBAL(pCheck, pReal)                                                       \
+    MILAN_CHECKW(pCheck != nullptr, L"failed to find " #pCheck);                            \
+    MILAN_TRACEW(ELOG_StartupGlobals, L"" #pCheck " found: 0x%p -> 0x%p", (void*)pCheck, (void*)pReal)
+
+#define _INSTALL_HOOK_ADDR_NO_LOG(Address, String, Function)                                       \
+    auto* const MILAN_VARCAT(Function, _target) = (MILAN_VARCAT(t_, Function)*)Address;     \
+    MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHook(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook)));
+
+#define _INSTALL_HOOK_ADDR(Address, String, Function)                                       \
+    auto* const MILAN_VARCAT(Function, _target) = (MILAN_VARCAT(t_, Function)*)Address;     \
+    MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHook(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook))); \
+    MILAN_TRACEW(ELOG_StartupGlobals, L"" String L" hooked: 0x%p -> 0x%p", (void*)MILAN_VARCAT(Function, _target), (void*)MILAN_VARCAT(Function, _orig))
+
+#define _INSTALL_HOOK_INIT(Pattern, String, Function)                                       \
+    _INSTALL_HOOK_ADDR(Context.ResolveTyped<MILAN_VARCAT(t_, Function)>(Pattern), String, Function)
+
+
+#define INSTALL_HOOK_ONE(Function, Pattern)  _INSTALL_HOOK_INIT(Pattern, #Function, Function)
+#define INSTALL_HOOK_TWO(Class, Function, Pattern)  _INSTALL_HOOK_INIT(Pattern, #Class "::" #Function, MILAN_VARCAT(MILAN_VARCAT(Class, _), Function))
+
+#define INSTALL_HOOK_ONE_ADDR(Function, Address)  _INSTALL_HOOK_ADDR(Address, #Function, Function)
+#define INSTALL_HOOK_ONE_ADDR_NO_LOG(Function, Address)  _INSTALL_HOOK_ADDR_NO_LOG(Address, #Function, Function)
+#define INSTALL_HOOK_TWO_ADDR(Class, Function, Address)  _INSTALL_HOOK_ADDR(Address, #Class "::" #Function, MILAN_VARCAT(MILAN_VARCAT(Class, _), Function))
+
+
+#define _FIND_VAR_ADDR(Address, String, Variable)                                           \
+    Variable = (MILAN_VARCAT(t_, Variable)*)Address;                                        \
+    MILAN_TRACEW(ELOG_StartupGlobals, L"" String L" found: 0x%p", (void*)Variable)
+
+#define _FIND_VAR_INIT(Pattern, String, Variable)                                           \
+    _FIND_VAR_ADDR(Context.ResolveTyped<MILAN_VARCAT(t_, Variable)>(Pattern), String, Variable)
+
+
+#define FIND_VAR_ONE(Variable, Pattern)  _FIND_VAR_INIT(Pattern, #Variable, Variable)
+#define FIND_VAR_TWO(Class, Variable, Pattern)  _FIND_VAR_INIT(Pattern, #Class "::" #Variable, MILAN_VARCAT(MILAN_VARCAT(Class, _), Variable))
 
 
 // ! Globals and hook patterns.
@@ -132,6 +170,10 @@ extern bool gb_logSerializeObject;
 
 // ! Miscellaneous functions / methods.
 // ========================================
+void ApplyIconToWindow(HWND window);
+using t_CreateWindowExW = HWND(WINAPI)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
+extern t_CreateWindowExW* CreateWindowExW_orig;
+HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
 
 using t_WndProc = LRESULT __stdcall(HWND, UINT, WPARAM, LPARAM);
 extern t_WndProc* WndProc_orig;

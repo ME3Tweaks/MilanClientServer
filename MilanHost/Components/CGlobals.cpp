@@ -6,43 +6,6 @@
 #include "NetProf/NetProfDecls.hpp"
 #include "Online/SFXOnlineHijacks.hpp"
 
-
-// ! Internal macros.
-// ========================================
-
-#define LOG_SDK_GLOBAL(pCheck, pReal)                                                       \
-    MILAN_CHECKW(pCheck != nullptr, L"failed to find " #pCheck);                            \
-    MILAN_TRACEW(ELOG_StartupGlobals, L"" #pCheck " found: 0x%p -> 0x%p", (void*)pCheck, (void*)pReal)
-
-
-#define _INSTALL_HOOK_ADDR(Address, String, Function)                                       \
-    auto* const MILAN_VARCAT(Function, _target) = (MILAN_VARCAT(t_, Function)*)Address;     \
-    MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHook(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook))); \
-    MILAN_TRACEW(ELOG_StartupGlobals, L"" String L" hooked: 0x%p -> 0x%p", (void*)MILAN_VARCAT(Function, _target), (void*)MILAN_VARCAT(Function, _orig))
-
-#define _INSTALL_HOOK_INIT(Pattern, String, Function)                                       \
-    _INSTALL_HOOK_ADDR(Context.ResolveTyped<MILAN_VARCAT(t_, Function)>(Pattern), String, Function)
-
-
-#define INSTALL_HOOK_ONE(Function, Pattern)  _INSTALL_HOOK_INIT(Pattern, #Function, Function)
-#define INSTALL_HOOK_TWO(Class, Function, Pattern)  _INSTALL_HOOK_INIT(Pattern, #Class "::" #Function, MILAN_VARCAT(MILAN_VARCAT(Class, _), Function))
-
-#define INSTALL_HOOK_ONE_ADDR(Function, Address)  _INSTALL_HOOK_ADDR(Address, #Function, Function)
-#define INSTALL_HOOK_TWO_ADDR(Class, Function, Address)  _INSTALL_HOOK_ADDR(Address, #Class "::" #Function, MILAN_VARCAT(MILAN_VARCAT(Class, _), Function))
-
-
-#define _FIND_VAR_ADDR(Address, String, Variable)                                           \
-    Variable = (MILAN_VARCAT(t_, Variable)*)Address;                                        \
-    MILAN_TRACEW(ELOG_StartupGlobals, L"" String L" found: 0x%p", (void*)Variable)
-
-#define _FIND_VAR_INIT(Pattern, String, Variable)                                           \
-    _FIND_VAR_ADDR(Context.ResolveTyped<MILAN_VARCAT(t_, Variable)>(Pattern), String, Variable)
-
-
-#define FIND_VAR_ONE(Variable, Pattern)  _FIND_VAR_INIT(Pattern, #Variable, Variable)
-#define FIND_VAR_TWO(Class, Variable, Pattern)  _FIND_VAR_INIT(Pattern, #Class "::" #Variable, MILAN_VARCAT(MILAN_VARCAT(Class, _), Variable))
-
-
 // ! CGlobals implementation.
 // ========================================
 
@@ -131,7 +94,6 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
 
 
     // From this point on, use the macro system to simplify search and installation.
-
     INSTALL_HOOK_ONE(BioRequestExit, GLOBAL_BIOREQUESTEXIT_PHOOK);
 
     FIND_VAR_TWO(UUIString, StringSize, GLOBAL_UUISTRING_STRINGSIZE_PHOOK);
