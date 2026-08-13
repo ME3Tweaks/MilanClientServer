@@ -5,6 +5,9 @@
 #include <windows.h>
 #include "SharedVersion.h"
 
+// Icon for injecting
+MILAN_WINDOW_ICON ICON "../Assets/icon.ico"
+
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION APP_VERSION_RC
  PRODUCTVERSION APP_VERSION_RC

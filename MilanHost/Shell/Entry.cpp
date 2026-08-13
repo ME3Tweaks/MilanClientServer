@@ -604,3 +604,14 @@ void SpawnLocalClients()
 
 #endif
 }
+
+::LESDK::Initializer* gp_sdkContext = nullptr;
+HMODULE g_hModule = nullptr;
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID) {
+    if (reason == DLL_PROCESS_ATTACH) {
+        // Capture pointer to module
+        g_hModule = hModule;
+    }
+    return TRUE;
+}

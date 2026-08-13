@@ -18,6 +18,8 @@
 #include "NetProf/NetProfStream.hpp"
 #include "Online/SFXOnlineHijacks.hpp"
 #include "Shell/CmdArgs.hpp"
+#include "Shell/Entry.hpp"
+#include "Version/SharedVersion.h"
 
 
 bool gb_logCallFunction = false;
@@ -41,6 +43,42 @@ HRESULT IDXGISwapChain_Present_hook(IDXGISwapChain* const pChain, UINT const Syn
     return IDXGISwapChain_Present_orig(pChain, SyncInterval, Flags);
 }
 #endif
+
+/// <summary>
+/// Applies the milan icon to the specified HWND
+/// </summary>
+/// <param name="windowHwnd"></param>
+void ApplyIconToWindow(HWND windowHwnd) {
+    HICON hIconBig = (HICON)LoadImageW(
+        g_hModule, MAKEINTRESOURCEW(MILAN_WINDOW_ICON),
+        IMAGE_ICON, 32, 32, LR_DEFAULTCOLOR);
+
+    HICON hIconSmall = (HICON)LoadImageW(
+        g_hModule, MAKEINTRESOURCEW(MILAN_WINDOW_ICON),
+        IMAGE_ICON, 16, 16, LR_DEFAULTCOLOR);
+
+    if (hIconBig)   SendMessageW(windowHwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+    if (hIconSmall) SendMessageW(windowHwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
+
+    // Some taskbar/Alt+Tab paths read the class icon instead of the
+    // instance icon, so set both to be safe.
+    if (hIconBig)   SetClassLongPtrW(windowHwnd, GCLP_HICON, (LONG_PTR)hIconBig);
+    if (hIconSmall) SetClassLongPtrW(windowHwnd, GCLP_HICONSM, (LONG_PTR)hIconSmall);
+}
+
+t_CreateWindowExW* CreateWindowExW_orig = nullptr;
+HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam)
+{
+    auto windowHwnd = (*CreateWindowExW_orig)(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
+    if (nullptr != lpWindowName) {
+        if (0 == wcscmp(lpWindowName, L"Mass Effect 3") || 0 == wcscmp(lpWindowName, L"SplashScreen"))
+        {
+            ApplyIconToWindow(windowHwnd);
+        }
+    }
+    return windowHwnd;
+}
+
 
 t_BioRequestExit* BioRequestExit_orig = nullptr;
 void BioRequestExit_hook(UBOOL const bForce, INT const ExitCode, INT const Unused)
@@ -354,7 +392,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
 
             MILAN_TRACEW(ELOG_Startup, L"Updating title for %s, viewport at %p", *(*Iter)->StaticName(), Viewport);
 
-            *Name = FString::Printf(L"Mass Effect 3 (INST = %d, PID = %d)", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
+            *Name = FString::Printf(L"Project Milan (INST = %d, PID = %d)", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
             DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
 
             s_updateWindow = false;

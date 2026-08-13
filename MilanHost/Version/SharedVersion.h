@@ -3,6 +3,9 @@
 // This file is used for shared version info in C++ and RC files.
 // This file is effectively templated and should be located in all ASI mod projects.
 
+// MILAN SPECIFIC
+#define MILAN_WINDOW_ICON 101
+
 // Todo: Move to a single version file for all asis
 #define CURRENT_YEAR "2026"
 

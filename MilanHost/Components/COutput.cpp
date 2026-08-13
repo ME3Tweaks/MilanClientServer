@@ -80,6 +80,10 @@ bool COutput::Initialize(::LESDK::Initializer& Context)
 {
     MILAN_UNUSED(Context);
 
+    // This is done here because we want to hook windows for icon changing, and the earliest it will show up
+    // is likely right before we open console.
+    INSTALL_HOOK_ONE_ADDR_NO_LOG(CreateWindowExW, CreateWindowExW);
+
     int NameInitCount = 0;
     int NameSuppressCount = 0;
 
@@ -200,6 +204,11 @@ void COutput::InitConsole()
         auto const ErrorMessage = std::string("can't enable virtual terminal: ") + ErrorCode;
         ::OutputDebugStringA(ErrorMessage.c_str());
     }
+
+    HWND hwnd = GetConsoleWindow();
+    if (hwnd != NULL) {
+        ApplyIconToWindow(hwnd);
+        }
 #endif
 }
 

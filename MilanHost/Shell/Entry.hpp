@@ -12,7 +12,10 @@
 // ! Initialization and cleanup.
 // ========================================
 
-::LESDK::Initializer* gp_sdkContext = nullptr;
+extern ::LESDK::Initializer* gp_sdkContext;
+
+// This dll's HMODULE, used for loading resources.
+extern HMODULE g_hModule;
 
 void InitSDKBasics(::LESDK::Initializer& Context);
 void ReportConfigError();
