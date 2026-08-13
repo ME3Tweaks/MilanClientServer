@@ -198,7 +198,7 @@ std::span<unsigned char> CaveIndexer::ViewMainModule()
             do
             {
                 char const* const ModuleName = ModuleEntry.szModule;
-                if (ModuleName == std::strstr(ModuleName, "MassEffect3"))
+                if (ModuleName == std::strstr(ModuleName, "MassEffectMultiplayer"))
                 {
                     BaseAddress = ModuleEntry.modBaseAddr;
                     ModuleLength = ModuleEntry.modBaseSize;
