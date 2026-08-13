@@ -81,9 +81,6 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
         Profile.Deserialize(ProfileStream);
         MILAN_TRACEW(ELOG_MultiProfile, L"profile deserialized in %.3f ms.", ProfileTimer.GetMilliseconds());
     }
-    else {
-        MILAN_TRACEW(ELOG_MultiProfile, L"No local cached MP_Profile found");
-    }
 }
 
 void CState::On_UWorld_Tick(UWorld* const Context, int const Unknown, float const Delta)
