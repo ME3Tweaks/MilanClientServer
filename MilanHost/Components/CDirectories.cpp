@@ -5,6 +5,7 @@
 // ! CDirectories implementation.
 // ========================================
 #define REL_PATH_RVA ::LESDK::Address::FromOffset(0x12db1c0)
+#define REL_LICENSEE_RVA ::LESDK::Address::FromOffset(0x1755c1c)
 
 /**
  * \brief Patches a segment of process memory.
@@ -29,7 +30,24 @@ bool PatchMemory(void* address, const void* patch, const SIZE_T patchSize)
     return true;
 }
 
-void CDirectories::InitPatchMemory(::LESDK::Initializer& Init)
+void CDirectories::PatchLicenseeVersion(::LESDK::Initializer& Init)
+{
+    // GMinPackageVersion
+    int* PatchOffset = Init.ResolveTyped<int>(REL_LICENSEE_RVA);
+    const int patchData = 206; // LMP
+    if (PatchOffset != nullptr)
+    {
+        auto res = PatchMemory(PatchOffset, &patchData, sizeof(patchData));
+        if (!res) {
+            MILAN_DEBUGW(ELOG_Startup, L"Failed to patch licensee version to LMP");
+        }
+        else {
+            MILAN_DEBUGW(ELOG_Startup, L"Patched licensee version to LMP %i: %s", *PatchOffset, PatchOffset);
+        }
+    }
+}
+
+void CDirectories::PatchDocumentsDirectory(::LESDK::Initializer& Init)
 {
     wchar_t* oPatchOffset = Init.ResolveTyped<wchar_t>(REL_PATH_RVA);
     void* PatchOffset = (char*)oPatchOffset + 0x56; // Start of 'ME3'
@@ -48,7 +66,8 @@ void CDirectories::InitPatchMemory(::LESDK::Initializer& Init)
 
 bool CDirectories::Initialize(::LESDK::Initializer& Context)
 {
-    InitPatchMemory(Context);
+    PatchLicenseeVersion(Context);
+    PatchDocumentsDirectory(Context);
     MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
 }

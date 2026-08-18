@@ -71,6 +71,7 @@ HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR l
 {
     auto windowHwnd = (*CreateWindowExW_orig)(dwExStyle, lpClassName, lpWindowName, dwStyle, X, Y, nWidth, nHeight, hWndParent, hMenu, hInstance, lpParam);
     if (nullptr != lpWindowName) {
+        // Look for title Mass Effect 3
         if (0 == wcscmp(lpWindowName, L"Mass Effect 3") || 0 == wcscmp(lpWindowName, L"SplashScreen"))
         {
             ApplyIconToWindow(windowHwnd);

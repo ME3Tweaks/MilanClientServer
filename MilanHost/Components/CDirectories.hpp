@@ -17,7 +17,8 @@ public:
     void Terminate(::LESDK::Initializer& Context);
 
 private:
-    void InitPatchMemory(::LESDK::Initializer& Context);
+    void PatchLicenseeVersion(::LESDK::Initializer& Context);
+    void PatchDocumentsDirectory(::LESDK::Initializer& Context);
 };
 
 static_assert(ComponentType<CDirectories>);
