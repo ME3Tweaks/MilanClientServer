@@ -33,8 +33,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Components/CRenderdoc.hpp
   ${PROJ_FOLDER}/Components/CState.cpp
   ${PROJ_FOLDER}/Components/CState.hpp
-  ${PROJ_FOLDER}/Components/CDirectories.cpp
-  ${PROJ_FOLDER}/Components/CDirectories.hpp
+  ${PROJ_FOLDER}/Components/CConstants.cpp
+  ${PROJ_FOLDER}/Components/CConstants.hpp
   ${PROJ_FOLDER}/Containers/string.hpp
   ${PROJ_FOLDER}/Containers/unordered_map.hpp
   ${PROJ_FOLDER}/Containers/vector.hpp

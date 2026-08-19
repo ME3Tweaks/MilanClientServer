@@ -19,7 +19,7 @@
 #include "Components/CProfilers.hpp"
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
-#include "Components/CDirectories.hpp"
+#include "Components/CConstants.hpp"
 #include "Engine/ExtObject.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "Shell/ClientConfig.hpp"
@@ -49,7 +49,7 @@ SPI_IMPLEMENT_ATTACH
     // Initialize subsystems / compontents.
     // ----------------------------------------
     gp_componentContainer->Initialize<COutput>(*gp_sdkContext);
-    gp_componentContainer->Initialize<CDirectories>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CConstants>(*gp_sdkContext);
     gp_componentContainer->Initialize<CGlobals>(*gp_sdkContext);
     gp_componentContainer->Initialize<CCommands>(*gp_sdkContext);
     gp_componentContainer->Initialize<CProfilers>(*gp_sdkContext);
