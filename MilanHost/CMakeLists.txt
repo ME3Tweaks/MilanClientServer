@@ -56,6 +56,7 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Online/MPProfile.cpp
   ${PROJ_FOLDER}/Online/MPProfile.hpp
   ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeGame.cpp
+  ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeHub.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeLogin.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineHijacks.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineHijacks.hpp
