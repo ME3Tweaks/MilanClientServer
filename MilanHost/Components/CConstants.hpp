@@ -41,6 +41,14 @@ private:
     /// </summary>
     /// <param name="Context"></param>
     void PatchMPDLCFolderNameFilter(::LESDK::Initializer& Context);
+
+    /// <summary>
+    /// NOPs out the NetMode/GPendingLevel gates (and the resulting GDisallowNetworkTravel write)
+    /// that stock UE3 uses to disable the 'set'/'setnopec' (UGameEngine::Exec) and
+    /// 'show'/'showset'/'showclear' (UGameViewportClient::Exec) console commands in multiplayer.
+    /// </summary>
+    /// <param name="Context"></param>
+    void PatchMultiplayerCommandGates(::LESDK::Initializer& Context);
 };
 
 static_assert(ComponentType<CConstants>);

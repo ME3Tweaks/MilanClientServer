@@ -9,6 +9,16 @@
 #define REL_MOUNT_CMP_INSTRUCTION_START ::LESDK::Address::FromOffset(0xafe043) // +1 = MIN, +6 = MAX (CMP is 2D + [INT])
 #define REL_MP_STRING_FILTER ::LESDK::Address::FromOffset(0x136141)
 
+// UGameEngine::Exec - 'set'/'setnopec' multiplayer gate (see Ghidra/notes/set-command-multiplayer-gate.md)
+#define REL_SET_GATE_PENDINGLEVEL_JNZ ::LESDK::Address::FromOffset(0x54408c) // JNZ on this->GPendingLevel != NULL
+#define REL_SET_GATE_NETMODE_JNZ ::LESDK::Address::FromOffset(0x5440a0) // JNZ on GetNetMode(GWorld) != NM_Standalone
+#define REL_SET_GATE_DISALLOWTRAVEL_WRITE ::LESDK::Address::FromOffset(0x5440a6) // GDisallowNetworkTravel = TRUE
+
+// UGameViewportClient::Exec - 'show'/'showset'/'showclear' multiplayer gate (see Ghidra/notes/show-command-multiplayer-gate.md)
+#define REL_SHOW_GATE_NETMODE_JNZ ::LESDK::Address::FromOffset(0x6d49ef) // JNZ on GetNetMode(GWorld) != NM_Standalone
+#define REL_SHOW_GATE_PENDINGLEVEL_JNZ ::LESDK::Address::FromOffset(0x6d4a19) // JNZ on UGameEngine::GPendingLevel != NULL
+#define REL_SHOW_GATE_DISALLOWTRAVEL_WRITE ::LESDK::Address::FromOffset(0x6d4a1f) // GDisallowNetworkTravel = TRUE
+
 /**
  * \brief Patches a segment of process memory.
  * \param address The address to start the overwrite of patch data to
@@ -98,6 +108,56 @@ void CConstants::PatchDocumentsDirectory(::LESDK::Initializer& Init)
     }
 }
 
+/**
+ * \brief Overwrites an instruction at a resolved RVA with NOPs (0x90).
+ * \param Init The initializer used to resolve the module-relative address
+ * \param address RVA of the first byte of the instruction to remove
+ * \param size Length of the instruction in bytes
+ * \param name Name used in the failure log message
+ * \return true if patched, false otherwise
+ */
+static bool PatchNop(::LESDK::Initializer& Init, ::LESDK::Address const address, SIZE_T const size, wchar_t const* const name)
+{
+    void* const target = Init.Resolve(address);
+    if (target == nullptr)
+    {
+        MILAN_DEBUGW(ELOG_Startup, L"Failed to resolve %s", name);
+        return false;
+    }
+
+    BYTE nops[10];
+    MILAN_CHECKW(size <= sizeof(nops), L"NOP patch size exceeds scratch buffer");
+    memset(nops, 0x90, sizeof(nops));
+
+    bool const res = PatchMemory(target, nops, size);
+    if (!res)
+    {
+        MILAN_DEBUGW(ELOG_Startup, L"Failed to NOP %s", name);
+    }
+    return res;
+}
+
+// Removes the NetMode/GPendingLevel checks (and the GDisallowNetworkTravel write that follows
+// them on success) that stock UE3 uses to silently swallow 'set'/'setnopec' and
+// 'show'/'showset'/'showclear' while in a networked game. Since the write is NOPed out too,
+// GDisallowNetworkTravel is never set by these paths, so the two read sites
+// (UGameEngine::Browse, UNetPendingLevel::UNetPendingLevel) don't need patching.
+void CConstants::PatchMultiplayerCommandGates(::LESDK::Initializer& Init)
+{
+    bool ok = true;
+    ok &= PatchNop(Init, REL_SET_GATE_PENDINGLEVEL_JNZ, 6, L"set-command GPendingLevel gate");
+    ok &= PatchNop(Init, REL_SET_GATE_NETMODE_JNZ, 6, L"set-command NetMode gate");
+    ok &= PatchNop(Init, REL_SET_GATE_DISALLOWTRAVEL_WRITE, 10, L"set-command GDisallowNetworkTravel write");
+    ok &= PatchNop(Init, REL_SHOW_GATE_NETMODE_JNZ, 6, L"show-command NetMode gate");
+    ok &= PatchNop(Init, REL_SHOW_GATE_PENDINGLEVEL_JNZ, 6, L"show-command GPendingLevel gate");
+    ok &= PatchNop(Init, REL_SHOW_GATE_DISALLOWTRAVEL_WRITE, 10, L"show-command GDisallowNetworkTravel write");
+
+    if (ok)
+    {
+        MILAN_DEBUGW(ELOG_Startup, L"Patched out 'set'/'show' multiplayer command gates");
+    }
+}
+
 void CConstants::PatchMPDLCFolderNameFilter(::LESDK::Initializer& Init)
 {
     wchar_t* PatchOffset = Init.ResolveTyped<wchar_t>(REL_MP_STRING_FILTER);
@@ -120,6 +180,7 @@ bool CConstants::Initialize(::LESDK::Initializer& Context)
     PatchLicenseeVersion(Context);
     PatchMountLoading(Context);
     PatchMPDLCFolderNameFilter(Context);
+    PatchMultiplayerCommandGates(Context);
     MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
 }
