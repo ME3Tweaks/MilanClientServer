@@ -48,22 +48,28 @@ class BasicConsoleLoggerOutput final : public ILoggerOutput
 {
 public:
 
-    BasicConsoleLoggerOutput();
+    explicit BasicConsoleLoggerOutput(HANDLE OutputHandle);
     ~BasicConsoleLoggerOutput() noexcept override;
     void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, SFXName Category, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) override;
     void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, SFXName Category, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) override;
     void Flush() override;
+
+private:
+    HANDLE OutputHandle{ INVALID_HANDLE_VALUE };
 };
 
 class ConsoleLoggerOutput final : public ILoggerOutput
 {
 public:
 
-    ConsoleLoggerOutput();
+    explicit ConsoleLoggerOutput(HANDLE OutputHandle);
     ~ConsoleLoggerOutput() noexcept override;
     void AcceptAnsi(CodePlaceA const& Place, ESeverity Severity, SFXName Category, char const* Data, size_t Size, float Seconds, FormatStyleA const& Style) override;
     void AcceptUnicode(CodePlaceW const& Place, ESeverity Severity, SFXName Category, wchar_t const* Data, size_t Size, float Seconds, FormatStyleW const& Style) override;
     void Flush() override;
+
+private:
+    HANDLE OutputHandle{ INVALID_HANDLE_VALUE };
 };
 
 class FileLoggerOutput final : public ILoggerOutput

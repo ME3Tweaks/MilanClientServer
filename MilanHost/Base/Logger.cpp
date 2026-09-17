@@ -1,5 +1,9 @@
 #include <algorithm>
 #include <array>
+#include <cstring>
+#include <cwchar>
+#include <limits>
+#include <string>
 #include <locale.h>
 
 #include "Base/Logger.hpp"
@@ -14,7 +18,6 @@ _locale_t s_sinkLocale = nullptr;
 
 struct FormatStyleA final
 {
-    std::FILE*          OutStream;      /** Standard stream to log to, if logging to stdout/stderr. */
     bool                bFlush;         /** Whether logger should flush stream after current line. */
     char const*         SevToken;       /** Textual representation of a severity level. */
     char const*         OpenSeq;        /** Characters to prepend to the message line (escape sequences). */
@@ -23,21 +26,121 @@ struct FormatStyleA final
 
 struct FormatStyleW final
 {
-    std::FILE*          OutStream;      /** Standard stream to log to, if logging to stdout/stderr. */
     bool                bFlush;         /** Whether logger should flush stream after current line. */
     wchar_t const*      SevToken;       /** Textual representation of a severity level. */
     wchar_t const*      OpenSeq;        /** Characters to prepend to the message line (escape sequences). */
     wchar_t const*      CloseSeq;       /** Characters to append to the message line (escape sequences). */
 };
 
+namespace
+{
+    bool WriteBytes(HANDLE const OutputHandle, char const* const Data, size_t const Size) noexcept
+    {
+        if (OutputHandle == nullptr || OutputHandle == INVALID_HANDLE_VALUE || (Data == nullptr && Size != 0))
+            return false;
+
+        size_t Offset = 0;
+        while (Offset < Size)
+        {
+            DWORD const ChunkSize = static_cast<DWORD>(std::min<size_t>(Size - Offset, 0x7ffff000u));
+            DWORD Written = 0;
+            if (::WriteFile(OutputHandle, Data + Offset, ChunkSize, &Written, nullptr) == FALSE || Written == 0 || Written > ChunkSize)
+                return false;
+            Offset += Written;
+        }
+        return true;
+    }
+
+    bool WriteWide(HANDLE const OutputHandle, wchar_t const* const Data, size_t const Size) noexcept
+    {
+        if (OutputHandle == nullptr || OutputHandle == INVALID_HANDLE_VALUE || (Data == nullptr && Size != 0))
+            return false;
+        if (Size == 0)
+            return true;
+
+        auto WriteUtf8 = [&]() noexcept
+        {
+            if (Size > static_cast<size_t>(std::numeric_limits<int>::max()))
+                return false;
+
+            int const CharacterCount = static_cast<int>(Size);
+            int const Utf8Length = ::WideCharToMultiByte(CP_UTF8, 0, Data, CharacterCount, nullptr, 0, nullptr, nullptr);
+            if (Utf8Length <= 0)
+                return false;
+
+            std::string Utf8(static_cast<size_t>(Utf8Length), '\0');
+            if (::WideCharToMultiByte(CP_UTF8, 0, Data, CharacterCount, Utf8.data(), Utf8Length, nullptr, nullptr) <= 0)
+                return false;
+            return WriteBytes(OutputHandle, Utf8.data(), Utf8.size());
+        };
+
+        DWORD ConsoleMode = 0;
+        if (::GetConsoleMode(OutputHandle, &ConsoleMode) != FALSE)
+        {
+            size_t Offset = 0;
+            while (Offset < Size)
+            {
+                DWORD const ChunkSize = static_cast<DWORD>(std::min<size_t>(Size - Offset, std::numeric_limits<DWORD>::max()));
+                DWORD Written = 0;
+                if (::WriteConsoleW(OutputHandle, Data + Offset, ChunkSize, &Written, nullptr) == FALSE)
+                {
+                    // A failed WriteConsoleW may have emitted a partial prefix. Do
+                    // not replay the line through the UTF-8 path in that case.
+                    return Written == 0 && Offset == 0 ? WriteUtf8() : false;
+                }
+                if (Written == 0 || Written > ChunkSize)
+                    return false;
+                Offset += Written;
+            }
+            return true;
+        }
+
+        return WriteUtf8();
+    }
+
+    std::string FormatAnsiLine(char const* const Open, char const* const Close, char const* const SeverityToken, SFXName const Category,
+        char const* const Data, size_t const Size, float const Seconds)
+    {
+        char Prefix[256]{};
+        sprintf_s(Prefix, _countof(Prefix), "[%07.3f] [%s %s] ", Seconds, SeverityToken, Category.GetName());
+
+        std::string Result;
+        Result.reserve(std::strlen(Open) + std::strlen(Prefix) + Size + std::strlen(Close) + 1);
+        Result += Open;
+        Result += Prefix;
+        if (Data != nullptr)
+            Result.append(Data, Size);
+        Result += Close;
+        Result.push_back('\n');
+        return Result;
+    }
+
+    std::wstring FormatUnicodeLine(wchar_t const* const Open, wchar_t const* const Close, wchar_t const* const SeverityToken, SFXName const Category,
+        wchar_t const* const Data, size_t const Size, float const Seconds)
+    {
+        wchar_t Prefix[256]{};
+        swprintf_s(Prefix, _countof(Prefix), L"[%07.3f] [%s %S] ", Seconds, SeverityToken, Category.GetName());
+
+        std::wstring Result;
+        Result.reserve(std::wcslen(Open) + std::wcslen(Prefix) + Size + std::wcslen(Close) + 1);
+        Result += Open;
+        Result += Prefix;
+        if (Data != nullptr)
+            Result.append(Data, Size);
+        Result += Close;
+        Result.push_back(L'\n');
+        return Result;
+    }
+}
+
 FormatStyleA const& GetFormatStyleShortA(ESeverity const Severity) noexcept
 {
-    static FormatStyleA s_styleTrace    { stdout, false,    "TRC",      "\x1b[1m\x1b[30m", "\x1b[0m" };     // bright black (= darkgray)
-    static FormatStyleA s_styleDebug    { stdout, false,    "DBG",      "\x1b[0m", "\x1b[0m" };             // default
-    static FormatStyleA s_styleInfo     { stdout, false,    "INF",      "\x1b[1m\x1b[34m", "\x1b[0m" };     // bright blue
-    static FormatStyleA s_styleWarn     { stdout, true,     "WRN",      "\x1b[33m", "\x1b[0m" };            // yellow
-    static FormatStyleA s_styleError    { stdout, true,     "ERR",      "\x1b[1m\x1b[31m", "\x1b[0m" };     // bright red
-    static FormatStyleA s_styleDefault  { stdout, true,     "N/A",      "", "" };
+    static FormatStyleA s_styleTrace    { false,    "TRC",      "\x1b[1m\x1b[30m", "\x1b[0m" };     // bright black (= darkgray)
+    static FormatStyleA s_styleDebug    { false,    "DBG",      "\x1b[0m", "\x1b[0m" };             // default
+    static FormatStyleA s_styleInfo     { false,    "INF",      "\x1b[1m\x1b[34m", "\x1b[0m" };     // bright blue
+    static FormatStyleA s_styleWarn     { true,     "WRN",      "\x1b[33m", "\x1b[0m" };            // yellow
+    static FormatStyleA s_styleError    { true,     "ERR",      "\x1b[1m\x1b[31m", "\x1b[0m" };     // bright red
+    static FormatStyleA s_styleDefault  { true,     "N/A",      "", "" };
 
     switch (Severity)
     {
@@ -52,12 +155,12 @@ FormatStyleA const& GetFormatStyleShortA(ESeverity const Severity) noexcept
 
 FormatStyleW const& GetFormatStyleShortW(ESeverity const Severity) noexcept
 {
-    static FormatStyleW s_styleTrace    { stdout, false,    L"TRC",     L"\x1b[1m\x1b[30m", L"\x1b[0m" };   // bright black (= darkgray)
-    static FormatStyleW s_styleDebug    { stdout, false,    L"DBG",     L"\x1b[0m", L"\x1b[0m" };           // default
-    static FormatStyleW s_styleInfo     { stdout, false,    L"INF",     L"\x1b[1m\x1b[34m", L"\x1b[0m" };   // bright blue
-    static FormatStyleW s_styleWarn     { stdout, true,     L"WRN",     L"\x1b[33m", L"\x1b[0m" };          // yellow
-    static FormatStyleW s_styleError    { stdout, true,     L"ERR",     L"\x1b[1m\x1b[31m", L"\x1b[0m" };   // bright red
-    static FormatStyleW s_styleDefault  { stdout, true,     L"N/A",     L"", L"" };
+    static FormatStyleW s_styleTrace    { false,    L"TRC",     L"\x1b[1m\x1b[30m", L"\x1b[0m" };   // bright black (= darkgray)
+    static FormatStyleW s_styleDebug    { false,    L"DBG",     L"\x1b[0m", L"\x1b[0m" };           // default
+    static FormatStyleW s_styleInfo     { false,    L"INF",     L"\x1b[1m\x1b[34m", L"\x1b[0m" };   // bright blue
+    static FormatStyleW s_styleWarn     { true,     L"WRN",     L"\x1b[33m", L"\x1b[0m" };          // yellow
+    static FormatStyleW s_styleError    { true,     L"ERR",     L"\x1b[1m\x1b[31m", L"\x1b[0m" }; // bright red
+    static FormatStyleW s_styleDefault  { true,     L"N/A",     L"", L"" };
 
     switch (Severity)
     {
@@ -74,56 +177,64 @@ FormatStyleW const& GetFormatStyleShortW(ESeverity const Severity) noexcept
 // ! BasicConsoleLoggerOutput implementation.
 // ========================================
 
-BasicConsoleLoggerOutput::BasicConsoleLoggerOutput() = default;
+BasicConsoleLoggerOutput::BasicConsoleLoggerOutput(HANDLE const InOutputHandle)
+    : OutputHandle{ InOutputHandle }
+{
+}
 BasicConsoleLoggerOutput::~BasicConsoleLoggerOutput() noexcept {}
 
 void BasicConsoleLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Severity, SFXName const Category,
     char const* const Data, size_t const Size, float const Seconds, FormatStyleA const& Style)
 {
-    std::fprintf(Style.OutStream, "[%07.3f] [%s %s] %s\n", Seconds, Style.SevToken, Category.GetName(), Data);
+    std::string const Line = FormatAnsiLine("", "", Style.SevToken, Category, Data, Size, Seconds);
+    WriteBytes(OutputHandle, Line.data(), Line.size());
     MILAN_UNUSED_4(Place, Severity, Category, Size);
 }
 
 void BasicConsoleLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Severity, SFXName const Category,
     wchar_t const* const Data, size_t const Size, float const Seconds, FormatStyleW const& Style)
 {
-    std::fwprintf(Style.OutStream, L"[%07.3f] [%s %S] %s\n", Seconds, Style.SevToken, Category.GetName(), Data);
+    std::wstring const Line = FormatUnicodeLine(L"", L"", Style.SevToken, Category, Data, Size, Seconds);
+    WriteWide(OutputHandle, Line.data(), Line.size());
     MILAN_UNUSED_4(Place, Severity, Category, Size);
 }
 
 void BasicConsoleLoggerOutput::Flush()
 {
-    std::fflush(stdout);
-    std::fflush(stderr);
+    if (OutputHandle != nullptr && OutputHandle != INVALID_HANDLE_VALUE)
+        ::FlushFileBuffers(OutputHandle);
 }
 
 
 // ! ConsoleLoggerOutput implementation.
 // ========================================
 
-ConsoleLoggerOutput::ConsoleLoggerOutput() = default;
+ConsoleLoggerOutput::ConsoleLoggerOutput(HANDLE const InOutputHandle)
+    : OutputHandle{ InOutputHandle }
+{
+}
 ConsoleLoggerOutput::~ConsoleLoggerOutput() noexcept {}
 
 void ConsoleLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Severity, SFXName const Category,
     char const* const Data, size_t const Size, float const Seconds, FormatStyleA const& Style)
 {
-    _fprintf_l(Style.OutStream, "%s[%07.3f] [%s] %s%s\n", s_sinkLocale,
-        Style.OpenSeq, Seconds, Category.GetName(), Data, Style.CloseSeq);
+    std::string const Line = FormatAnsiLine(Style.OpenSeq, Style.CloseSeq, Style.SevToken, Category, Data, Size, Seconds);
+    WriteBytes(OutputHandle, Line.data(), Line.size());
     MILAN_UNUSED_4(Place, Severity, Category, Size);
 }
 
 void ConsoleLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Severity, SFXName const Category,
     wchar_t const* const Data, size_t const Size, float const Seconds, FormatStyleW const& Style)
 {
-    _fwprintf_l(Style.OutStream, L"%s[%07.3f] [%S] %s%s\n", s_sinkLocale,
-        Style.OpenSeq, Seconds, Category.GetName(), Data, Style.CloseSeq);
+    std::wstring const Line = FormatUnicodeLine(Style.OpenSeq, Style.CloseSeq, Style.SevToken, Category, Data, Size, Seconds);
+    WriteWide(OutputHandle, Line.data(), Line.size());
     MILAN_UNUSED_4(Place, Severity, Category, Size);
 }
 
 void ConsoleLoggerOutput::Flush()
 {
-    std::fflush(stdout);
-    std::fflush(stderr);
+    if (OutputHandle != nullptr && OutputHandle != INVALID_HANDLE_VALUE)
+        ::FlushFileBuffers(OutputHandle);
 }
 
 
@@ -147,7 +258,6 @@ FileLoggerOutput::FileLoggerOutput(std::string_view const OutputPath, bool const
         ErrorText += std::strerror(errno);
 
         ::OutputDebugStringA(ErrorText.c_str());
-        std::fprintf(stderr, "%s\n", ErrorText.c_str());
     }
 }
 
@@ -362,12 +472,24 @@ void AsyncMilanLogger::Initialize()
 
 void AsyncMilanLogger::Cleanup() noexcept
 {
+    // Cleanup may be reached through more than one shutdown path. Once the
+    // worker has been joined there is no processing thread left to satisfy a
+    // flush request, so make the operation idempotent before calling Flush().
+    if (!ProcessThread.joinable())
+        return;
+
     Flush();
 
     bInitialized.clear();
-    bWaitingForExit.test_and_set();
 
-    BufferCondvar.notify_all();
+    {
+        // Must hold WriteMutex while setting the flag and notifying, otherwise the
+        // processing thread's BufferCondvar.wait() predicate check can race with this
+        // update and miss the notification entirely, hanging shutdown forever.
+        std::unique_lock Lock{ WriteMutex };
+        bWaitingForExit.test_and_set();
+        BufferCondvar.notify_all();
+    }
 
     if (ProcessThread.joinable())
         ProcessThread.join();
@@ -430,7 +552,11 @@ void AsyncMilanLogger::ProcessThreadInternal()
 
         if (bWaitingForFlush.test())
         {
-            //std::unique_lock Lock{ WriteMutex };
+            // Must hold WriteMutex here: FlushInternal() waits on FlushCondvar with the
+            // predicate `!bWaitingForFlush.test()` checked under this same lock. Clearing
+            // the flag and notifying without holding it can race with the waiter's
+            // check-then-block sequence and lose the wakeup, hanging the caller forever.
+            std::unique_lock Lock{ WriteMutex };
             bWaitingForFlush.clear();
             FlushCondvar.notify_all();
         }

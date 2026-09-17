@@ -146,8 +146,7 @@ void Details::OnFatalErrorW(CodePlaceW const& Place,
 
         ::OutputDebugStringW(AuxiliaryBuffer.data());
 
-        std::fwprintf(stderr, L"%s\n", AuxiliaryBuffer.data());
-        std::fflush(stderr);
+        ::OutputDebugStringW(L"\n");
     }
 
     if (BioRequestExit_orig != nullptr)

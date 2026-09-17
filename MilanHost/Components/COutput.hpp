@@ -5,6 +5,7 @@
 
 #pragma once
 #include "Base/Base.hpp"
+#include <SPI.h>
 
 
 /**
@@ -46,13 +47,16 @@ public:
 
 private:
 
-    void InitConsole();
+    void InitConsole(::LESDK::Initializer& Context);
     void InitMainLogger();
     void InitLoggingCategories(int& InitCount);
     void InitSuppressedCategories(int& InitCount);
 
     bool bUseAsyncLogger{ true };
     bool bUseVirtualTerminal{ true };
+    ISharedProxyInterface* ProxyInstance{ nullptr };
+    SPIConsoleLease ConsoleLease{ 0 };
+    HANDLE ConsoleHandle{ INVALID_HANDLE_VALUE };
 
     bool bEnableLogInternal{ false };
     bool bEnableWarnInternal{ false };

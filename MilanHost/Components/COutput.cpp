@@ -11,9 +11,10 @@
 
 BOOL WINAPI MilanConsoleHandler(DWORD const dwCtrlType)
 {
-    if (dwCtrlType <= CTRL_CLOSE_EVENT)
-        ::SingleDetachImpl();
-
+	MILAN_UNUSED(dwCtrlType);
+	// Console control callbacks run on a system-created thread. Do not perform
+	// component teardown, logger waits, or hook removal from that callback.
+	// Returning FALSE leaves the event to the normal Windows handling path.
     return false;
 }
 
@@ -78,8 +79,6 @@ void UObject_WarnInternal(UObject* const Context, FFrame* const Stack, [[maybe_u
 
 bool COutput::Initialize(::LESDK::Initializer& Context)
 {
-    MILAN_UNUSED(Context);
-
     // This is done here because we want to hook windows for icon changing, and the earliest it will show up
     // is likely right before we open console.
     INSTALL_HOOK_ONE_ADDR_NO_LOG(CreateWindowExW, CreateWindowExW);
@@ -90,7 +89,7 @@ bool COutput::Initialize(::LESDK::Initializer& Context)
     InitLoggingCategories(NameInitCount);
     InitSuppressedCategories(NameSuppressCount);
 
-    InitConsole();
+    InitConsole(Context);
     InitMainLogger();
 
     bUseAsyncLogger
@@ -108,20 +107,35 @@ bool COutput::Initialize(::LESDK::Initializer& Context)
 
 void COutput::Terminate(::LESDK::Initializer& Context)
 {
-    MILAN_UNUSED(Context);
-    MILAN_DEBUGW(ELOG_Teardown, L"component '%s' terminating", k_typeName);
+	MILAN_UNUSED(Context);
 
-    // This is not very safe, but it shouldn't change much...
-    reinterpret_cast<MilanLogger*>(gp_mainLogger)->Cleanup();
+#ifndef _FINAL_RELEASE
+    ::SetConsoleCtrlHandler(::MilanConsoleHandler, FALSE);
+#endif
 
     if (gp_mainLogger != nullptr)
     {
+        MILAN_DEBUGW(ELOG_Teardown, L"component '%s' terminating", k_typeName);
+
+        reinterpret_cast<MilanLogger*>(gp_mainLogger)->Cleanup();
         delete gp_mainLogger;
         gp_mainLogger = nullptr;
     }
 
 #ifndef _FINAL_RELEASE
-    ::LESDK::TerminateConsole();
+    // The logger and its async worker must be fully destroyed before the
+    // handle is closed and the broker lease is released.
+    if (ConsoleHandle != nullptr && ConsoleHandle != INVALID_HANDLE_VALUE)
+    {
+        ::CloseHandle(ConsoleHandle);
+        ConsoleHandle = INVALID_HANDLE_VALUE;
+    }
+	if (ProxyInstance != nullptr && ConsoleLease != 0)
+	{
+		ProxyInstance->ReleaseConsoleLease(ConsoleLease);
+		ConsoleLease = 0;
+	}
+	ProxyInstance = nullptr;
 #endif
 }
 
@@ -180,24 +194,51 @@ bool COutput::ToggleWarnInternal() noexcept
 #endif
 #endif
 
-void COutput::InitConsole()
+void COutput::InitConsole(::LESDK::Initializer& Context)
 {
+    MILAN_UNUSED(Context);
+
 #ifndef _FINAL_RELEASE
-    ::LESDK::InitializeConsole();
+    ProxyInstance = Context.ProxyInstance;
+    if (ProxyInstance == nullptr)
+    {
+        bUseVirtualTerminal = false;
+        ::OutputDebugStringA("MilanHost: SPI v4 console broker unavailable (no proxy context).\n");
+        return;
+    }
+
+    unsigned long ProxyVersion = 0;
+    ConsoleHandle = INVALID_HANDLE_VALUE;
+    if (ProxyInstance->GetVersion(&ProxyVersion) != SPIReturn::Success || ProxyVersion < SPI_VERSION_V4 ||
+        !ProxyInstance->AcquireConsoleLease(L"MilanHost", &ConsoleLease) || ConsoleLease == 0 ||
+        !ProxyInstance->OpenConsoleOutput(ConsoleLease, &ConsoleHandle) ||
+        ConsoleHandle == nullptr || ConsoleHandle == INVALID_HANDLE_VALUE)
+    {
+        // OpenConsoleOutput returns a caller-owned handle on success. Be
+        // defensive if a broker reports failure after assigning one anyway.
+        if (ConsoleHandle != nullptr && ConsoleHandle != INVALID_HANDLE_VALUE)
+            ::CloseHandle(ConsoleHandle);
+        if (ConsoleLease != 0)
+            ProxyInstance->ReleaseConsoleLease(ConsoleLease);
+        ConsoleLease = 0;
+        ConsoleHandle = INVALID_HANDLE_VALUE;
+        bUseVirtualTerminal = false;
+        ::OutputDebugStringA("MilanHost: failed to acquire SPI v4 console output; continuing with file logging.\n");
+        return;
+    }
+
     ::SetConsoleCtrlHandler(::MilanConsoleHandler, TRUE);
 
-    HANDLE const    ConsoleHandle = GetStdHandle(STD_OUTPUT_HANDLE);
     DWORD           dwOriginalMode = 0u;
 
-    if (ConsoleHandle == INVALID_HANDLE_VALUE) [[unlikely]]
+    if (::GetConsoleMode(ConsoleHandle, &dwOriginalMode) == 0) [[unlikely]]
     {
         bUseVirtualTerminal = FALSE;
         auto const ErrorCode = std::to_string(::GetLastError());
-        auto const ErrorMessage = std::string("can't get stdout handle: ") + ErrorCode;
+        auto const ErrorMessage = std::string("can't get console output handle: ") + ErrorCode;
         ::OutputDebugStringA(ErrorMessage.c_str());
     }
-    else if (0 == ::GetConsoleMode(ConsoleHandle, &dwOriginalMode) ||
-        0 == ::SetConsoleMode(ConsoleHandle, dwOriginalMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+    else if (0 == ::SetConsoleMode(ConsoleHandle, dwOriginalMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
     {
         bUseVirtualTerminal = FALSE;
         auto const ErrorCode = std::to_string(::GetLastError());
@@ -228,7 +269,8 @@ void COutput::InitMainLogger()
 
 #ifndef _FINAL_RELEASE
     // In DEBUG and RELEASE builds keep both sinks, and set file to overwrite previous log.
-    MainLogger->AddSink(bUseVirtualTerminal ? (ILoggerOutput*)(new ConsoleLoggerOutput) : new BasicConsoleLoggerOutput);
+    if (ConsoleHandle != nullptr && ConsoleHandle != INVALID_HANDLE_VALUE)
+        MainLogger->AddSink(bUseVirtualTerminal ? (ILoggerOutput*)(new ConsoleLoggerOutput(ConsoleHandle)) : new BasicConsoleLoggerOutput(ConsoleHandle));
     MainLogger->AddSink(new FileLoggerOutput{ LogFileName, false });
 #else
     // In FINAL_RELEASE builds only enable file sink, and set it to append.
