@@ -11,6 +11,7 @@
 #include "Components/CProfilers.hpp"
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
+#include "Engine/ConsoleAutoComplete.hpp"
 #include "Engine/ExtObject.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
@@ -138,6 +139,9 @@ UBOOL UGameEngine_LoadMap_hook(UGameEngine* const Context, FURL* const Url, UPen
 
     auto const Result = (*UGameEngine_LoadMap_orig)(Context, Url, Level, Error);
     if (!Result) MILAN_ERRORW(ELOG_EngineHooks, L"UGameEngine::LoadMap failed: %s", *(*Error));
+
+    // Refreshes exec-function/map completions for the new level (e.g. DLC-added commands).
+    if (Result) ConsoleAutoComplete::RebuildForCurrentLevel();
 
     return Result;
 }
@@ -759,7 +763,7 @@ int UPackageMap_SerializeObject_hook(UPackageMap* const Context, FArchive* const
     //    // Let's assume that this type only ever gets FInBunch as Archive.
     //    auto const InBunch = reinterpret_cast<FInBunch*>(Archive);
     //    MILAN_DEBUGW(ELOG_NetHooks, L"  Pos => %d, Bytes:", InBunch->BunchPos);
-    //    PrintHex(stdout, InBunch->Buffer.GetData(), 16, "");
+    //    PrintHex(consoleOutput, InBunch->Buffer.GetData(), 16, "");
     //}
 
     return Return;

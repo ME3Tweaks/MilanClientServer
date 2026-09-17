@@ -40,6 +40,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Containers/vector.hpp
   ${PROJ_FOLDER}/Engine/Canvas.cpp
   ${PROJ_FOLDER}/Engine/Canvas.hpp
+  ${PROJ_FOLDER}/Engine/ConsoleAutoComplete.cpp
+  ${PROJ_FOLDER}/Engine/ConsoleAutoComplete.hpp
   ${PROJ_FOLDER}/Engine/ExtObject.cpp
   ${PROJ_FOLDER}/Engine/ExtObject.hpp
   ${PROJ_FOLDER}/Engine/Hooks.cpp

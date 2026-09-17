@@ -1,5 +1,6 @@
 #include "Components/CGlobals.hpp"
 #include "Components/CImgui.hpp"
+#include "Engine/ConsoleAutoComplete.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
 #include "Misc/GuidCacheUtils.hpp"
@@ -37,6 +38,9 @@ void CGlobals::PostInitialize(::LESDK::Initializer& Context)
 {
     // Depends on CImgui initialization.
     InitWindowProc(Context);
+
+    // Engine is a base package, always loaded by this point (unlike e.g. SFXOnlineFoundation).
+    ConsoleAutoComplete::Install();
 }
 
 void CGlobals::UninstallSomeHooks(::LESDK::Initializer& Context)
