@@ -42,24 +42,6 @@ bool PatchMemory(void* address, const void* patch, const SIZE_T patchSize)
     return true;
 }
 
-// Licnesee 205->206
-void CConstants::PatchLicenseeVersion(::LESDK::Initializer& Init)
-{
-    // GMinPackageVersion
-    int* PatchOffset = Init.ResolveTyped<int>(REL_LICENSEE_RVA);
-    const int patchData = 206; // LMP
-    if (PatchOffset != nullptr)
-    {
-        auto res = PatchMemory(PatchOffset, &patchData, sizeof(patchData));
-        if (!res) {
-            MILAN_DEBUGW(ELOG_Startup, L"Failed to patch licensee version to LMP");
-        }
-        else {
-            MILAN_DEBUGW(ELOG_Startup, L"Patched licensee version to LMP %i: %s", *PatchOffset, PatchOffset);
-        }
-    }
-}
-
 // Makes mount files able to load on a full range of values.
 void CConstants::PatchMountLoading(::LESDK::Initializer& Init)
 {
@@ -177,7 +159,6 @@ void CConstants::PatchMPDLCFolderNameFilter(::LESDK::Initializer& Init)
 bool CConstants::Initialize(::LESDK::Initializer& Context)
 {
     PatchDocumentsDirectory(Context);
-    PatchLicenseeVersion(Context);
     PatchMountLoading(Context);
     PatchMPDLCFolderNameFilter(Context);
     PatchMultiplayerCommandGates(Context);

@@ -19,12 +19,6 @@ public:
 private:
 
     /// <summary>
-    /// Allows the game to load our LMP licensee packages
-    /// </summary>
-    /// <param name="Context"></param>
-    void PatchLicenseeVersion(::LESDK::Initializer& Context);
-
-    /// <summary>
     /// Redirects the documents directory to load LMP instead of ME3 so it is self contained game
     /// </summary>
     /// <param name="Context"></param>
