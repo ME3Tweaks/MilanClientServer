@@ -44,7 +44,10 @@ public enum SearchStage
 [JsonConverter(typeof(JsonStringEnumConverter<CandidateKind>))]
 public enum CandidateKind
 {
-    // Host-reported private address (RFC 1918, link-local, or 100.64/10) with the game port.
+    // Source address and port of the peer's authenticated UDP binding request. This is
+    // the game socket's NAT mapping only if the peer sent it from that socket.
+    PublicObserved,
+    // Peer-reported private address (RFC 1918, link-local, or 100.64/10) with its game port.
     Lan,
     // Address the host's control request came from, with the host-reported game port.
     // Unverified: only reachable when the host has a manual or router-mapped forward.
@@ -72,13 +75,18 @@ public sealed record LobbySnapshot(
 
 public sealed record CreateLobbyRequest(string GameVersion, LobbySnapshot State);
 
+// Credentials for UDP endpoint discovery (see Discovery.cs): a 16-byte ticket ID and
+// a 32-byte HMAC secret, both base64url. The server's UDP port is in /v1/info.
+public sealed record UdpTicket(string TicketId, string Secret);
+
 public sealed record CreateLobbyResponse(
     string LobbyId,
     string HostKey,
     string InviteCode,
     long Revision,
     DateTimeOffset ExpiresAt,
-    int HeartbeatSeconds);
+    int HeartbeatSeconds,
+    UdpTicket UdpTicket);
 
 // Stale is true when the report was older than the stored revision and was ignored.
 // The lease is refreshed either way.
@@ -119,13 +127,40 @@ public sealed record LobbySummary(
 
 // SamePublicAddress is only a locality hint: CGNAT can put unrelated households
 // behind one address, so clients must still probe LAN candidates before using them.
+// TraversalKey is shared with the host (through its introduction) to authenticate
+// direct peer probes; the server never sees those probes.
 public sealed record JoinReservation(
     string ReservationId,
     string JoinKey,
     LobbySummary Lobby,
     IReadOnlyList<EndpointCandidate> HostCandidates,
     bool SamePublicAddress,
+    DateTimeOffset ExpiresAt,
+    UdpTicket UdpTicket,
+    string TraversalKey);
+
+// Joiner-reported once its game socket exists, so the host can also try the LAN path.
+public sealed record JoinerCandidatesRequest(int GamePort, IReadOnlyList<string>? LanAddresses = null);
+
+// Long-poll results carry the lobby's event version; pass it back as "after" to wait
+// for the next change.
+public sealed record ReservationStatus(
+    long Version,
+    IReadOnlyList<EndpointCandidate> HostCandidates,
+    bool SamePublicAddress,
+    bool Joined,
     DateTimeOffset ExpiresAt);
+
+public sealed record Introduction(
+    string ReservationId,
+    string TraversalKey,
+    IReadOnlyList<EndpointCandidate> JoinerCandidates,
+    bool SamePublicAddress,
+    bool Joined,
+    DateTimeOffset ExpiresAt);
+
+// Every live reservation for the lobby, not just changed ones.
+public sealed record IntroductionList(long Version, IReadOnlyList<Introduction> Introductions);
 
 public sealed record ServerInfo(
     int ProtocolVersion,
@@ -133,6 +168,8 @@ public sealed record ServerInfo(
     int LobbyLeaseSeconds,
     int ReservationSeconds,
     int SearchSeconds,
-    int MaxPlayersCeiling);
+    int MaxPlayersCeiling,
+    int LongPollSeconds,
+    int UdpPort);
 
 public sealed record ServerError(string Code, string Message);

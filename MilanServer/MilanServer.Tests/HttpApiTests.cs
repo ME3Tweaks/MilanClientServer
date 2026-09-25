@@ -1,5 +1,8 @@
+using System.Buffers.Binary;
+using System.Buffers.Text;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Net.Http.Json;
 using System.Text;
 using Microsoft.AspNetCore.Hosting;
@@ -7,12 +10,18 @@ using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace MilanServer.Tests;
 
-public sealed class HttpApiTests : IClassFixture<WebApplicationFactory<Program>>
+// Binds UDP discovery to an ephemeral port so tests never collide with a running server.
+public sealed class MilanFactory : WebApplicationFactory<Program>
+{
+    protected override void ConfigureWebHost(IWebHostBuilder builder) => builder.UseSetting("Milan:UdpPort", "0");
+}
+
+public sealed class HttpApiTests : IClassFixture<MilanFactory>
 {
     const string Version = "milan-1.0.0";
     readonly WebApplicationFactory<Program> _factory;
 
-    public HttpApiTests(WebApplicationFactory<Program> factory)
+    public HttpApiTests(MilanFactory factory)
     {
         _factory = factory;
     }
@@ -109,9 +118,10 @@ public sealed class HttpApiTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task Info_ReportsProtocolAndTimings()
     {
-        ServerInfo? info = await _factory.CreateClient().GetFromJsonAsync<ServerInfo>("/v1/info", Ct);
+        ServerInfo info = (await _factory.CreateClient().GetFromJsonAsync<ServerInfo>("/v1/info", Ct))!;
 
-        Assert.Equal(new ServerInfo(Api.ProtocolVersion, 20, 60, 30, 120, 16), info);
+        Assert.Equal(new ServerInfo(Api.ProtocolVersion, 20, 60, 30, 120, 16, 25, info.UdpPort), info);
+        Assert.NotEqual(0, info.UdpPort);
     }
 
     [Fact]
@@ -130,5 +140,43 @@ public sealed class HttpApiTests : IClassFixture<WebApplicationFactory<Program>>
         HttpResponseMessage rejected = await client.PostAsJsonAsync("/v1/searches", new SearchRequest(Version), Ct);
         Assert.Equal(HttpStatusCode.TooManyRequests, rejected.StatusCode);
         Assert.Equal("rate_limited", (await rejected.Content.ReadFromJsonAsync<ServerError>(Ct))?.Code);
+    }
+
+    [Fact]
+    public async Task UdpBinding_ReachesJoinersAndWakesHostPoll()
+    {
+        HttpClient client = _factory.CreateClient();
+        ServerInfo info = (await client.GetFromJsonAsync<ServerInfo>("/v1/info", Ct))!;
+        HttpResponseMessage created = await client.PostAsJsonAsync("/v1/lobbies", new CreateLobbyRequest(Version, State()), Ct);
+        CreateLobbyResponse lobby = (await created.Content.ReadFromJsonAsync<CreateLobbyResponse>(Ct))!;
+
+        // Stand-in for the host's game socket.
+        using UdpClient gameSocket = new(new IPEndPoint(IPAddress.Loopback, 0));
+        byte[] ticketId = Base64Url.DecodeFromChars(lobby.UdpTicket.TicketId);
+        byte[] secret = Base64Url.DecodeFromChars(lobby.UdpTicket.Secret);
+        byte[] request = new byte[DiscoveryPacket.RequestLength];
+        DiscoveryPacket.WriteRequest(request, BinaryPrimitives.ReadUInt128BigEndian(ticketId), 1, secret);
+        await gameSocket.SendAsync(request, new IPEndPoint(IPAddress.Loopback, info.UdpPort), Ct);
+
+        using CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        UdpReceiveResult received = await gameSocket.ReceiveAsync(timeout.Token);
+        Assert.True(DiscoveryPacket.TryReadResponse(received.Buffer, secret, out _, out _, out IPEndPoint observed));
+        Assert.Equal(((IPEndPoint)gameSocket.Client.LocalEndPoint!).Port, observed.Port);
+
+        HttpResponseMessage first = await client.SendAsync(
+            Authorized(HttpMethod.Post, $"/v1/lobbies/{lobby.LobbyId}/introductions/poll", lobby.HostKey), Ct);
+        IntroductionList initial = (await first.Content.ReadFromJsonAsync<IntroductionList>(Ct))!;
+        Assert.Empty(initial.Introductions);
+
+        Task<HttpResponseMessage> waiting = client.SendAsync(
+            Authorized(HttpMethod.Post, $"/v1/lobbies/{lobby.LobbyId}/introductions/poll?after={initial.Version}", lobby.HostKey), Ct);
+        HttpResponseMessage redeemed = await client.PostAsJsonAsync("/v1/invites/redeem",
+            new RedeemInviteRequest(lobby.InviteCode, Version), Ct);
+        JoinReservation reservation = (await redeemed.Content.ReadFromJsonAsync<JoinReservation>(Ct))!;
+        Assert.Equal(new EndpointCandidate("127.0.0.1", observed.Port, CandidateKind.PublicObserved), reservation.HostCandidates[0]);
+
+        IntroductionList woken = (await (await waiting.WaitAsync(TimeSpan.FromSeconds(10), Ct)).Content.ReadFromJsonAsync<IntroductionList>(Ct))!;
+        Assert.Equal(reservation.ReservationId, Assert.Single(woken.Introductions).ReservationId);
     }
 }

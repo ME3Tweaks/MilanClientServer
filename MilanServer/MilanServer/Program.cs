@@ -16,6 +16,8 @@ builder.Services.AddSingleton<IValidateOptions<MilanServerOptions>, MilanServerO
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<MatchmakingStore>();
 builder.Services.AddHostedService<ExpirySweeper>();
+builder.Services.AddSingleton<DiscoveryEndpoint>();
+builder.Services.AddHostedService<UdpDiscoveryService>();
 
 builder.WebHost.ConfigureKestrel(kestrel =>
 {

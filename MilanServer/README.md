@@ -1,12 +1,14 @@
 # MilanServer
 
 Accountless matchmaking and rendezvous server for player-hosted LMP matches. It
-tracks lobbies in memory, runs quick-match searches, redeems invite codes, and
-reserves capacity for joiners. It never carries UE3 game traffic.
+tracks lobbies in memory, runs quick-match searches, redeems invite codes, reserves
+capacity for joiners, observes each peer's public UDP endpoint, and introduces
+joiners to hosts. It never carries UE3 game traffic.
 
-Status: the lobby state machine and v1 HTTP control API are implemented and unit
-tested. UDP endpoint discovery, NAT traversal, host introductions, and MilanHost
-integration do not exist yet. Nothing here has been tested with the game. See
+Status: the lobby state machine, v1 HTTP control API, UDP endpoint discovery, and
+host introductions are implemented and tested against the server alone. Peer-to-peer
+probing and MilanHost integration do not exist yet. Nothing here has been tested with
+the game, so an observed endpoint is not yet evidence of a working NAT path. See
 [Docs/Matchmaking-NAT-Handoff.md](../Docs/Matchmaking-NAT-Handoff.md) for the plan.
 
 ## Build and test
@@ -25,6 +27,9 @@ dotnet run --project MilanServer -- --urls http://0.0.0.0:5080
 ```
 
 Without `--urls` (or `ASPNETCORE_URLS`), Kestrel listens on `localhost:5000` only.
+UDP endpoint discovery listens on IPv4 port 5081 (`Milan:UdpPort`) on all interfaces.
+Clients read the port from `/v1/info`, so a firewall or container must expose it
+with the same number.
 
 Host, search, and join keys are bearer secrets. On the Internet, serve the API over
 TLS, either through Kestrel certificate configuration or behind a reverse proxy.
@@ -67,6 +72,9 @@ A wrong key and a missing object return the same 404.
 | POST | `/v1/searches/{id}/poll` | search key | Advance the search; may reserve a slot |
 | DELETE | `/v1/searches/{id}` | search key | Cancel; also releases an unjoined reservation |
 | POST | `/v1/invites/redeem` | invite code in body | Reserve a slot through an invite |
+| POST | `/v1/lobbies/{id}/introductions/poll?after=N` | host key | Long-poll: every live reservation with joiner candidates and traversal key |
+| PUT | `/v1/reservations/{id}/candidates` | join key | Joiner's game port and LAN addresses, once its socket exists |
+| POST | `/v1/reservations/{id}/poll?after=N` | join key | Long-poll: current host candidates |
 | POST | `/v1/reservations/{id}/joined` | join key | Joiner was admitted; slot is released on the host's next current report |
 | DELETE | `/v1/reservations/{id}` | join key | Give up a reservation |
 
@@ -85,3 +93,30 @@ private lobbies and during extraction.
 Map, enemy, and difficulty IDs are opaque, so new game options need no server
 update. Only the search "Any" sentinels are special: map `-1`, enemy `127`,
 difficulty `127`.
+
+Long-polls return immediately when `after` is omitted or differs from the lobby's
+current event version. Otherwise they wait up to `LongPollSeconds` (25) for a change.
+Pass the returned `version` back as `after`. Lease heartbeats with unchanged state do
+not wake them.
+
+## UDP endpoint discovery v1
+
+Lobby creation returns a host `udpTicket`, and each reservation returns a joiner
+`udpTicket`: a 16-byte ID and a 32-byte HMAC secret, both base64url. A peer sends a
+64-byte binding request **from its UE3 game socket** to the server's UDP port. The
+server replies with a 56-byte response giving the source address and port it saw.
+That becomes the peer's `PublicObserved` candidate, which the other side sees
+through its long-poll. The byte layout is documented in `MilanServer/Discovery.cs`.
+
+- Requests carry an HMAC-SHA256 tag (truncated to 16 bytes). They are accepted only
+  if the sequence number is higher than any accepted before and at least
+  `DiscoveryMinIntervalMilliseconds` (200) has passed. Everything else is dropped
+  without a reply.
+- Responses are authenticated with the same secret and are smaller than requests,
+  so the server cannot amplify traffic. It never forwards packets.
+- Resend about every 20 seconds while hosting, to keep the NAT mapping open and
+  notice address changes.
+- Each reservation also carries a `traversalKey`, which the host receives in its
+  introduction. Peers use it to authenticate the probes they send each other; the
+  server never sees those probes.
+

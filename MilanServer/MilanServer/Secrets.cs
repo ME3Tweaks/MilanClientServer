@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
@@ -16,6 +17,20 @@ internal static class Secrets
     public static string NewId() => Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16));
 
     public static string NewKey() => Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));
+
+    public static (UInt128 Id, byte[] Secret) NewUdpTicket()
+    {
+        Span<byte> id = stackalloc byte[16];
+        RandomNumberGenerator.Fill(id);
+        return (BinaryPrimitives.ReadUInt128BigEndian(id), RandomNumberGenerator.GetBytes(32));
+    }
+
+    public static UdpTicket ToContract(UInt128 id, byte[] secret)
+    {
+        Span<byte> idBytes = stackalloc byte[16];
+        BinaryPrimitives.WriteUInt128BigEndian(idBytes, id);
+        return new UdpTicket(Base64Url.EncodeToString(idBytes), Base64Url.EncodeToString(secret));
+    }
 
     public static byte[] Hash(string key) => SHA256.HashData(Encoding.UTF8.GetBytes(key));
 

@@ -2,14 +2,14 @@
 
 Last updated: 2026-09-25
 
-Status: handoff step 1 (lobby state machine and HTTP control API) is implemented and unit tested on branch `MilanServerBlaze`. UDP endpoint discovery, traversal, host introductions, and all game/client integration are not implemented. Nothing has been tested with LMP.
+Status: on branch `MilanServerBlaze`, step 1 (lobby state machine and HTTP API) is committed by the user. The server side of step 2 (UDP endpoint discovery and host introductions) is implemented and tested against the server alone, and is uncommitted as of this update. Peer-to-peer probing and all game/client integration are not implemented. Nothing has been tested with LMP.
 
 ## Current implementation handoff (2026-09-25, second agent)
 
 ### Branch and repository decisions
 
 - The user chose a new branch, **`MilanServerBlaze`** (cut from `main` at `9fa4dbc`), for this work. **Do not use `origin/server`.** The user says it is old. That branch has an unrelated `MilanServer/` .NET solution (Milan.Core/Milan.GameServer, framed TCP protocol, EF Core and account models) by other contributors. The README on `main` still calls `server` the primary branch; that note is stale for this work.
-- As of this update, nothing is committed. The new files are untracked on `MilanServerBlaze`. The unrelated working-tree changes are untouched: `Patching/_index.list`, untracked `Patching/*.diff`, and the `ThirdParty/LExSDKv2` submodule. Do not stage or reset them. `git` may need `-c safe.directory='B:/UserProfile/source/repos/ME3Tweaks/MilanClientServer'`.
+- The user reviews and commits changes themselves; agents only stage files and suggest a commit message. Step 1 is committed; the step 2 server-side changes are not. The unrelated working-tree changes are untouched: `Patching/_index.list`, untracked `Patching/*.diff`, and the `ThirdParty/LExSDKv2` submodule. Do not stage or reset them. `git` may need `-c safe.directory='B:/UserProfile/source/repos/ME3Tweaks/MilanClientServer'`.
 - The user confirmed that map, enemy, and difficulty IDs are **not fixed**: new ones may be added without a server update, and they do not change the logic. The server therefore treats IDs as opaque integers. Only the search sentinels (map `-1`, enemy/difficulty `127`) are special, and hosted states may not use them. Matching compares selected IDs by equality. That alone makes a Random map lobby (ID 0) fail a specific-map search, and makes Random Faction/Coalition/Unified match by mode ID.
 
 ### What exists (source evidence plus unit tests only)
@@ -41,9 +41,32 @@ Status: handoff step 1 (lobby state machine and HTTP control API) is implemented
   - Option validation at startup.
 - Verification: `dotnet test` passes 69 tests. Two deliberate mutations were caught: removing the private-lobby filter and removing the joined-reservation release. A manual Kestrel smoke run checked create/redeem, 413 on oversize bodies, and real remote-address capture. A self-contained `linux-x64` single-file publish succeeded. No Docker image was built.
 
+### Step 2 server side: discovery and introductions (source plus tests only)
+
+- `Discovery.cs` defines UDP discovery v1. A binding request is 64 bytes: magic `MLNR`, version, type, a 16-byte ticket ID, a u64 sequence, zero padding, and a 16-byte truncated HMAC-SHA256 tag. The 56-byte response echoes the ticket and sequence and gives the observed IPv4 address and port, with its own tag. Responses are smaller than requests.
+- The server replies only to authenticated requests with a sequence above the last accepted one, at most once per 200 ms per ticket, and only while the ticket's lobby or reservation is live. Everything else is dropped silently, and nothing is ever forwarded. The listener is IPv4-only, on `Milan:UdpPort` (default 5081, reported in `/v1/info`), and binds before startup completes.
+- Tickets: the lobby gets a host ticket at creation, and each reservation gets a joiner ticket plus a `traversalKey` for peer probes. The host receives the `traversalKey` in its introduction; the server never sees peer probes.
+- Host candidates for joiners are ordered `PublicObserved`, then `PublicReported` (only if different), then `Lan`. Joiner candidates for the host are `PublicObserved` from the joiner's binding, plus `Lan` from `PUT /v1/reservations/{id}/candidates`. The joiner can only report LAN candidates once its game socket and port exist. `SamePublicAddress` prefers observed addresses.
+- Long-polls:
+  - `POST /v1/lobbies/{id}/introductions/poll?after=N` (host key) returns every live reservation.
+  - `POST /v1/reservations/{id}/poll?after=N` (join key) returns current host candidates.
+  - Both wait up to 25 s on a per-lobby event version. It is bumped by reservation add/remove/joined, candidate or observed-endpoint changes, host address changes, and state content changes. Same-content heartbeats and lobby removal (which wakes waiters into a 404) are handled.
+- Verification: 89 tests pass, including a real loopback UDP round trip through the hosted service and an HTTP long-poll woken by an invite redemption. Deliberately removing replay protection, and separately removing the reservation wake-up, each failed the tests.
+
+**Proposed connection sequence for the client work (not implemented or validated):**
+1. The host creates a lobby.
+2. The host sends a binding request from the **UE3 game socket** about every 20 s, and long-polls introductions.
+3. The joiner redeems an invite or matches a search.
+4. Once the joiner's game socket exists, it sends its own binding request and reports its port and LAN addresses.
+5. Both sides send authenticated probes with the `traversalKey` to each other's candidates for a few seconds: LAN first when `SamePublicAddress`, observed public otherwise.
+6. On the first verified probe response, the joiner starts the UE3 connection to that endpoint, then reports `joined` after admission.
+7. The host clears finished introductions when their reservations disappear.
+
+The peer probe packet format is still undesigned. Reuse the discovery layout style: a distinct magic, fixed length, and an HMAC keyed by `traversalKey` that binds the reservation ID and direction. The open problems in "Same-NAT topology" and "Working hypothesis" below still decide whether steps 2 and 4 are possible on the real game socket.
+
 ### Known limits and open design points
 
-- **The host is never told about joiners.** Introductions (host learns the joiner's candidates and reservation ID for probing) belong with UDP discovery in step 2. A long-poll or WebSocket host channel is the likely shape.
+- The host learns about joiners only by long-polling. Consider a WebSocket if polling proves too slow or heavy in practice.
 - Reservation accounting is best effort. A heartbeat that was in flight before an admission can release a `joined` slot slightly early. The game still enforces its own cap.
 - Accountless griefing from many addresses (holding public slots through repeated searches) is limited only by per-address and rate limits.
 - Invite codes change when a host re-creates its lobby after a server restart. Allowing clients to choose codes would let other clients claim codes that belong to someone else.
@@ -72,8 +95,8 @@ Test two clients in one household joining a remote host as **two distinct player
 
 ### Next agent's immediate steps
 
-1. **Done (unit-tested only):** lobby state machine and v1 HTTP API, described above. Before building on it, ask the user whether to commit it on `MilanServerBlaze`. The contracts are still provisional; bump `Api.ProtocolVersion` on breaking changes once a client exists.
-2. Add a host introduction channel (pending reservations with joiner candidates) and bounded UDP endpoint discovery with authentication and anti-reflection limits, then verify its packets can originate from the **actual UE3 gameplay socket** before claiming NAT traversal. The earlier Ghidra pass identified the socket lifecycle but not a safe client receive/interception point. Do not use a separate preliminary UDP socket as proof that the game socket mapping works.
+1. **Done and committed by the user (unit-tested only):** lobby state machine and v1 HTTP API, described above. The user commits changes themselves; stage only and suggest a message. The contracts are still provisional; bump `Api.ProtocolVersion` on breaking changes once a client exists.
+2. **Server side done (tested against the server only):** host introduction channel and bounded UDP endpoint discovery. Remaining client work: send and receive discovery and peer probes with authentication and anti-reflection limits, then verify its packets can originate from the **actual UE3 gameplay socket** before claiming NAT traversal. The earlier Ghidra pass identified the socket lifecycle but not a safe client receive/interception point. Do not use a separate preliminary UDP socket as proof that the game socket mapping works.
 3. Add Windows/Linux packaging and container documentation. A single .NET server instance with ephemeral state is a reasonable first deployment; account for host re-registration after a restart. AWS UDP ingress likely needs a Network Load Balancer if using ECS Fargate. Keep independent hosting possible.
 4. Integrate MilanHost and the Discord ASI only after the socket and menu-flow boundaries are proven. The Discord ASI source is outside this repository at `B:\UserProfile\source\repos\LExASIs\DiscordIntegration`; it was inspected but not changed. Preserve the ability to run LMP without Discord for direct/invite-code use.
 5. Run real LMP tests: one LAN host and join, two distinct consumer NATs, both same-house topologies above, failed hairpin, rapid setting changes during a search, full lobby, extraction, host crash/expiry, and game travel/socket recreation. Label source/static evidence separately from runtime proof.

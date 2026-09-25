@@ -17,11 +17,11 @@ public static class Api
 
         RouteGroupBuilder v1 = app.MapGroup("/v1");
 
-        v1.MapGet("/info", (IOptions<MilanServerOptions> options) =>
+        v1.MapGet("/info", (IOptions<MilanServerOptions> options, DiscoveryEndpoint discovery) =>
         {
             MilanServerOptions o = options.Value;
             return new ServerInfo(ProtocolVersion, o.HeartbeatSeconds, o.LobbyLeaseSeconds,
-                o.ReservationSeconds, o.SearchSeconds, o.MaxPlayersCeiling);
+                o.ReservationSeconds, o.SearchSeconds, o.MaxPlayersCeiling, o.LongPollSeconds, discovery.Port);
         });
 
         v1.MapPost("/lobbies", (CreateLobbyRequest request, HttpContext http, MatchmakingStore store) =>
@@ -37,6 +37,10 @@ public static class Api
 
         v1.MapPost("/lobbies/{lobbyId}/invite", (string lobbyId, HttpContext http, MatchmakingStore store) =>
             Respond(store.RotateInviteCode(lobbyId, BearerToken(http)), Results.Ok));
+
+        // Long-poll; "after" is the version from the previous response (omit it to return at once).
+        v1.MapPost("/lobbies/{lobbyId}/introductions/poll", async (string lobbyId, long? after, HttpContext http, MatchmakingStore store) =>
+            Respond(await store.PollIntroductionsAsync(lobbyId, BearerToken(http), after ?? -1, http.RequestAborted), Results.Ok));
 
         v1.MapPost("/searches", (SearchRequest request, HttpContext http, MatchmakingStore store) =>
             Respond(store.CreateSearch(request, http.Connection.RemoteIpAddress),
@@ -56,6 +60,13 @@ public static class Api
 
         v1.MapPost("/reservations/{reservationId}/joined", (string reservationId, HttpContext http, MatchmakingStore store) =>
             Respond(store.MarkReservationJoined(reservationId, BearerToken(http))));
+
+        v1.MapPut("/reservations/{reservationId}/candidates",
+            (string reservationId, JoinerCandidatesRequest request, HttpContext http, MatchmakingStore store) =>
+                Respond(store.ReportJoinerCandidates(reservationId, BearerToken(http), request)));
+
+        v1.MapPost("/reservations/{reservationId}/poll", async (string reservationId, long? after, HttpContext http, MatchmakingStore store) =>
+            Respond(await store.PollReservationAsync(reservationId, BearerToken(http), after ?? -1, http.RequestAborted), Results.Ok));
 
         v1.MapDelete("/reservations/{reservationId}", (string reservationId, HttpContext http, MatchmakingStore store) =>
             Respond(store.CancelReservation(reservationId, BearerToken(http))));

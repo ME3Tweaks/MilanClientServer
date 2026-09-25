@@ -18,6 +18,14 @@ public sealed class MilanServerOptions
     public int MapWidenSeconds { get; set; } = 30;
     public int EnemyWidenSeconds { get; set; } = 60;
     public int SearchPollMilliseconds { get; set; } = 2000;
+    // Upper bound on how long introduction and reservation polls wait for a change.
+    public int LongPollSeconds { get; set; } = 25;
+
+    public bool UdpEnabled { get; set; } = true;
+    // 0 binds an ephemeral port (for tests). Behind port mapping, map it 1:1 because
+    // clients learn this port from /v1/info.
+    public int UdpPort { get; set; } = 5081;
+    public int DiscoveryMinIntervalMilliseconds { get; set; } = 200;
     // Server-side ceiling only. It is not evidence that LMP supports this many players.
     public int MaxPlayersCeiling { get; set; } = 16;
 
@@ -58,6 +66,12 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
         }
         if (options.SearchPollMilliseconds < 100)
             errors.Add("SearchPollMilliseconds must be at least 100.");
+        if (options.LongPollSeconds is < 1 or > 120)
+            errors.Add("LongPollSeconds must be between 1 and 120.");
+        if (options.UdpPort is < 0 or > 65535)
+            errors.Add("UdpPort must be between 0 and 65535.");
+        if (options.DiscoveryMinIntervalMilliseconds < 0)
+            errors.Add("DiscoveryMinIntervalMilliseconds must not be negative.");
         if (options.MaxPlayersCeiling is < 1 or > 64)
             errors.Add("MaxPlayersCeiling must be between 1 and 64.");
 
