@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="MilanServer/MilanServer.csproj" />
+  <Project Path="MilanServer.Tests/MilanServer.Tests.csproj" />
+</Solution>
