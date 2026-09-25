@@ -18,6 +18,7 @@ struct ClientConfig final
 {
     game::string                    ConnectHost{ "127.0.0.1" };
     int                             ConnectPort{ 11111 };
+    game::string                    MatchmakerUrl{ "http://127.0.0.1:5080" };
     game::vector<game::string>      LoggingSuppressed{};
 
     bool TryRead(std::wstring_view InPath, game::string& OutError) noexcept;

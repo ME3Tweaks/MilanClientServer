@@ -5,10 +5,10 @@ tracks lobbies in memory, runs quick-match searches, redeems invite codes, reser
 capacity for joiners, observes each peer's public UDP endpoint, and introduces
 joiners to hosts. It never carries UE3 game traffic.
 
-Status: the lobby state machine, v1 HTTP control API, UDP endpoint discovery, and
-host introductions are implemented and tested against the server alone. Peer-to-peer
-probing and MilanHost integration do not exist yet. Nothing here has been tested with
-the game, so an observed endpoint is not yet evidence of a working NAT path. See
+Status: the lobby state machine, v1 HTTP control API, UDP endpoint discovery, host
+introductions, peer probes, and MilanHost's console and Quick Match paths are implemented.
+Server tests and the MilanHost build pass; two LMP instances successfully joined through
+the Quick Match menu on one PC. A local join does not establish an Internet NAT path. See
 [Docs/Matchmaking-NAT-Handoff.md](../Docs/Matchmaking-NAT-Handoff.md) for the plan.
 
 ## Build and test

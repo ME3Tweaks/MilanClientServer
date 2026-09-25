@@ -1,4 +1,5 @@
 #include "Base/Base.hpp"
+#include "Components/CMatchmaking.hpp"
 #include "Engine/Intercept.hpp"
 #include "Online/SFXOnlineHijacks.hpp"
 
@@ -526,7 +527,8 @@ void SFXOnlineComponentBlazeGame::GetResolvedConnectString_Hook(USFXOnlineCompon
 
     MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::GetResolvedConnectString - SessionName = %s", *SessionName.ToString());
 
-    ConnectInfo = L"MPLobby?listen";
+    std::wstring const Target = COMPONENT(CMatchmaking).QuickMatchConnectString();
+    ConnectInfo = Target.empty() ? L"MPLobby?listen" : Target.c_str();
     *(UBOOL*)Result = TRUE;
 }
 
@@ -717,26 +719,36 @@ enum EQuickMatchResult : BYTE
 
 void SFXOnlineComponentBlazeGame::QuickMatch_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
 {
-    MILAN_UNUSED_3(Context, Stack, Result);
-    //QuickMatch_Original(Context, Stack, Result);
-
     NATIVE_GET_OBJECT_OPTIONAL(UOnlineGameSettings, quickMatchSettings, nullptr);
     NATIVE_FINISH();
 
-    MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::QuickMatch - quickMatchSettings = ...");
-    MILAN_CHECKW(quickMatchSettings->IsA<USFXOnlineGameSettings>(), L"");
+    USFXOnlineGameSettings* const Settings = quickMatchSettings != nullptr && quickMatchSettings->IsA<USFXOnlineGameSettings>()
+        ? static_cast<USFXOnlineGameSettings*>(quickMatchSettings) : nullptr;
+    if (Settings == nullptr)
+    {
+        MILAN_WARNW(ELOG_Matchmaking, L"BlazeGame::QuickMatch called without SFXOnlineGameSettings");
+        *(UBOOL*)Result = FALSE;
+        return;
+    }
 
-    USFXOnlineComponentBlazeGame_execOnQuickMatchComplete_Parms Parms{};
-    Parms.Result = EQMR_Failure;
-
-    SFXName const NAME_OnQuickMatchComplete(L"OnQuickMatchComplete", 0);
-    Context->ProcessDelegate(NAME_OnQuickMatchComplete, &Context->__OnQuickMatchComplete__Delegate, &Parms, nullptr);
-
-    for (FScriptDelegate const& Delegate : Context->QuickMatchCompleteDelegates)
-        Context->ProcessDelegate(NAME_OnQuickMatchComplete, &Delegate, &Parms, nullptr);
-
-    // Quick match search is kinda difficult to mock...
-    *(UBOOL*)Result = FALSE;
+    int const MapId = Settings->mME3MapName.Length() > 0
+        ? Settings->eventGetMasterMapID(Settings->mME3MapName) : -1;
+    int const EnemyModeId = Settings->EnemyType;
+    int const DifficultyId = Settings->Difficulty;
+    *(UBOOL*)Result = COMPONENT(CMatchmaking).StartQuickMatch(MapId, EnemyModeId, DifficultyId,
+        [Context](bool const Matched)
+        {
+            USFXOnlineComponentBlazeGame_execOnQuickMatchComplete_Parms Parms{};
+            Parms.Result = Matched ? EQMR_StartGame : EQMR_Failure;
+            SFXName const Name(L"OnQuickMatchComplete", 0);
+            // A script callback may clear its delegate. Snapshot the array before dispatch.
+            std::vector<FScriptDelegate> Delegates{};
+            for (FScriptDelegate const& Delegate : Context->QuickMatchCompleteDelegates)
+                Delegates.push_back(Delegate);
+            Context->ProcessDelegate(Name, &Context->__OnQuickMatchComplete__Delegate, &Parms, nullptr);
+            for (FScriptDelegate const& Delegate : Delegates)
+                Context->ProcessDelegate(Name, &Delegate, &Parms, nullptr);
+        });
 }
 
 void SFXOnlineComponentBlazeGame::CanStartMPMatch_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
@@ -834,6 +846,7 @@ void SFXOnlineComponentBlazeGame::CancelFindOnlineGames_Hook(USFXOnlineComponent
     NATIVE_FINISH();
 
     MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::CancelFindOnlineGames");
+    COMPONENT(CMatchmaking).CancelQuickMatch();
 
     USFXOnlineComponentBlazeGame_execOnCancelFindOnlineGamesComplete_Parms Parms{};
     Parms.bWasSuccessful = TRUE;

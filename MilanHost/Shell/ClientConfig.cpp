@@ -25,6 +25,7 @@ bool ClientConfig::TryRead(std::wstring_view const InPath, game::string& OutErro
 
         ConnectHost         = MLN_CONFIG(Table, "milan.connect.host", std::string);
         ConnectPort         = MLN_CONFIG(Table, "milan.connect.port", int);
+        MatchmakerUrl       = MLN_CONFIG_OPT(Table, "milan.matchmaker.url", std::string, std::string{ MatchmakerUrl.c_str() }).c_str();
 
     #ifndef _FINAL_RELEASE
         if (toml::array const* LoggingSuppressedArray = Table.at_path("milan.logging.suppressed").as_array())

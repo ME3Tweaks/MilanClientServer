@@ -21,6 +21,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Components/CCommands.hpp
   ${PROJ_FOLDER}/Components/CGlobals.cpp
   ${PROJ_FOLDER}/Components/CGlobals.hpp
+  ${PROJ_FOLDER}/Components/CMatchmaking.cpp
+  ${PROJ_FOLDER}/Components/CMatchmaking.hpp
   #${PROJ_FOLDER}/Components/CImgui.cpp
   #${PROJ_FOLDER}/Components/CImgui.hpp
   ${PROJ_FOLDER}/Components/CNetworkProfiler.cpp
@@ -55,8 +57,12 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/NetProf/NetProfHandlers.cpp
   ${PROJ_FOLDER}/NetProf/NetProfStream.cpp
   ${PROJ_FOLDER}/NetProf/NetProfStream.hpp
+  ${PROJ_FOLDER}/Online/MatchmakingNet.cpp
+  ${PROJ_FOLDER}/Online/MatchmakingNet.hpp
   ${PROJ_FOLDER}/Online/MPProfile.cpp
   ${PROJ_FOLDER}/Online/MPProfile.hpp
+  ${PROJ_FOLDER}/Online/Rendezvous.cpp
+  ${PROJ_FOLDER}/Online/Rendezvous.hpp
   ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeGame.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeHub.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeLogin.cpp
@@ -76,9 +82,9 @@ set (PROJ_SOURCES
 
 set (PROJ_LINKS
   LESDK-LE3
-  ImGui renderdoc-api tomlplusplus Zydis
+  ImGui nlohmann-json renderdoc-api tomlplusplus Zydis
   d3d11.lib dxgi.lib dxguid.lib
-  Ws2_32.lib
+  Ws2_32.lib Winhttp.lib Bcrypt.lib Iphlpapi.lib
 )
 
 add_library (${PROJ_TARGET} SHARED ${PROJ_SOURCES})
@@ -92,6 +98,10 @@ target_compile_options (${PROJ_TARGET} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${MILAN_
 target_include_directories (${PROJ_TARGET} PUBLIC ${PROJ_FOLDER})
 target_link_options (${PROJ_TARGET} PUBLIC ${MILAN_LINK_OPTIONS})
 target_link_libraries (${PROJ_TARGET} PUBLIC ${PROJ_LINKS})
+
+# Uses Winsock 2, WinHTTP, and IP Helper headers, which clash with the Winsock 1
+# declarations that the SDK precompiled header pulls in through <Windows.h>.
+set_source_files_properties (${PROJ_FOLDER}/Online/MatchmakingNet.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
 mln_organize_pchs (${PROJ_TARGET})
 

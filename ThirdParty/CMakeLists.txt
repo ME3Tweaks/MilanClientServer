@@ -55,6 +55,19 @@ add_subdirectory ("LExSDKv2")
 set_target_properties (LESDK-LE3 PROPERTIES FOLDER "ThirdParty")
 
 
+# ! nlohmann/json interface.
+# ========================================
+
+set (NLOHMANN_JSON_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/nlohmann")
+set (NLOHMANN_JSON_SOURCE "${NLOHMANN_JSON_FOLDER}/json.hpp")
+set (NLOHMANN_JSON_TARGET "nlohmann-json")
+
+add_library (${NLOHMANN_JSON_TARGET} INTERFACE ${NLOHMANN_JSON_SOURCE})
+set_target_properties (${NLOHMANN_JSON_TARGET} PROPERTIES FOLDER "ThirdParty")
+source_group (TREE "${NLOHMANN_JSON_FOLDER}" FILES ${NLOHMANN_JSON_SOURCE})
+target_include_directories (${NLOHMANN_JSON_TARGET} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+
+
 # ! RenderDoc API interface.
 # ========================================
 

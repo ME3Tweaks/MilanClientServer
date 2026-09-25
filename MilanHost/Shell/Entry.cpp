@@ -14,6 +14,7 @@
 #ifdef WITH_IMGUI
 #include "Components/CImgui.hpp"
 #endif
+#include "Components/CMatchmaking.hpp"
 #include "Components/CNetworkProfiler.hpp"
 #include "Components/COutput.hpp"
 #include "Components/CProfilers.hpp"
@@ -57,6 +58,7 @@ SPI_IMPLEMENT_ATTACH
     gp_componentContainer->Initialize<CImgui>(*gp_sdkContext);
 #endif
     gp_componentContainer->Initialize<CState>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CMatchmaking>(*gp_sdkContext);
 
 #ifndef _FINAL_RELEASE
     gp_componentContainer->Initialize<CNetworkProfiler>(*gp_sdkContext);
@@ -116,6 +118,7 @@ void SingleDetachImpl()
     gp_componentContainer->Terminate<CNetworkProfiler>(*gp_sdkContext);
 #endif
 
+    gp_componentContainer->Terminate<CMatchmaking>(*gp_sdkContext);
     gp_componentContainer->Terminate<CState>(*gp_sdkContext);
 #ifdef WITH_IMGUI
     gp_componentContainer->Terminate<CImgui>(*gp_sdkContext);

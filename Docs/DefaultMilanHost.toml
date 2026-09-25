@@ -12,6 +12,10 @@
 host = "localhost"
 port = 11111
 
+[milan.matchmaker]
+# MilanServer base URL (optional; this is the default). Change at runtime with mm.server <url>.
+url = "http://127.0.0.1:5080"
+
 [milan.logging]
 suppressed = [
   # "General",
@@ -30,4 +34,5 @@ suppressed = [
   # "NetHooksTrace",
   # "NetHooksRepl",
   # "NetProf",
+  # "Matchmaking",
 ]

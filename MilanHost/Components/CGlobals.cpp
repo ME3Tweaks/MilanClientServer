@@ -52,6 +52,9 @@ void CGlobals::UninstallSomeHooks(::LESDK::Initializer& Context)
     Context.UninstallHook("UObject::CallFunction");
     Context.UninstallHook("UGameEngine::Tick");
     Context.UninstallHook("UGameEngine::Exec");
+    // These call into CMatchmaking, which is terminated after this.
+    Context.UninstallHook("FSocketWin::RecvFrom");
+    Context.UninstallHook("FSocketWin::SendTo");
 }
 
 void CGlobals::UpdateGuidCacheOverride()
@@ -151,12 +154,14 @@ void CGlobals::InitNetworkHooks(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(UWorld, ServerTickClients, GLOBAL_UWORLD_SERVERTICKCLIENTS_PHOOK);
     INSTALL_HOOK_ONE(SortReplicatedActors, GLOBAL_SORT_REPLICATED_ACTORS_OFFSET);
     INSTALL_HOOK_ONE(GlobalDynamicBuildVersion, GLOBAL_GLOBALDYNAMICBUILDVERSION_PATTERN);
-    INSTALL_HOOK_TWO(FSocketWin, SendTo, GLOBAL_FSOCKETWIN_SENDTO_OFFSET);
     INSTALL_HOOK_TWO(FSocketWin, Send, GLOBAL_FSOCKETWIN_SEND_OFFSET);
-    INSTALL_HOOK_TWO(FSocketWin, RecvFrom, GLOBAL_FSOCKETWIN_RECVFROM_OFFSET);
     INSTALL_HOOK_TWO(FSocketWin, Recv, GLOBAL_FSOCKETWIN_RECV_OFFSET);
 
 #endif // !_FINAL_RELEASE
+
+    // Matchmaking sends and receives its datagrams on the UE3 game socket in every build.
+    INSTALL_HOOK_TWO(FSocketWin, SendTo, GLOBAL_FSOCKETWIN_SENDTO_OFFSET);
+    INSTALL_HOOK_TWO(FSocketWin, RecvFrom, GLOBAL_FSOCKETWIN_RECVFROM_OFFSET);
 }
 
 void CGlobals::InitNetworkInjections()

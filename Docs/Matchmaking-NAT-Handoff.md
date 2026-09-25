@@ -2,9 +2,23 @@
 
 Last updated: 2026-09-25
 
-Status: on branch `MilanServerBlaze`, step 1 (lobby state machine and HTTP API) is committed by the user. The server side of step 2 (UDP endpoint discovery and host introductions) is implemented and tested against the server alone, and is uncommitted as of this update. Peer-to-peer probing and all game/client integration are not implemented. Nothing has been tested with LMP.
+Status: on branch `MilanServerBlaze`, step 1 (lobby state machine and HTTP API) is committed by the user. Step 2 server and MilanHost client work is staged but uncommitted. Quick Match menu integration is edited in MilanHost and ProjectMilan source. MilanHost DEBUG builds, MilanServer's 89 tests pass, and the two edited UnrealScript functions compiled into a scratch package. That package and the ASI are deployed to LMP. **The first same-PC two-instance Quick Match test succeeded:** the user reached the host's lobby, and server/ASI logs confirm search, reservation, direct-IP travel, authenticated probes, and joined reporting. This is local loopback proof, not public Internet NAT traversal.
 
 ## Current implementation handoff (2026-09-25, second agent)
+
+### Quick Match menu follow-up (2026-09-25, current agent)
+
+- Goal: run MilanServer and two LMP instances on one Windows PC; host normally in instance A, register it with `mm.host`, then use the **Quick Match menu option** in instance B. This tests server search, reservation, direct-IP travel, and the UE3 socket discovery/probe path on one machine. It does not establish Internet NAT traversal.
+- `MilanHost/Components/CMatchmaking.*` now has an asynchronous `/v1/searches` flow. It sends map/enemy/difficulty filters from `USFXOnlineGameSettings`, polls while searching, consumes the returned reservation, and exposes the chosen `ip:port` through `GetResolvedConnectString`. Search cancellation invalidates pending callbacks, and a loopback discovery candidate is preferred when both instances use the local server. Invite-code joining still uses the same reservation parser.
+- `MilanHost/Online/SFXOnlineComponentBlazeGame.cpp` now starts that search from `QuickMatch_Hook`, handles the optional settings pointer safely, dispatches the completion delegate on the game thread, returns the chosen address from `GetResolvedConnectString_Hook`, and cancels a pending search from `CancelFindOnlineGames_Hook`. The existing `JoinOnlineGame_Hook` still returns failure; the patched script uses the proven direct-IP `open` path instead.
+- ProjectMilan source was edited separately at `B:\UserProfile\source\repos\ME3Tweaks\ProjectMilan\ProjectMilan\Pipelines\Shared\Compiling\ClassOverride\SFXGameInfoMP_Lobby.uc`: default Quick Match supplies map `-1`, enemy `127`, difficulty `127`; result 2 runs `open <resolved address>`; failure shows a matchmaking error instead of starting a new listen lobby. Changes use `MILAN CHANGE` markers. This source edit is **not in this repository**, and must be reviewed/committed in ProjectMilan separately.
+- Verification: `dotnet test` from `MilanServer/` passes 89 tests. `Build/VisualStudio/DEBUG/MilanHost.asi` rebuilt successfully with the Visual Studio CMake tool. An LECCLI `compile-class` attempt against the old installed LMP `BIOP_MP_COMMON.pcc` parsed the whole script but stopped on six existing missing `GUI_SF_*` resource references at source lines 752-760; it reported no modified exports and saved nothing. A temporary patcher under ignored `Build/QuickMatchPatcher/` then used LegendaryExplorerCore `CompileFunction` on exactly `OnQuickMatchComplete` and `StartMPMatch`, saved a **scratch** package, and asserted those were the only changed exports. LECCLI decompiled both functions from that scratch package and confirmed the new code. This is package validation, not game runtime proof.
+- The user authorized deployment to LMP and required removing ASIs whose **filenames contain `MilanHost`** before copying the new one. The LMP `Win64/ASI` folder contained `MilanHost.asi` and `LE3TextureOverride-v4.asi`; product metadata confirmed the latter is Texture Override. Removed the single name-matched ASI, copied the DEBUG build, and verified exactly one name-matched ASI remains and its SHA-256 equals the build (`EE5E2D59E1CC8EA7E655BECB86296D6A6733F1C8716A2E138897195AA618C741`).
+- Backed up the original installed `BIOP_MP_COMMON.pcc` to ignored `Build/QuickMatchPatcher/BIOP_MP_COMMON.before-quickmatch.pcc` (SHA-256 `D045F10EFC236DA539E0ADEE438D2DABC54D9A4FDCBA9B9A74D246AA9D2498E8`). Copied the scratch package over the installed LMP package and verified its SHA-256 is `06E266E59EDBEEBF4EA25F98ECA331F1A99A7AD1222EEA7921BA0B16EDEE90B8`. This is a narrow two-function patch, **not a full ProjectMilan pipeline rebuild**.
+- MilanServer is running as `dotnet` PID 4488 from `MilanServer/`, bound to `http://127.0.0.1:5080` and UDP 5081. `/healthz` returned `ok`; `/v1/info` returned protocol 1 and UDP port 5081. Logs are in ignored `Build/quickmatch-server.stdout.log` and `.stderr.log`. LMP instances were launched visibly as PIDs 64840 and 37992; both later exited normally (`BioRequestExit: bForce = FALSE, ExitCode = 0`).
+- **Runtime result:** the user reported a successful join. Server log: created public lobby `KqukhjnHiISt2GGFW5JLDg`, then Quick Match matched it at stage `Exact`. Host log: UE3 game socket port 3659, UDP discovery observed `127.0.0.1:3659` on that same socket, one reservation, `NotifyControlMessage (Login)` from the joiner, and authenticated probes/path verification. Joiner log: Quick Match filters `map -1, enemy 127, difficulty 127`; selected `127.0.0.1:3659 (PublicObserved, same public address: 1)`; `GetResolvedConnectString` was called; UE3 game socket port 57979 was observed unchanged by discovery; probes were verified; `joined the host's game; releasing the reservation` was logged. Actor channels including `SFXGRIMP_Lobby` were created, which supports actual game replication rather than just a control-plane match.
+- The user noticed a slight pause when “searching for game” appeared and suggested disabled movies. The joiner log shows the Quick Match request at 49.859s and chosen target at 49.927s (about 68 ms). The pause is **not explained by server search latency** in this run; no UI/render cause has been established. Do not claim a fix without a targeted repeat if it remains noticeable.
+- Both ASI logs reported a nonfatal `failed to read config: File could not be opened for reading`: there is no `Win64/MilanHost.toml`, so matchmaking used its compiled localhost URL default. The test still succeeded. The server later logged expiration of the now-closed host lobby after missed heartbeats (60-second lease). The server remains running for a repeat test; check PID/health before starting another copy.
 
 ### Branch and repository decisions
 
@@ -64,6 +78,80 @@ Status: on branch `MilanServerBlaze`, step 1 (lobby state machine and HTTP API) 
 
 The peer probe packet format is still undesigned. Reuse the discovery layout style: a distinct magic, fixed length, and an HMAC keyed by `traversalKey` that binds the reservation ID and direction. The open problems in "Same-NAT topology" and "Working hypothesis" below still decide whether steps 2 and 4 are possible on the real game socket.
 
+### MilanHost client, first cut (builds; not yet run in the game)
+
+Console-driven, so the socket boundary can be proven before any menu integration. Files:
+- `MilanHost/Components/CMatchmaking.*`: the state machine, two worker threads, and the `mm.*` commands.
+- `MilanHost/Online/Rendezvous.*`: MLNR discovery and MLNP probe packets.
+- `MilanHost/Online/MatchmakingNet.*`: WinHTTP, BCrypt HMAC, GetAdaptersAddresses, and getsockname. It is compiled with `SKIP_PRECOMPILE_HEADERS` because the SDK PCH's `<Windows.h>` pulls in Winsock 1.
+- `ThirdParty/nlohmann/json.hpp`: nlohmann/json 3.12.0, vendored at the user's choice.
+
+Config key `milan.matchmaker.url` is optional, default `http://127.0.0.1:5080` (see `Docs/DefaultMilanHost.toml`).
+
+- **Socket lookup (static offsets, validated at runtime by getsockname):** the pending level's net driver, else `GWorld->NetDriver`. It must be `IsA(UTcpNetDriver)`. The `FSocket*` is at driver `+0x1F8`, and the `SOCKET` at `FSocket+0x1C`. `mm.status` prints the driver class and whether the socket was found. If the live driver is not a `UTcpNetDriver` subclass (see the earlier `SFXOnlineNetDriver` question), this is the first thing to check.
+- **Send path:** discovery requests and probes go through the original `FSocketWin::SendTo`, on the game thread (from the `UGameEngine::Tick` hook).
+- **Receive path:** the `FSocketWin::RecvFrom` hook now loops. It pulls out any datagram that `Rendezvous::Classify` recognizes (exact length plus magic/version/type), then reads the next one, so UE3 sees the final call's result and Winsock error unchanged. After 256 consumed datagrams it returns WSAEWOULDBLOCK for the frame. State is only touched on the game thread. `FSocketWin::SendTo` and `RecvFrom` are now installed in all builds; NETPROF calls inside them remain non-final only. Both hooks are uninstalled in `UninstallSomeHooks` before the component is torn down.
+- **Host (`mm.host` after hosting from the menu):** `/v1/info`, then create the lobby, then discovery (1 s retries, then every 20 s). It sends full state when it changes (checked every 250 ms) or as the heartbeat. It long-polls introductions and probes each joiner's candidates for 15 s after they change. **The lobby state is a placeholder:** map, enemy, and difficulty are 0, max players is 4, and players are counted as 1 + `ChildConnections`.
+- **Joiner (`mm.join <code>`):**
+  1. Redeems the invite and picks one target: LAN if `samePublicAddress`, otherwise `PublicObserved`, then `PublicReported`.
+  2. Runs `open ip:port` through the first local player's `ConsoleCommand`.
+  3. Once UE3's socket exists, sends discovery and reports its port and LAN addresses, then probes the host.
+  4. Reports `joined` when the pending level is gone and `GWorld->NetDriver->ServerConnection` exists.
+
+  UE3 connects to one address only. If a probe verifies a different endpoint than the one `open` used, the likely fix is to rewrite the pending `UTcpipConnection::Address` (`+0x606C`) on the game thread. That is not implemented.
+- **Verification so far:**
+  - DEBUG builds warning-free.
+  - FINAL fails only on the pre-existing `CConstants.cpp(101)` C4100.
+  - A throwaway harness (scratchpad, not committed) compiled `Rendezvous.cpp` and `MatchmakingNet.cpp` at `/W4 /WX` and passed against a live MilanServer: WinHTTP and JSON, discovery HMAC and observed port, tamper rejection, introductions, and probe authentication.
+  - **No in-game run yet.**
+
+**Local two-instance Quick Match test (completed successfully on 2026-09-25; repeatable procedure):**
+1. Run MilanServer from `MilanServer/` with `dotnet run --project MilanServer -- --urls http://127.0.0.1:5080` (UDP 5081). Check `http://127.0.0.1:5080/healthz` and `/v1/info`.
+2. On instance A: host a **public** match from the menu, then run `mm.status` and `mm.host`. Expect a `UTcpNetDriver` socket at local port N, `lobby registered`, and `discovery: server saw 127.0.0.1:N ... (same port)`. Keep this instance in the lobby.
+3. On instance B: choose **Quick Match** from the menu (not `mm.join`). Expect `quick match search: map -1, enemy 127, difficulty 127`, a server match/reservation, a `host candidate 127.0.0.1:N`, then `joining via 127.0.0.1:N (PublicObserved, same public address: 1)`. `GetResolvedConnectString` should return that address and the script should issue `open 127.0.0.1:N`.
+4. Confirm B appears in A's lobby. Run `mm.status` in each instance and capture the MilanHost logs. Look for new game socket/discovery, authenticated `probe received` and `path verified`, and `joined the host's game`. Check UE3 has no spurious connections from the traversal datagrams.
+5. If Quick Match reports no lobby, check A's `mm.status`, the lobby registration and discovery logs, public/private state, exact `gameVersion`, and server search logs. If B starts its own lobby, inspect the **installed** `BIOP_MP_COMMON.pcc` bytecode for the updated `OnQuickMatchComplete`; source alone is insufficient.
+
+This proves the socket boundary and loopback path on one machine, not NAT traversal. The older `mm.join <code>` test remains useful as a control if Quick Match fails.
+
+### LMP script changes that affect matchmaking (2026-09-25)
+
+**Sources:**
+- ProjectMilan source: `Pipelines/Shared/Compiling/ClassOverride/SFXGameInfoMP_Lobby.uc`, `SFXLobbyFlow.uc`, `Mod/BaseDelta/SFXOnlineFoundation/Classes/SFXOnlineSubsystem.uc`, and `SFXOnlineGameSettings.uc`.
+- Checked against the **installed** package with LECCLI: `LMP/BioGame/DLC/DLC_MOD_ProjectMilan/CookedPCConsole/BIOP_MP_COMMON.pcc` (written 2026-09-23). Its classes live under `SFXGameMPContent.*`. The decompiled `OnMPGameStarted`, `OnQuickMatchComplete`, and `CreateOnlineGame` match the source.
+- **Compared with original ME3 (2012 PC) using LECCLI.** `list-game-paths` gives the install as `B:\SteamLibrary\steamapps\common\Mass Effect 3`. The comparison used `BIOGame/CookedPCConsole/BIOP_MP_COMMON.pcc` and `SFXOnlineFoundation.pcc` from there, against LMP's pre-Quick-Match package backup (`Build/QuickMatchPatcher/BIOP_MP_COMMON.before-quickmatch.pcc`) and LMP's base `SFXOnlineFoundation.pcc`. Whole classes were decompiled and compared function by function, ignoring whitespace:
+  - Lobby and online classes checked: `SFXGameInfoMP_Lobby`, `SFXLobbyFlow`, `SFXGRIMP_Lobby`, `SFXGameInfoMP`, `SFXPlayerControllerMP`, `SFXOnlineComponentBlazeGame`, `SFXOnlineSubsystem`, `SFXOnlineGameSettings`, `SFXOnlineComponentGameFlow`, `ISFXOnlineComponentGame`.
+  - Only LMP's lobby changes touch the join path.
+  - The `SFXOnlineFoundation` differences are harmless for matchmaking:
+    - extra logging and `if (TRUE)` debug blocks, since LMP's base is a later build (it has Dingo/Orbis components);
+    - the privacy enum;
+    - 127 "any" sentinels.
+  - `SFXLobbyFlow` changes are the privacy enum, the kicked-out message, MPSaveManager initialization, and the challenge screens.
+
+**Findings:**
+- **Original ME3 routed both hosting and joining through `GetResolvedConnectString`.** `OnMPGameStarted` called it and appended `?origin=MultiplayerMenu?private=..?map=..?enemy=..?difficulty=..`. Blaze returned `MPLobby?listen` for a new game or the host address for a joined one. Original `OnQuickMatchComplete` was the same for every result:
+  - 2 (start game) read the address, then called `OnMPGameStarted(TRUE)`, which joined through that same resolved string.
+  - 3 retried.
+  - Any other result called `OnMPGameStarted(Result != 4)`, so a search that ended in a created game made the player the host.
+- **Hosting ignores the online subsystem** (this is what makes solo and local play work, and it should stay):
+  - `CreateOnlineGame` short-circuits with `if (TRUE) { OnCreateGameComplete('Game', TRUE); }`.
+  - `OnMPGameStarted` always runs `open mplobby?listen?origin=MultiplayerMenu?privacy=..?map=..?enemy=..?difficulty=..`. That is the only reason the unpatched Quick Match hosted instead of joining.
+  - `StartMPMatch` drops the `CanPlayOnline()` check and sets `BlazeGame.GameSettings` itself before `CreateOnlineGame`.
+  - The matchmaker can register the lobby when that listen server comes up. The URL options, then the live settings, can supply the real lobby state that `CMatchmaking` currently fakes.
+- **Quick Match (the narrow two-function patch, now deployed):**
+  - `OnQuickMatchComplete(2)` runs `open <GetResolvedConnectString>` directly, leaving `OnMPGameStarted` host-only.
+  - Every result other than 2 and 3 shows `srMatchMakingError`. ME3 would have hosted instead. MilanHost only ever sends 2 or 4, so a player without a reachable matchmaker gets an error, and hosting is untouched.
+  - `StartMPMatch` with no settings now searches with map -1, enemy 127, difficulty 127.
+  - `StartCustomMatch`, the filtered search, already sends public settings with `mCreateNewMatch = FALSE`, so it reaches the same `QuickMatch_Hook` with the chosen filters.
+  - `JoinOnlineGame_Hook` still returns failure, but nothing on this path calls it.
+- **Privacy is now three-way:** `EMatchPrivacySetting` is `PRIVACY_PUBLIC` (0), `PRIVACY_PRIVATE` (1), and `PRIVACY_FRIENDS` (2). It replaces ME3's `bool`, and `GRI.PrivacySetting` is an `int`. `SetPrivacy` sets `NumPublicConnections` to 0 only for `PRIVACY_PRIVATE`. The accountless server has no friends concept, so FRIENDS probably maps to an unlisted, invite-code-only lobby.
+- **Joinable signal:** `CommitSettings` (lobby countdown, before `servertravel`) calls `ChangeMatchSettings(..., bAllowMatchmaking = FALSE)`, and `UnCommitSettings` passes TRUE. MilanHost's `AllowMatchmaking_Hook` already stores this in `BlazeGame.bAllowMatchmaking`. `ChangeMatchSettings` also calls the hijacked `UpdateOnlineGame('Game', NewSettings)` with the new map, enemy, difficulty, and privacy, so both hooks can drive prompt lobby-state reports without reading the `SFXGRIMP_Lobby` GRI. That class is LMP script and is not in the LE3 SDK.
+- **The private and local flow is unaffected** as long as matchmaking stays opt-in. `mm.join` / Discord invites use a plain `open ip:port`, which the user reports works, and it bypasses these delegates entirely.
+- **Useful hooks for host updates:**
+  - `ChangeMatchSettings` already calls `GetComponentGame().AllowMatchmaking(bAllow, FALSE)`, which MilanHost hijacks. That is a natural trigger for prompt state reports.
+  - `SFXOnlineGameSettings.SetPrivacy` sets `NumPublicConnections` to 0 when private.
+  - `SFXOnlineSubsystem` builds `GameProtocolVersion = m_IsolatedMatchMakingCode $ GetBuildUniqueId() $ GetBioStaticBuildVersion()`. This is a better `gameVersion` for the matchmaker than the ASI version, because it matches content builds.
+
 ### Known limits and open design points
 
 - The host learns about joiners only by long-polling. Consider a WebSocket if polling proves too slow or heavy in practice.
@@ -96,7 +184,7 @@ Test two clients in one household joining a remote host as **two distinct player
 ### Next agent's immediate steps
 
 1. **Done and committed by the user (unit-tested only):** lobby state machine and v1 HTTP API, described above. The user commits changes themselves; stage only and suggest a message. The contracts are still provisional; bump `Api.ProtocolVersion` on breaking changes once a client exists.
-2. **Server side done (tested against the server only):** host introduction channel and bounded UDP endpoint discovery. Remaining client work: send and receive discovery and peer probes with authentication and anti-reflection limits, then verify its packets can originate from the **actual UE3 gameplay socket** before claiming NAT traversal. The earlier Ghidra pass identified the socket lifecycle but not a safe client receive/interception point. Do not use a separate preliminary UDP socket as proof that the game socket mapping works.
+2. **Same-PC Quick Match passed with deployed MilanHost and a narrowly patched ProjectMilan package.** The equal observed/local UDP ports prove discovery originated from each live UE3 game socket on this loopback test. Peer probes were authenticated and the game join completed. Next, verify distinct-machine LAN and real Internet NAT paths, including whether UE3's first connection packets reach the host before/after the punch. Do not use a separate preliminary UDP socket as proof that the game socket mapping works.
 3. Add Windows/Linux packaging and container documentation. A single .NET server instance with ephemeral state is a reasonable first deployment; account for host re-registration after a restart. AWS UDP ingress likely needs a Network Load Balancer if using ECS Fargate. Keep independent hosting possible.
 4. Integrate MilanHost and the Discord ASI only after the socket and menu-flow boundaries are proven. The Discord ASI source is outside this repository at `B:\UserProfile\source\repos\LExASIs\DiscordIntegration`; it was inspected but not changed. Preserve the ability to run LMP without Discord for direct/invite-code use.
 5. Run real LMP tests: one LAN host and join, two distinct consumer NATs, both same-house topologies above, failed hairpin, rapid setting changes during a search, full lobby, extraction, host crash/expiry, and game travel/socket recreation. Label source/static evidence separately from runtime proof.

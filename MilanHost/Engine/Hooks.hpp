@@ -310,6 +310,20 @@ extern t_UWorld_Tick* UWorld_Tick_orig;
 void UWorld_Tick_hook(UWorld* Context, int Unknown, float Delta);
 
 
+// ! Game socket I/O (all builds: matchmaking shares the UE3 socket).
+// ========================================
+
+using t_FSocketWin_SendTo = UINT(FSocket*, BYTE*, INT, INT*, SOCKADDR_IN*);
+extern t_FSocketWin_SendTo* FSocketWin_SendTo_orig;
+
+UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, SOCKADDR_IN* Destination);
+
+using t_FSocketWin_RecvFrom = UINT(FSocket*, BYTE*, INT, INT*, SOCKADDR_IN*);
+extern t_FSocketWin_RecvFrom* FSocketWin_RecvFrom_orig;
+
+UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read, SOCKADDR_IN* Source);
+
+
 // ! <Methods relevant to network debug.>
 // ========================================
 
@@ -391,20 +405,10 @@ extern t_GlobalDynamicBuildVersion* GlobalDynamicBuildVersion_orig;
 
 UINT GlobalDynamicBuildVersion_hook();
 
-using t_FSocketWin_SendTo = UINT(FSocket*, BYTE*, INT, INT*, SOCKADDR_IN*);
-extern t_FSocketWin_SendTo* FSocketWin_SendTo_orig;
-
-UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, SOCKADDR_IN* Destination);
-
 using t_FSocketWin_Send = UINT(FSocket*, BYTE*, INT, INT*);
 extern t_FSocketWin_Send* FSocketWin_Send_orig;
 
 UINT FSocketWin_Send_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent);
-
-using t_FSocketWin_RecvFrom = UINT(FSocket*, BYTE*, INT, INT*, SOCKADDR_IN*);
-extern t_FSocketWin_RecvFrom* FSocketWin_RecvFrom_orig;
-
-UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read, SOCKADDR_IN* Source);
 
 using t_FSocketWin_Recv = UINT(FSocket*, BYTE*, INT, INT*);
 extern t_FSocketWin_Recv* FSocketWin_Recv_orig;

@@ -7,6 +7,7 @@
 #ifdef WITH_IMGUI
 #include "Components/CImgui.hpp"
 #endif
+#include "Components/CMatchmaking.hpp"
 #include "Components/COutput.hpp"
 #include "Components/CProfilers.hpp"
 #include "Components/CState.hpp"
@@ -152,6 +153,7 @@ void UGameEngine_Tick_hook(UGameEngine* const Context, float const Delta)
     //MILAN_TRACEW(L"(UGameEngine::Tick): Delta=%f", Delta);
     NETPROF(CaptureFrameStart(Delta));
     (*UGameEngine_Tick_orig)(Context, Delta);
+    COMPONENT(CMatchmaking).On_GameEngineTick(Delta);
 }
 
 
@@ -509,6 +511,65 @@ void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delt
 {
     (*UWorld_Tick_orig)(Context, Unknown, Delta);
     COMPONENT(CState).On_UWorld_Tick(Context, Unknown, Delta);
+}
+
+
+// ! Game socket I/O (all builds: matchmaking shares the UE3 socket).
+// ========================================
+
+t_FSocketWin_SendTo* FSocketWin_SendTo_orig = nullptr;
+UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, SOCKADDR_IN* Destination)
+{
+    UINT const Ret = (*FSocketWin_SendTo_orig)(Context, Data, Count, Sent, Destination);
+    if (Count > 0)
+    {
+        // This would be too verbose even for ELOG_NetHooksTrace.
+
+        //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Destination->sin_addr), ntohs(Destination->sin_port));
+        //MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::SendTo: type=%d, desc=%s, count=%d, sent=%d, dest=%s", Context->Type, *Context->Description, Count, *Sent, *Remote);
+
+#ifndef _FINAL_RELEASE
+        NETPROF(CaptureSocketCall(Destination, true, *Sent * 8));
+#else
+        MILAN_UNUSED_2(Context, Destination);
+#endif
+    }
+    return Ret;
+}
+
+t_FSocketWin_RecvFrom* FSocketWin_RecvFrom_orig = nullptr;
+UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read, SOCKADDR_IN* Source)
+{
+    // Matchmaking datagrams share the game socket. Consume them here and read the next
+    // datagram, so UE3 only ever sees its own traffic. The last call's result (and its
+    // Winsock error, e.g. WSAEWOULDBLOCK) is what UE3 observes, as without the hook.
+    for (int Consumed = 0; ; ++Consumed)
+    {
+        if (Consumed == 256)
+        {
+            // Yield to the frame instead of draining an unbounded flood.
+            *Read = -1;
+            ::WSASetLastError(WSAEWOULDBLOCK);
+            return FALSE;
+        }
+
+        UINT const Ret = (*FSocketWin_RecvFrom_orig)(Context, Buffer, Max, Read, Source);
+        if (Ret && *Read > 0 && COMPONENT(CMatchmaking).On_ReceivedDatagram(Context, Buffer, *Read, Source))
+            continue;
+
+        if (*Read > 0)
+        {
+            // This would be too verbose even for ELOG_NetHooksTrace.
+
+            //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Source->sin_addr), ntohs(Source->sin_port));
+            //MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::RecvFrom: type=%d, desc=%s, read=%d, source=%s", Context->Type, *Context->Description, *Read, *Remote);
+
+#ifndef _FINAL_RELEASE
+            NETPROF(CaptureSocketCall(Source, false, *Read * 8));
+#endif
+        }
+        return Ret;
+    }
 }
 
 
@@ -899,22 +960,6 @@ UINT GlobalDynamicBuildVersion_hook()
     return Version;
 }
 
-t_FSocketWin_SendTo* FSocketWin_SendTo_orig = nullptr;
-UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, SOCKADDR_IN* Destination)
-{
-    UINT const Ret = (*FSocketWin_SendTo_orig)(Context, Data, Count, Sent, Destination);
-    if (Count > 0)
-    {
-        // This would be too verbose even for ELOG_NetHooksTrace.
-
-        //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Destination->sin_addr), ntohs(Destination->sin_port));
-        //MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::SendTo: type=%d, desc=%s, count=%d, sent=%d, dest=%s", Context->Type, *Context->Description, Count, *Sent, *Remote);
-
-        NETPROF(CaptureSocketCall(Destination, true, *Sent * 8));
-    }
-    return Ret;
-}
-
 t_FSocketWin_Send* FSocketWin_Send_orig = nullptr;
 UINT FSocketWin_Send_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent)
 {
@@ -923,22 +968,6 @@ UINT FSocketWin_Send_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent)
     {
         // This remains uncommented because I haven't managed to trigger a call to this function yet...
         MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::Send: type=%d, desc=%s, count=%d, sent=%d", Context->Type, *Context->Description, Count, *Sent);
-    }
-    return Ret;
-}
-
-t_FSocketWin_RecvFrom* FSocketWin_RecvFrom_orig = nullptr;
-UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read, SOCKADDR_IN* Source)
-{
-    UINT const Ret = (*FSocketWin_RecvFrom_orig)(Context, Buffer, Max, Read, Source);
-    if (*Read > 0)
-    {
-        // This would be too verbose even for ELOG_NetHooksTrace.
-
-        //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Source->sin_addr), ntohs(Source->sin_port));
-        //MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::RecvFrom: type=%d, desc=%s, read=%d, source=%s", Context->Type, *Context->Description, *Read, *Remote);
-
-        NETPROF(CaptureSocketCall(Source, false, *Read * 8));
     }
     return Ret;
 }

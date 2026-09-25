@@ -77,6 +77,7 @@ all or parts of this project, in no particular order.
 ```
 General:
   - ImGui - v1.91.3 - MIT - Omar Cornut
+  - nlohmann/json - v3.12.0 - MIT - Niels Lohmann
   - RenderDoc API - #9f4f0e6 - MIT - Baldur Karlsson & Crytek
   - toml++ - v3.4.0 - MIT - Mark Gillard
   - Zydis - v4.1.0 - MIT - Florian Bernd & Joel Höner
