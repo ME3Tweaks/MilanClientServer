@@ -126,6 +126,32 @@ enum EStorageField : int
     EStorageField_MAX = 96,
 };
 
+// Keep the original profile setting IDs for 78 kits and reserve IDs 96-217 for kits 78-199.
+// Match this capacity in SFXOnlineSaveGameMP/UpdateCharacterValues2.uc.
+inline constexpr int MP_PROFILE_CHARACTER_CAPACITY = 200;
+inline constexpr int MP_PROFILE_LEGACY_CHARACTER_COUNT = SGF_Character77 - SGF_Character00 + 1;
+inline constexpr int MP_PROFILE_EXTENDED_CHARACTER_FIRST_ID = 96;
+inline constexpr int MP_PROFILE_EXTENDED_CHARACTER_LAST_ID =
+    MP_PROFILE_EXTENDED_CHARACTER_FIRST_ID + MP_PROFILE_CHARACTER_CAPACITY - MP_PROFILE_LEGACY_CHARACTER_COUNT - 1;
+static_assert(MP_PROFILE_EXTENDED_CHARACTER_FIRST_ID >= EStorageField_MAX);
+
+// Native accomplishment storage only exposes three 250-value timestamp strings.
+// The local profile holds another three strings without changing the legacy field IDs.
+inline constexpr int MP_PROFILE_COMPLETION_TIMES_PER_FIELD = 250;
+inline constexpr int MP_PROFILE_LEGACY_COMPLETION_TIME_COUNT =
+    3 * MP_PROFILE_COMPLETION_TIMES_PER_FIELD;
+inline constexpr int MP_PROFILE_COMPLETION_TIME_CAPACITY = 1500;
+// IDs 96-1023 are reserved for kit records, allowing 1,006 total kit slots
+// without changing timestamp field IDs in an existing profile.
+inline constexpr int MP_PROFILE_EXTENDED_COMPLETION_FIRST_ID = 1024;
+inline constexpr int MP_PROFILE_EXTENDED_COMPLETION_FIELD_COUNT =
+    (MP_PROFILE_COMPLETION_TIME_CAPACITY - MP_PROFILE_LEGACY_COMPLETION_TIME_COUNT) /
+    MP_PROFILE_COMPLETION_TIMES_PER_FIELD;
+inline constexpr int MP_PROFILE_EXTENDED_COMPLETION_LAST_ID =
+    MP_PROFILE_EXTENDED_COMPLETION_FIRST_ID + MP_PROFILE_EXTENDED_COMPLETION_FIELD_COUNT - 1;
+static_assert(MP_PROFILE_COMPLETION_TIME_CAPACITY % MP_PROFILE_COMPLETION_TIMES_PER_FIELD == 0);
+static_assert(MP_PROFILE_EXTENDED_COMPLETION_FIRST_ID > MP_PROFILE_EXTENDED_CHARACTER_LAST_ID);
+
 
 struct ProfileSetting final : public NonCopyable
 {
@@ -155,6 +181,7 @@ public:
 
     MPProfile(USFXEngine* Engine);
 
+    void PrepareCharacterStorage() const;
     void Deserialize(IInputStream& Stream);
     void Serialize(IOutputStream& Stream) const;
 
