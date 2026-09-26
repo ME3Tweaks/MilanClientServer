@@ -106,6 +106,10 @@
 #define GLOBAL_USFXENGINE_UPDATEDYNAMICLOADMAPPINGFINDHASH_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 89 5C 24 08 */ "48 89 6C 24 ?? 48 89 74 24 ?? 48 89 7C 24 ?? 41 56 48 83 EC 20 33 FF 44 8B F2")
 
+// USFXEngine's override of the UGameEngine virtual (vtable slot 123).
+#define GLOBAL_USFXENGINE_GETDISCONNECTFALLBACKMAP_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 89 54 24 10 */ "57 48 83 EC 40 48 C7 44 24 20 FE FF FF FF 48 89 5C 24 50 48 89 6C 24 60 48 89 74 24 68 48 8B DA 48 8B E9 E8 ?? ?? ?? ?? 48 8B F8 48 85 C0 0F 84")
+
 #define GLOBAL_UWORLD_SPAWNACTOR_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 55 41 */ "54 41 55 41 56 41 57 48 8D 68 ?? 48 81 EC A0 00 00 00 48 C7 45 ?? FE FF FF FF 48 89 58 ?? 48 89 70 ?? 48 89 78 ?? 49 8B F9")
 
@@ -279,6 +283,11 @@ using t_USFXEngine_UpdateDynamicLoadMappingFindHash = int(USFXEngine* Context, i
 extern t_USFXEngine_UpdateDynamicLoadMappingFindHash* USFXEngine_UpdateDynamicLoadMappingFindHash_orig;
 
 int USFXEngine_UpdateDynamicLoadMappingFindHash_hook(USFXEngine* Context, int ObjectNetID);
+
+using t_USFXEngine_GetDisconnectFallbackMap = FString*(USFXEngine* Context, FString* Result);
+extern t_USFXEngine_GetDisconnectFallbackMap* USFXEngine_GetDisconnectFallbackMap_orig;
+
+FString* USFXEngine_GetDisconnectFallbackMap_hook(USFXEngine* Context, FString* Result);
 
 
 // ! UWorld methods.

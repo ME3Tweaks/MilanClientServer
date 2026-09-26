@@ -16,6 +16,11 @@ public:
     bool Initialize(::LESDK::Initializer& Context);
     void Terminate(::LESDK::Initializer& Context);
 
+    /// Applies the LE3 minimum-resolution compatibility patch before game PreInit runs.
+    static void ApplyEarlyMinimumResolutionCompatibility(::LESDK::Initializer& Context);
+    /// Stops the bounded startup dialog watchdog during ASI detach.
+    static void StopMinimumResolutionDialogWatchdog();
+
 private:
 
     /// <summary>

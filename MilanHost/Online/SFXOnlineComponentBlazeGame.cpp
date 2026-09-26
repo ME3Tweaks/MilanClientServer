@@ -139,6 +139,8 @@ void SFXOnlineComponentBlazeGame::AllowMatchmaking_Hook(USFXOnlineComponentBlaze
     }
 
     // End of ghidra decomp.
+
+    COMPONENT(CMatchmaking).On_AllowMatchmaking(bAllow != 0);
 }
 
 void SFXOnlineComponentBlazeGame::OnInitialize_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
@@ -472,6 +474,9 @@ void SFXOnlineComponentBlazeGame::UpdateOnlineGame_Hook(USFXOnlineComponentBlaze
     MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::UpdateOnlineGame - SessionName = %s, UpdatedGameSettings = ..., bShouldRefreshOnlineData = %d",
         *SessionName.ToString(), bShouldRefreshOnlineData);
     MILAN_CHECKW(UpdatedGameSettings->IsA<USFXOnlineGameSettings>(), L"");
+
+    // The matchmaker lobby follows these settings; this never fails the update.
+    COMPONENT(CMatchmaking).On_HostSettingsChanged(static_cast<USFXOnlineGameSettings*>(UpdatedGameSettings));
 
     USFXOnlineComponentBlazeGame_execOnUpdateOnlineGameComplete_Parms Parms{};
     Parms.SessionName = SessionName;
@@ -834,8 +839,9 @@ void SFXOnlineComponentBlazeGame::OnConnectionError_Hook(USFXOnlineComponentBlaz
 
     MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::OnConnectionError");
 
-    // Ghidra decomp:  does nothing.
-    *(UBOOL*)Result = TRUE;
+    // LE3's native returns FALSE (vtable slot 118, a return-0 stub). TRUE means "silent
+    // QuickMatch retry" to the script, which then skips its host-left handling.
+    *(UBOOL*)Result = COMPONENT(CMatchmaking).On_ConnectionError() ? TRUE : FALSE;
 }
 
 void SFXOnlineComponentBlazeGame::CancelFindOnlineGames_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)

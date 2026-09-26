@@ -9,9 +9,11 @@
 #include <iphlpapi.h>
 #include <windows.h>
 #include <bcrypt.h>
+#include <sddl.h>
 #include <winhttp.h>
 
 #include <memory>
+#include <thread>
 
 #include "Online/MatchmakingNet.hpp"
 
@@ -19,6 +21,8 @@
 namespace
 {
     constexpr std::size_t k_maxResponseBytes = 256 * 1024;
+    constexpr DWORD k_maxPipeMessage = 4096;
+    constexpr DWORD k_pipeIoTimeoutMs = 2000;
 
     struct WinHttpHandle
     {
@@ -81,11 +85,155 @@ namespace
             || (b[0] == 169 && b[1] == 254)
             || (b[0] == 100 && (b[1] & 0xC0) == 64);
     }
+
+    // A protected DACL that grants access to the current user only.
+    bool CurrentUserOnlyDescriptor(PSECURITY_DESCRIPTOR& Out, std::string& OutError)
+    {
+        HANDLE Token = nullptr;
+        if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_QUERY, &Token))
+        {
+            OutError = LastErrorText("OpenProcessToken");
+            return false;
+        }
+        DWORD Size = 0;
+        ::GetTokenInformation(Token, TokenUser, nullptr, 0, &Size);
+        std::vector<std::uint8_t> User(Size);
+        bool const HaveUser = Size != 0 && ::GetTokenInformation(Token, TokenUser, User.data(), Size, &Size);
+        ::CloseHandle(Token);
+        if (!HaveUser)
+        {
+            OutError = LastErrorText("GetTokenInformation");
+            return false;
+        }
+
+        LPWSTR Sid = nullptr;
+        if (!::ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER const*>(User.data())->User.Sid, &Sid))
+        {
+            OutError = LastErrorText("ConvertSidToStringSid");
+            return false;
+        }
+        std::wstring const Sddl = std::wstring{ L"D:P(A;;GA;;;" } + Sid + L")";
+        ::LocalFree(Sid);
+
+        if (!::ConvertStringSecurityDescriptorToSecurityDescriptorW(Sddl.c_str(), SDDL_REVISION_1, &Out, nullptr))
+        {
+            OutError = LastErrorText("ConvertStringSecurityDescriptorToSecurityDescriptor");
+            return false;
+        }
+        return true;
+    }
+
+    enum class EPipeIo { Done, Failed, Stopped };
+
+    // Completes an overlapped pipe operation started with @p Started, waiting at most
+    // @p TimeoutMs or until @p Stop is signaled. Pending I/O is cancelled on timeout or stop.
+    EPipeIo FinishPipeIo(HANDLE const Instance, OVERLAPPED& Overlapped, BOOL const Started, HANDLE const Stop,
+        DWORD const TimeoutMs, DWORD& OutBytes)
+    {
+        OutBytes = 0;
+        if (!Started)
+        {
+            DWORD const Error = ::GetLastError();
+            if (Error == ERROR_PIPE_CONNECTED)
+                return EPipeIo::Done;
+            if (Error != ERROR_IO_PENDING)
+                return EPipeIo::Failed;
+
+            HANDLE const Handles[2]{ Overlapped.hEvent, Stop };
+            DWORD const Wait = ::WaitForMultipleObjects(2, Handles, FALSE, TimeoutMs);
+            if (Wait != WAIT_OBJECT_0)
+            {
+                ::CancelIoEx(Instance, &Overlapped);
+                ::GetOverlappedResult(Instance, &Overlapped, &OutBytes, TRUE);
+                return Wait == WAIT_OBJECT_0 + 1 ? EPipeIo::Stopped : EPipeIo::Failed;
+            }
+        }
+        return ::GetOverlappedResult(Instance, &Overlapped, &OutBytes, FALSE) ? EPipeIo::Done : EPipeIo::Failed;
+    }
+}
+
+
+struct MatchmakingNet::ControlPipe
+{
+    HANDLE                          StopEvent{ nullptr };
+
+    ControlPipe() = default;
+    ~ControlPipe() { if (StopEvent) ::CloseHandle(StopEvent); }
+    ControlPipe(ControlPipe const&) = delete;
+    ControlPipe& operator=(ControlPipe const&) = delete;
+};
+
+
+namespace
+{
+    // One pipe instance serves clients in turn, so the name is never released
+    // between clients for another process to claim.
+    void ServeControlPipe(std::shared_ptr<MatchmakingNet::ControlPipe> const Pipe, HANDLE const Instance,
+        MatchmakingNet::PipeHandler const Handler)
+    {
+        OVERLAPPED Overlapped{};
+        Overlapped.hEvent = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        HANDLE const Stop = Pipe->StopEvent;
+        DWORD Bytes = 0;
+
+        auto const Step = [&](auto&& Start, DWORD const TimeoutMs)
+        {
+            ::ResetEvent(Overlapped.hEvent);
+            return FinishPipeIo(Instance, Overlapped, Start(), Stop, TimeoutMs, Bytes);
+        };
+
+        while (Overlapped.hEvent != nullptr)
+        {
+            EPipeIo const Connected = Step([&] { return ::ConnectNamedPipe(Instance, &Overlapped); }, INFINITE);
+            if (Connected == EPipeIo::Stopped)
+                break;
+
+            if (Connected == EPipeIo::Done)
+            {
+                std::string Request(k_maxPipeMessage, '\0');
+                EPipeIo const Read = Step([&] { return ::ReadFile(Instance, Request.data(), k_maxPipeMessage, nullptr, &Overlapped); },
+                    k_pipeIoTimeoutMs);
+                if (Read == EPipeIo::Stopped)
+                    break;
+
+                if (Read == EPipeIo::Done)
+                {
+                    Request.resize(Bytes);
+                    std::string const Reply = Handler(Request);
+                    if (Step([&] { return ::WriteFile(Instance, Reply.data(), static_cast<DWORD>(Reply.size()), nullptr, &Overlapped); },
+                        k_pipeIoTimeoutMs) == EPipeIo::Stopped)
+                    {
+                        break;
+                    }
+
+                    // Disconnecting discards unread data, so wait for the client to close first.
+                    char Drain = 0;
+                    if (Step([&] { return ::ReadFile(Instance, &Drain, 1, nullptr, &Overlapped); }, k_pipeIoTimeoutMs) == EPipeIo::Stopped)
+                        break;
+                }
+            }
+            else if (::WaitForSingleObject(Stop, 100) == WAIT_OBJECT_0)
+            {
+                break;
+            }
+            ::DisconnectNamedPipe(Instance);
+        }
+
+        if (Overlapped.hEvent != nullptr)
+            ::CloseHandle(Overlapped.hEvent);
+        ::CloseHandle(Instance);
+    }
 }
 
 
 namespace MatchmakingNet
 {
+    bool IsValidBaseUrl(std::string const& BaseUrl)
+    {
+        CrackedUrl Url{};
+        return CrackBaseUrl(BaseUrl, Url);
+    }
+
     HttpResult Request(std::string const& BaseUrl, wchar_t const* const Method, std::string const& Path,
         std::string const& Bearer, std::string const& JsonBody, int const ReceiveTimeoutMs)
     {
@@ -232,35 +380,42 @@ namespace MatchmakingNet
         {
             Buffer = std::make_unique<std::uint8_t[]>(Size);
             Status = ::GetAdaptersAddresses(AF_INET,
-                GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_INCLUDE_GATEWAYS,
                 nullptr, reinterpret_cast<IP_ADAPTER_ADDRESSES*>(Buffer.get()), &Size);
         }
         if (Status != NO_ERROR)
             return Addresses;
 
-        for (auto const* Adapter = reinterpret_cast<IP_ADAPTER_ADDRESSES const*>(Buffer.get());
-             Adapter != nullptr && Addresses.size() < Max; Adapter = Adapter->Next)
+        // Joiners on the host's network take the first address. Adapters with a default
+        // gateway come first: gateway-less virtual switches (Hyper-V, WSL) are only
+        // reachable from this PC.
+        for (bool const WantGateway : { true, false })
         {
-            if (Adapter->OperStatus != IfOperStatusUp || Adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
-                continue;
-
-            for (auto const* Unicast = Adapter->FirstUnicastAddress; Unicast != nullptr && Addresses.size() < Max; Unicast = Unicast->Next)
+            for (auto const* Adapter = reinterpret_cast<IP_ADAPTER_ADDRESSES const*>(Buffer.get());
+                 Adapter != nullptr && Addresses.size() < Max; Adapter = Adapter->Next)
             {
-                auto const* const Sockaddr = reinterpret_cast<sockaddr_in const*>(Unicast->Address.lpSockaddr);
-                if (Sockaddr == nullptr || Sockaddr->sin_family != AF_INET)
+                if (Adapter->OperStatus != IfOperStatusUp || Adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK
+                    || (Adapter->FirstGatewayAddress != nullptr) != WantGateway)
                     continue;
 
-                auto const* const Bytes = reinterpret_cast<std::uint8_t const*>(&Sockaddr->sin_addr.s_addr);
-                if (!IsLanAddress(Bytes))
-                    continue;
+                for (auto const* Unicast = Adapter->FirstUnicastAddress; Unicast != nullptr && Addresses.size() < Max; Unicast = Unicast->Next)
+                {
+                    auto const* const Sockaddr = reinterpret_cast<sockaddr_in const*>(Unicast->Address.lpSockaddr);
+                    if (Sockaddr == nullptr || Sockaddr->sin_family != AF_INET)
+                        continue;
 
-                std::string Text = FormatIPv4(Sockaddr->sin_addr.s_addr, 0);
-                Text.resize(Text.rfind(':'));
-                bool Duplicate = false;
-                for (auto const& Existing : Addresses)
-                    Duplicate = Duplicate || Existing == Text;
-                if (!Duplicate)
-                    Addresses.push_back(std::move(Text));
+                    auto const* const Bytes = reinterpret_cast<std::uint8_t const*>(&Sockaddr->sin_addr.s_addr);
+                    if (!IsLanAddress(Bytes))
+                        continue;
+
+                    std::string Text = FormatIPv4(Sockaddr->sin_addr.s_addr, 0);
+                    Text.resize(Text.rfind(':'));
+                    bool Duplicate = false;
+                    for (auto const& Existing : Addresses)
+                        Duplicate = Duplicate || Existing == Text;
+                    if (!Duplicate)
+                        Addresses.push_back(std::move(Text));
+                }
             }
         }
         return Addresses;
@@ -286,5 +441,42 @@ namespace MatchmakingNet
         auto const* const b = reinterpret_cast<std::uint8_t const*>(&AddressNetworkOrder);
         return std::to_string(b[0]) + "." + std::to_string(b[1]) + "." + std::to_string(b[2]) + "."
             + std::to_string(b[3]) + ":" + std::to_string(PortHostOrder);
+    }
+
+    std::shared_ptr<ControlPipe> StartControlPipe(std::wstring const& Name, PipeHandler Handler, std::string& OutError)
+    {
+        PSECURITY_DESCRIPTOR Descriptor = nullptr;
+        if (!CurrentUserOnlyDescriptor(Descriptor, OutError))
+            return nullptr;
+
+        SECURITY_ATTRIBUTES Attributes{ sizeof(Attributes), Descriptor, FALSE };
+        std::wstring const Path = L"\\\\.\\pipe\\" + Name;
+        HANDLE const Instance = ::CreateNamedPipeW(Path.c_str(),
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+            1, k_maxPipeMessage, k_maxPipeMessage, 0, &Attributes);
+        ::LocalFree(Descriptor);
+        if (Instance == INVALID_HANDLE_VALUE)
+        {
+            OutError = LastErrorText("CreateNamedPipe");
+            return nullptr;
+        }
+
+        auto Pipe = std::make_shared<ControlPipe>();
+        Pipe->StopEvent = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        if (Pipe->StopEvent == nullptr)
+        {
+            OutError = LastErrorText("CreateEvent");
+            ::CloseHandle(Instance);
+            return nullptr;
+        }
+
+        std::thread{ ServeControlPipe, Pipe, Instance, std::move(Handler) }.detach();
+        return Pipe;
+    }
+
+    void StopControlPipe(ControlPipe& Pipe)
+    {
+        ::SetEvent(Pipe.StopEvent);
     }
 }

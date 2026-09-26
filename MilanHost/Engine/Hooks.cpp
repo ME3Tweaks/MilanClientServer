@@ -337,6 +337,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     {
         bCallOriginal = false;
     }
+    COMPONENT(CMatchmaking).On_ScriptCall(Stack->Node);
 
     if (bCallOriginal)
     {
@@ -419,6 +420,26 @@ t_USFXEngine_UpdateDynamicLoadMappingFindHash* USFXEngine_UpdateDynamicLoadMappi
 int USFXEngine_UpdateDynamicLoadMappingFindHash_hook(USFXEngine* const Context, int const ObjectNetID)
 {
     return (*USFXEngine_UpdateDynamicLoadMappingFindHash_orig)(Context, ObjectNetID);
+}
+
+// UGameEngine::Browse loads this map for ?closed and ?failed (the "disconnect" command, a lost
+// or failed connection), and the host-left prompt opens it. LE3 returns the lobby map only when
+// signed in to Blaze, which LMP never is, so leaving a lobby or match fell back to EntryMenu.
+// Away from the local map it now returns to the multiplayer menu. Exit Multiplayer opens
+// EntryMenu directly and is unaffected.
+t_USFXEngine_GetDisconnectFallbackMap* USFXEngine_GetDisconnectFallbackMap_orig = nullptr;
+FString* USFXEngine_GetDisconnectFallbackMap_hook(USFXEngine* const Context, FString* const Result)
+{
+    (*USFXEngine_GetDisconnectFallbackMap_orig)(Context, Result);
+
+    UWorld* const World = (GWorld != nullptr) ? *GWorld : nullptr;
+    if (World == nullptr || World->Outer == nullptr || Result->StartsWith(*World->Outer->GetName(), true))
+        return Result;
+
+    FString LobbyMap = Context->GetDefaultLobbyMap();
+    MILAN_DEBUGW(ELOG_EngineHooks, L"disconnect fallback map: %s instead of %s", *LobbyMap, **Result);
+    *Result = std::move(LobbyMap);
+    return Result;
 }
 
 

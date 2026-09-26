@@ -41,6 +41,7 @@ SPI_IMPLEMENT_ATTACH
     // ----------------------------------------
 
     gp_sdkContext = new ::LESDK::Initializer{ InterfacePtr, "MilanHost" };
+    CConstants::ApplyEarlyMinimumResolutionCompatibility(*gp_sdkContext);
     gp_componentContainer = new ComponentContainer;
     gb_disableSafeBreak = CmdArgs::Contain(L"-nobreak");
 
@@ -106,6 +107,8 @@ void SingleDetachImpl()
         return;
 
     MILAN_INFOW(ELOG_Teardown, L"single detach starting");
+
+    CConstants::StopMinimumResolutionDialogWatchdog();
 
     COMPONENT(COutput).FlushEverything();
     COMPONENT(CGlobals).UninstallSomeHooks(*gp_sdkContext);

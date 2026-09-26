@@ -10,6 +10,8 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <span>
 #include <string>
 #include <vector>
@@ -17,6 +19,9 @@
 
 namespace MatchmakingNet
 {
+    /** True when @p BaseUrl is an http:// or https:// URL with a host. */
+    bool IsValidBaseUrl(std::string const& BaseUrl);
+
     struct HttpResult
     {
         int                         Status{ 0 };        // 0 when the request did not complete.
@@ -37,11 +42,29 @@ namespace MatchmakingNet
 
     bool HmacSha256(std::span<std::uint8_t const> Key, std::span<std::uint8_t const> Data, std::span<std::uint8_t, 32> Out);
 
-    /** Canonical dotted-quad private IPv4 addresses of up adapters (RFC 1918, 169.254/16, 100.64/10). */
+    /**
+     * Canonical dotted-quad private IPv4 addresses of up adapters (RFC 1918, 169.254/16, 100.64/10),
+     * adapters with a default gateway first.
+     */
     std::vector<std::string> LanIPv4Addresses(std::size_t Max);
 
     /** Local port of a bound IPv4 socket handle, or -1. */
     int LocalPort(std::uintptr_t SocketHandle);
 
     std::string FormatIPv4(std::uint32_t AddressNetworkOrder, std::uint16_t PortHostOrder);
+
+    /**
+     * Local control channel for other programs, such as an invite handler. It is a
+     * message-mode named pipe that only the current Windows user can open, and remote
+     * clients are rejected. Each connection sends one request message (at most 4 KiB)
+     * and receives one reply message. @p Handler runs on the pipe's own thread.
+     */
+    struct ControlPipe;
+    using PipeHandler = std::function<std::string(std::string const& Request)>;
+
+    /** Serves \\.\pipe\<Name> on a detached thread. Returns null and sets @p OutError on failure. */
+    std::shared_ptr<ControlPipe> StartControlPipe(std::wstring const& Name, PipeHandler Handler, std::string& OutError);
+
+    /** Asks the pipe thread to exit. It never calls the handler afterwards. */
+    void StopControlPipe(ControlPipe& Pipe);
 }
