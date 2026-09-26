@@ -113,22 +113,80 @@ public sealed class SearchTests : StoreTestBase
     {
         // Coalition (mode 1) currently fighting the faction with ID 4.
         Host(State(enemy: 1) with { ResolvedEnemyId = 4, Phase = MatchPhase.InProgress, WaveNumber = 3 });
+        CreateSearchResponse resolvedFaction = StartSearch(enemy: 4, widen: false);
+        CreateSearchResponse selectedMode = StartSearch(enemy: 1, from: OtherJoinerIp);
 
-        Assert.Equal(SearchState.Searching, StartSearch(enemy: 4).Status.State);
-        Assert.Equal(SearchState.Matched, StartSearch(enemy: 1, from: OtherJoinerIp).Status.State);
+        Assert.Equal(SearchState.Searching, Poll(resolvedFaction).State);
+        Assert.Equal(SearchState.Matched, Poll(selectedMode).State);
+    }
+
+    [Fact]
+    public void InProgressMatches_JoinStraightAwayWithNoOpenLobby()
+    {
+        CreateLobbyResponse match = Host(State(phase: MatchPhase.InProgress, wave: 2));
+        // Lobbies the player could never be matched to do not hold the search back.
+        Host(State(isPrivate: true), from: JoinerIp);
+        Host(State(players: 4), from: OtherJoinerIp);
+        Host(State(difficulty: 3), from: OtherJoinerIp);
+
+        Assert.Equal(match.LobbyId, StartSearch(difficulty: 2).Status.Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void InProgressMatches_WaitWhileAnyLobbyIsOpen()
+    {
+        CreateLobbyResponse match = Host(State(phase: MatchPhase.InProgress, wave: 2));
+        Host(State(map: 6), from: OtherJoinerIp);
+
+        CreateSearchResponse search = StartSearch(map: 5, difficulty: 2);
+        Assert.Equal(SearchState.Searching, search.Status.State);
+
+        Advance(Options.InProgressAfterSeconds - 1);
+        Assert.Equal(SearchState.Searching, Poll(search).State);
+
+        Advance(1);
+        Assert.Equal(match.LobbyId, Poll(search).Reservation?.Lobby.LobbyId);
     }
 
     [Fact]
     public void Ranking_PrefersLobbiesThenEarlierWaves()
     {
+        // Nothing is open when the search starts, so matches in progress qualify at once.
+        CreateSearchResponse search = StartSearch();
         Host(State(phase: MatchPhase.InProgress, wave: 2));
-        CreateLobbyResponse waiting = Host(State(phase: MatchPhase.Lobby), from: JoinerIp);
         CreateLobbyResponse earlyWave = Host(State(phase: MatchPhase.InProgress, wave: 1), from: OtherJoinerIp);
-
-        Assert.Equal(waiting.LobbyId, StartSearch().Status.Reservation?.Lobby.LobbyId);
+        CreateLobbyResponse waiting = Host(from: JoinerIp);
+        Assert.Equal(waiting.LobbyId, Poll(search).Reservation?.Lobby.LobbyId);
 
         Assert.Null(Store.DeleteLobby(waiting.LobbyId, waiting.HostKey));
         Assert.Equal(earlyWave.LobbyId, StartSearch(from: OtherJoinerIp).Status.Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void Ranking_PrefersLongestWaitingLobby()
+    {
+        CreateLobbyResponse oldest = Host();
+        Advance(5);
+        Host(State(players: 3), from: JoinerIp);
+
+        // Setting changes and heartbeats in the lobby keep its place.
+        Report(oldest, State(2, map: 6));
+
+        Assert.Equal(oldest.LobbyId, StartSearch(from: OtherJoinerIp).Status.Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void Ranking_ReturningFromAMatchRestartsTheWait()
+    {
+        CreateLobbyResponse veteran = Host();
+        Advance(5);
+        CreateLobbyResponse newcomer = Host(from: JoinerIp);
+
+        Report(veteran, State(2, phase: MatchPhase.InProgress, wave: 3));
+        Advance(5);
+        Report(veteran, State(3));
+
+        Assert.Equal(newcomer.LobbyId, StartSearch(from: OtherJoinerIp).Status.Reservation?.Lobby.LobbyId);
     }
 
     [Fact]

@@ -167,8 +167,10 @@ public sealed class LobbyTests : StoreTestBase
     public void Options_RejectBadWideningOrder()
     {
         MilanServerOptions options = new() { MapWidenSeconds = 70, EnemyWidenSeconds = 60 };
+        MilanServerOptions lateInProgress = new() { InProgressAfterSeconds = 121 };
 
         Assert.True(new MilanServerOptionsValidator().Validate(null, options).Failed);
+        Assert.True(new MilanServerOptionsValidator().Validate(null, lateInProgress).Failed);
         Assert.True(new MilanServerOptionsValidator().Validate(null, new MilanServerOptions()).Succeeded);
     }
 }

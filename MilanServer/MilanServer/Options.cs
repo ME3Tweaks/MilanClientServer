@@ -17,6 +17,10 @@ public sealed class MilanServerOptions
     // Offsets from search start at which quick match widens to any map, then any enemy.
     public int MapWidenSeconds { get; set; } = 30;
     public int EnemyWidenSeconds { get; set; } = 60;
+    // When a search starts while any lobby at the player's difficulty is open to them,
+    // matches already in progress join its candidates this long afterwards, so the
+    // lobbies get the first chance. With no such lobby, they are candidates straight away.
+    public int InProgressAfterSeconds { get; set; } = 10;
     public int SearchPollMilliseconds { get; set; } = 2000;
     // Upper bound on how long introduction and reservation polls wait for a change.
     public int LongPollSeconds { get; set; } = 25;
@@ -64,6 +68,8 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
         {
             errors.Add("Search timings must satisfy 0 <= MapWidenSeconds <= EnemyWidenSeconds <= SearchSeconds, with SearchSeconds >= 1.");
         }
+        if (options.InProgressAfterSeconds < 0 || options.InProgressAfterSeconds > options.SearchSeconds)
+            errors.Add("InProgressAfterSeconds must be between 0 and SearchSeconds.");
         if (options.SearchPollMilliseconds < 100)
             errors.Add("SearchPollMilliseconds must be at least 100.");
         if (options.LongPollSeconds is < 1 or > 120)

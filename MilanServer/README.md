@@ -46,7 +46,9 @@ combinations fail at startup.
 
 ## Publish
 
-Self-contained single-file builds (about 100 MB, no runtime needed on the target):
+Publishing is trimmed, so it has to be self-contained (single file about 22 MB, no
+runtime needed on the target). JSON bodies need a `[JsonSerializable]` root in
+`MilanJsonContext` (`Contracts.cs`), or the trimmed server cannot serialize them:
 
 ```
 dotnet publish MilanServer -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o publish/linux-x64
@@ -54,7 +56,73 @@ dotnet publish MilanServer -c Release -r win-x64 --self-contained -p:PublishSing
 ```
 
 State is ephemeral. After a restart, a host's next report gets `lobby_not_found`,
-and the host must create a new lobby, which gets a new invite code.
+and the host must create a new lobby, which gets a new invite code. MilanHost does this
+automatically.
+
+## Docker
+
+From this directory, on Linux or inside WSL:
+
+```
+docker build -t milanserver .
+docker run -d --name milanserver --network host milanserver
+```
+
+`docker compose up -d --build` does the same with published ports instead
+(`compose.yaml`). `docker build --target test .` runs the unit tests in the SDK image.
+The image listens on TCP 5080 (`ASPNETCORE_HTTP_PORTS`) and UDP 5081 (`Milan__UdpPort`),
+runs as the non-root `app` user, and takes any `Milan__<Setting>` environment variable.
+It holds the trimmed server on a chiseled Ubuntu base (about 65 MB) with no shell, so
+`docker exec` cannot open one; use `docker logs`.
+
+The server has to see each player's real address and UDP port, or endpoint discovery
+and per-address rate limits are wrong. How that works depends on where Docker runs:
+
+- **Linux host:** `--network host` is simplest. Published ports (`-p 5080:5080/tcp
+  -p 5081:5081/udp`) also keep outside players' addresses. Clients on the same machine
+  that connect through `localhost` may then appear as the Docker gateway. Publish UDP
+  on the same port number: clients take it from `/v1/info`.
+- **WSL2 in NAT mode (the default):** only TCP is forwarded to Windows `localhost`,
+  and other PCs cannot reach WSL at all. Games on the same PC can point at the WSL
+  address (`wsl hostname -I`), e.g. `-mmserver=http://172.x.y.z:5080`. They all appear
+  to come from the Windows side of the WSL switch, which only suits same-PC tests.
+- **WSL2 for LAN tests:** switch WSL to mirrored networking and run with
+  `--network host`. Put `networkingMode=mirrored` under `[wsl2]` in
+  `%UserProfile%\.wslconfig`, then run `wsl --shutdown`. Inbound traffic from other PCs
+  also needs the Hyper-V firewall to allow it for WSL, for example
+  `Set-NetFirewallHyperVVMSetting -Name '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -DefaultInboundAction Allow`
+  (elevated PowerShell), plus the usual Windows firewall rules for TCP 5080 and UDP 5081.
+  Stop any Windows copy of MilanServer first: mirrored mode shares ports with Windows.
+- **Docker Desktop:** published ports go through a proxy, so every player appears as
+  the gateway. Do not use it for NAT or LAN tests.
+
+### Deploying the image to a server
+
+From WSL or Linux, `deploy.sh` builds the image, copies it over SSH, and replaces the
+running server:
+
+```
+./deploy.sh user@server /var/milan
+```
+
+- It builds for the server's CPU (x64 or arm64) and saves the image as
+  `/var/milan/milanserver.tar.gz`, about 19 MB. It asks for sudo once if the folder
+  cannot be created as the login user.
+- It replaces the `milanserver` container, which runs with host networking, restarts
+  unless stopped, and has a 384 MB memory limit (`MEMORY_LIMIT` in the script). It then
+  checks `/healthz`. Lobbies are lost on a redeploy; hosts register again on their own.
+- Settings go in `/var/milan/milanserver.env` on the server, one `Milan__<Setting>=value`
+  per line, and apply on the next deploy.
+- The login user must be able to run Docker without sudo (the `docker` group).
+
+To do it by hand, name the tag when saving: `docker save milanserver` saves every tag in
+the repository, including `milanserver:test` from `--target test`, which carries the
+whole .NET SDK.
+
+With host networking, the server's own firewall applies: open TCP 5080 and UDP 5081 there
+(for example `ufw allow 5080/tcp` and `ufw allow 5081/udp`) and in the provider's
+firewall. Published ports (`-p`) bypass ufw. Games connect with
+`-mmserver=http://<server IPv4 address>:5080`.
 
 ## API v1
 
@@ -86,7 +154,13 @@ same content is a heartbeat. The same revision with different content is `revisi
 
 Quick match holds difficulty fixed. It widens from the exact map and enemy to any
 map after `MapWidenSeconds`, then to any enemy after `EnemyWidenSeconds`, and ends
-with state `NoMatch` after `SearchSeconds`. `widen: false` disables widening. Private
+with state `NoMatch` after `SearchSeconds`. `widen: false` disables widening. If no lobby
+at the player's difficulty is open to them when the search starts, matches already in
+progress are candidates straight away. Otherwise they wait `InProgressAfterSeconds`
+(10), even if those lobbies' map or enemy does not fit yet, and lobbies still rank first
+after that. Among
+lobbies, the one that has waited longest is offered first; a lobby that returns from a
+match starts waiting again. Private
 lobbies, extraction, and complete matches never match a search. Invites work for
 private lobbies and during extraction.
 

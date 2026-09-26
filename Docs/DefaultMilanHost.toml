@@ -13,7 +13,9 @@ host = "localhost"
 port = 11111
 
 [milan.matchmaker]
-# MilanServer base URL (optional; this is the default). Change at runtime with mm.server <url>.
+# MilanServer base URL (optional; this is the default). An empty string disables matchmaking;
+# hosting works either way. The -mmserver=<url> command-line switch overrides this, and
+# mm.server <url> / mm.server off or the control pipe change it while the game runs.
 url = "http://127.0.0.1:5080"
 
 [milan.logging]

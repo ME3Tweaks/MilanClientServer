@@ -7,13 +7,22 @@ using System.Net.Http.Json;
 using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MilanServer.Tests;
 
 // Binds UDP discovery to an ephemeral port so tests never collide with a running server.
+// Drops the reflection fallback from the server's JSON options, as trimming does in the
+// published server, so a body missing from MilanJsonContext fails here.
 public sealed class MilanFactory : WebApplicationFactory<Program>
 {
-    protected override void ConfigureWebHost(IWebHostBuilder builder) => builder.UseSetting("Milan:UdpPort", "0");
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseSetting("Milan:UdpPort", "0");
+        builder.ConfigureTestServices(services =>
+            services.ConfigureHttpJsonOptions(json => json.SerializerOptions.TypeInfoResolver = MilanJsonContext.Default));
+    }
 }
 
 public sealed class HttpApiTests : IClassFixture<MilanFactory>
@@ -71,12 +80,26 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
         Assert.Equal(lobby.LobbyId, status.Reservation?.Lobby.LobbyId);
         Assert.Contains(status.Reservation!.HostCandidates, c => c is { Address: "192.168.1.20", Port: 7777, Kind: CandidateKind.Lan });
 
+        HttpResponseMessage candidates = await client.SendAsync(Authorized(HttpMethod.Put,
+            $"/v1/reservations/{status.Reservation.ReservationId}/candidates", status.Reservation.JoinKey,
+            new JoinerCandidatesRequest(7778, ["192.168.1.30"])), Ct);
+        Assert.Equal(HttpStatusCode.NoContent, candidates.StatusCode);
+
+        HttpResponseMessage reservation = await client.SendAsync(
+            Authorized(HttpMethod.Post, $"/v1/reservations/{status.Reservation.ReservationId}/poll", status.Reservation.JoinKey), Ct);
+        Assert.False((await reservation.Content.ReadFromJsonAsync<ReservationStatus>(Ct))?.Joined);
+
         HttpResponseMessage joined = await client.SendAsync(
             Authorized(HttpMethod.Post, $"/v1/reservations/{status.Reservation.ReservationId}/joined", status.Reservation.JoinKey), Ct);
         Assert.Equal(HttpStatusCode.NoContent, joined.StatusCode);
 
+        HttpResponseMessage rotated = await client.SendAsync(
+            Authorized(HttpMethod.Post, $"/v1/lobbies/{lobby.LobbyId}/invite", lobby.HostKey), Ct);
+        string inviteCode = (await rotated.Content.ReadFromJsonAsync<InviteResponse>(Ct))!.InviteCode;
+        Assert.NotEqual(lobby.InviteCode, inviteCode);
+
         HttpResponseMessage redeemed = await client.PostAsJsonAsync("/v1/invites/redeem",
-            new RedeemInviteRequest(lobby.InviteCode, Version), Ct);
+            new RedeemInviteRequest(inviteCode, Version), Ct);
         Assert.Equal(HttpStatusCode.OK, redeemed.StatusCode);
 
         HttpResponseMessage deleted = await client.SendAsync(

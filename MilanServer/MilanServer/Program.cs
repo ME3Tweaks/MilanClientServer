@@ -27,6 +27,7 @@ builder.WebHost.ConfigureKestrel(kestrel =>
 
 builder.Services.ConfigureHttpJsonOptions(json =>
 {
+    json.SerializerOptions.TypeInfoResolverChain.Insert(0, MilanJsonContext.Default);
     json.SerializerOptions.RespectNullableAnnotations = true;
     json.SerializerOptions.RespectRequiredConstructorParameters = true;
     json.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
@@ -62,7 +63,8 @@ builder.Services.AddOptions<RateLimiterOptions>()
             response.StatusCode = StatusCodes.Status429TooManyRequests;
             if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out TimeSpan retryAfter))
                 response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
-            await response.WriteAsJsonAsync(new ServerError("rate_limited", "Too many requests from this network address."), cancellationToken);
+            await response.WriteAsJsonAsync(new ServerError("rate_limited", "Too many requests from this network address."),
+                MilanJsonContext.Default.ServerError, cancellationToken: cancellationToken);
         };
     });
 
@@ -78,7 +80,7 @@ app.Use(async (http, next) =>
     catch (BadHttpRequestException ex) when (!http.Response.HasStarted)
     {
         http.Response.StatusCode = ex.StatusCode;
-        await http.Response.WriteAsJsonAsync(new ServerError("invalid_request", ex.Message));
+        await http.Response.WriteAsJsonAsync(new ServerError("invalid_request", ex.Message), MilanJsonContext.Default.ServerError);
     }
 });
 app.UseRateLimiter();

@@ -1,0 +1,22 @@
+# docker compose up -d --build     (from the MilanServer directory)
+#
+# The server must see each player's real address and UDP port. On a Linux host,
+# published ports keep the client's source address for outside players. On Docker
+# Desktop (Windows/macOS) they do not: every client appears as the Docker gateway,
+# so endpoint discovery and per-address rate limits are wrong. See README.md.
+services:
+  milanserver:
+    build: .
+    image: milanserver:dev
+    restart: unless-stopped
+    ports:
+      - "5080:5080/tcp"
+      # Must stay the same number on both sides: clients use the port from /v1/info.
+      - "5081:5081/udp"
+    # Alternative on Linux: share the host's network stack instead of publishing ports.
+    # network_mode: host
+    environment:
+      # Any setting from MilanServer/Options.cs can be overridden as Milan__<Name>.
+      # Milan__LobbyLeaseSeconds: "60"
+      # Milan__TrustedProxies__0: "10.0.0.5"   # only behind a TLS reverse proxy
+      Logging__LogLevel__Default: "Information"

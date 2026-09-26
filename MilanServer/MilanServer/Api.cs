@@ -72,7 +72,8 @@ public static class Api
             Respond(store.CancelReservation(reservationId, BearerToken(http))));
     }
 
-    public static IResult Error(Failure failure) => Results.Json(failure.ToError(), statusCode: failure.StatusCode);
+    public static IResult Error(Failure failure) =>
+        Results.Json(failure.ToError(), MilanJsonContext.Default.ServerError, statusCode: failure.StatusCode);
 
     static IResult Respond<T>(Outcome<T> outcome, Func<T, IResult> onSuccess) =>
         outcome.Failure is { } failure ? Error(failure) : onSuccess(outcome.Value);

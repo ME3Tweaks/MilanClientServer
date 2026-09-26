@@ -70,6 +70,7 @@ public sealed class MatchmakingStore
                 SourceKey = sourceKey,
                 InviteCode = NewUniqueInviteCode(),
                 State = state,
+                WaitingSince = now,
                 PublicAddress = NetworkAddresses.PublicIPv4(source),
                 ExpiresAt = now.AddSeconds(_options.LobbyLeaseSeconds),
             };
@@ -79,8 +80,9 @@ public sealed class MatchmakingStore
             lobby.UdpTicketId = ticketId;
         }
 
-        _logger.LogInformation("Created lobby {LobbyId} ({Privacy}, {Players}/{MaxPlayers}).",
-            lobby.Id, state.IsPrivate ? "private" : "public", state.PlayerCount, state.MaxPlayers);
+        _logger.LogInformation("Created lobby {LobbyId} ({Privacy}, {Phase}, {Joinable}, {Players}/{MaxPlayers}).",
+            lobby.Id, state.IsPrivate ? "private" : "public", state.Phase, state.Joinable ? "joinable" : "not joinable",
+            state.PlayerCount, state.MaxPlayers);
 
         return new CreateLobbyResponse(lobby.Id, hostKey, Secrets.FormatInviteCode(lobby.InviteCode),
             state.Revision, lobby.ExpiresAt, _options.HeartbeatSeconds, udpTicket);
@@ -106,6 +108,15 @@ public sealed class MatchmakingStore
             {
                 if (!SameContent(state, lobby.State))
                     SignalLocked(lobby);
+                // Back in the lobby after a match: it queues behind lobbies already waiting.
+                if (state.Phase == MatchPhase.Lobby && lobby.State.Phase != MatchPhase.Lobby)
+                    lobby.WaitingSince = now;
+                if (state.Phase != lobby.State.Phase || state.Joinable != lobby.State.Joinable || state.IsPrivate != lobby.State.IsPrivate)
+                {
+                    _logger.LogInformation("Lobby {LobbyId} is now {Phase}, {Joinable}, {Privacy} ({Players}/{MaxPlayers}).",
+                        lobby.Id, state.Phase, state.Joinable ? "joinable" : "not joinable", state.IsPrivate ? "private" : "public",
+                        state.PlayerCount, state.MaxPlayers);
+                }
                 lobby.State = state;
 
                 // A current report reflects the host's player count after any joiner that
@@ -197,7 +208,17 @@ public sealed class MatchmakingStore
                 CreatedAt = now,
                 Deadline = now.AddSeconds(_options.SearchSeconds),
             };
+            // With no open lobby at the player's difficulty, matches in progress qualify at
+            // once. Otherwise the lobbies get InProgressAfterSeconds first, even if their map
+            // or enemy does not fit yet.
+            search.InProgressFrom = _lobbies.Values.Any(l => l.State.Phase == MatchPhase.Lobby && IsOpenTo(l, search, now))
+                ? now.AddSeconds(_options.InProgressAfterSeconds)
+                : now;
             _searches.Add(search.Id, search);
+            _logger.LogInformation(
+                "Search {SearchId} started: map {MapId}, enemy {EnemyModeId}, difficulty {DifficultyId}, widen {Widen}; matches in progress {InProgress}.",
+                search.Id, request.MapId, request.EnemyModeId, request.DifficultyId, request.Widen,
+                search.InProgressFrom == now ? "allowed now (no open lobby)" : $"allowed after {_options.InProgressAfterSeconds} s (lobbies open)");
 
             Outcome<SearchStatus> status = EvaluateSearchLocked(search, now);
             if (status.Failure is { } failure)
@@ -234,8 +255,10 @@ public sealed class MatchmakingStore
             _searches.Remove(search.Id);
             if (search.Reservation is { JoinedAt: null } reservation)
                 RemoveReservationLocked(reservation);
-            return null;
         }
+
+        _logger.LogInformation("Search {SearchId} cancelled.", searchId);
+        return null;
     }
 
     public static SearchStage StageAt(TimeSpan elapsed, bool widen, MilanServerOptions options)
@@ -256,17 +279,23 @@ public sealed class MatchmakingStore
             // No automatic lobby creation: the client reports "no match found".
             search.State = SearchState.NoMatch;
             search.Result = new SearchStatus(SearchState.NoMatch, stage, search.Deadline, 0);
+            _logger.LogInformation("Search {SearchId} found no match.", search.Id);
             return search.Result;
+        }
+        if (stage != search.Stage)
+        {
+            search.Stage = stage;
+            _logger.LogInformation("Search {SearchId} widened to {Stage}.", search.Id, stage);
         }
 
         Lobby? best = null;
-        (int, int, int, int, long) bestRank = default;
+        (int, int, int, DateTimeOffset, long) bestRank = default;
         foreach (Lobby lobby in _lobbies.Values)
         {
             if (!IsSearchCandidate(lobby, search, stage, now))
                 continue;
 
-            (int, int, int, int, long) rank = Rank(lobby, search.Request);
+            (int, int, int, DateTimeOffset, long) rank = Rank(lobby, search.Request);
             if (best is null || rank.CompareTo(bestRank) < 0)
             {
                 best = lobby;
@@ -288,36 +317,43 @@ public sealed class MatchmakingStore
         return search.Result;
     }
 
+    // Whether this player could ever be matched to the lobby, before the map and enemy
+    // filters that widen. Private lobbies never appear in search, extraction is
+    // invite-only, and difficulty never widens.
+    bool IsOpenTo(Lobby lobby, Search search, DateTimeOffset now)
+    {
+        LobbySnapshot state = lobby.State;
+        SearchRequest request = search.Request;
+        return lobby.ExpiresAt > now
+            && !state.IsPrivate
+            && state.Joinable
+            && state.Phase is (MatchPhase.Lobby or MatchPhase.InProgress)
+            && (request.DifficultyId == GameSettingIds.AnyDifficulty || state.DifficultyId == request.DifficultyId)
+            && lobby.GameVersion == request.GameVersion
+            && !search.Excluded.Contains(lobby.Id)
+            && Occupancy(lobby, now) < state.MaxPlayers;
+    }
+
     bool IsSearchCandidate(Lobby lobby, Search search, SearchStage stage, DateTimeOffset now)
     {
         LobbySnapshot state = lobby.State;
         SearchRequest request = search.Request;
 
-        // Private lobbies never appear in search, and extraction is invite-only.
-        if (lobby.ExpiresAt <= now
-            || state.IsPrivate
-            || !state.Joinable
-            || state.Phase is not (MatchPhase.Lobby or MatchPhase.InProgress)
-            || lobby.GameVersion != request.GameVersion
-            || search.Excluded.Contains(lobby.Id)
-            || Occupancy(lobby, now) >= state.MaxPlayers)
-        {
+        if (!IsOpenTo(lobby, search, now) || (state.Phase == MatchPhase.InProgress && now < search.InProgressFrom))
             return false;
-        }
 
-        // Difficulty stays fixed while widening. Filters compare the selected setting,
-        // so a Random map lobby never satisfies a specific map, and Random Faction or
-        // Coalition match by mode ID rather than the faction currently in play.
+        // Filters compare the selected setting, so a Random map lobby never satisfies a
+        // specific map, and Random Faction or Coalition match by mode ID rather than the
+        // faction currently in play.
         bool mapMatches = stage >= SearchStage.AnyMap || request.MapId == GameSettingIds.AnyMap || state.MapId == request.MapId;
         bool enemyMatches = stage >= SearchStage.AnyMapAndEnemy || request.EnemyModeId == GameSettingIds.AnyEnemy
             || state.EnemyModeId == request.EnemyModeId;
-        bool difficultyMatches = request.DifficultyId == GameSettingIds.AnyDifficulty || state.DifficultyId == request.DifficultyId;
-        return mapMatches && enemyMatches && difficultyMatches;
+        return mapMatches && enemyMatches;
     }
 
     // Lower sorts first: lobbies before matches in progress, then closer matches to the
-    // player's original filters, earlier waves, fuller lobbies, and finally older lobbies.
-    static (int, int, int, int, long) Rank(Lobby lobby, SearchRequest request)
+    // player's original filters, earlier waves, and then the lobby that has waited longest.
+    static (int, int, int, DateTimeOffset, long) Rank(Lobby lobby, SearchRequest request)
     {
         LobbySnapshot state = lobby.State;
         int specificity = 0;
@@ -326,7 +362,7 @@ public sealed class MatchmakingStore
         if (request.EnemyModeId != GameSettingIds.AnyEnemy && state.EnemyModeId == request.EnemyModeId)
             specificity++;
 
-        return (state.Phase == MatchPhase.Lobby ? 0 : 1, -specificity, state.WaveNumber, -state.PlayerCount, lobby.Sequence);
+        return (state.Phase == MatchPhase.Lobby ? 0 : 1, -specificity, state.WaveNumber, lobby.WaitingSince, lobby.Sequence);
     }
 
     #endregion
@@ -835,6 +871,8 @@ public sealed class MatchmakingStore
         public required string SourceKey { get; init; }
         public required string InviteCode { get; set; }
         public required LobbySnapshot State { get; set; }
+        // When the lobby opened or last returned to the Lobby phase; search ranks older first.
+        public required DateTimeOffset WaitingSince { get; set; }
         // Address of the host's latest control request, when it was IPv4.
         public required IPAddress? PublicAddress { get; set; }
         public required DateTimeOffset ExpiresAt { get; set; }
@@ -882,6 +920,10 @@ public sealed class MatchmakingStore
         public required IPAddress? PublicAddress { get; init; }
         public required DateTimeOffset CreatedAt { get; init; }
         public required DateTimeOffset Deadline { get; init; }
+        // When matches already in progress become candidates; set once, at the start.
+        public DateTimeOffset InProgressFrom { get; set; }
+        // Last stage seen by a poll, so each widening is logged once.
+        public SearchStage Stage { get; set; }
         public SearchState State { get; set; } = SearchState.Searching;
         public SearchStatus? Result { get; set; }
         public Reservation? Reservation { get; set; }

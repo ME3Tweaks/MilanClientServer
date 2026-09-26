@@ -173,3 +173,26 @@ public sealed record ServerInfo(
     int UdpPort);
 
 public sealed record ServerError(string Code, string Message);
+
+// Source-generated JSON metadata: the published server is trimmed, which turns off
+// reflection-based serialization. Every request and response body needs a root here;
+// nested types are picked up from them. Endpoints serialize with the HTTP JSON options
+// in Program.cs. These options only apply where a type is written through this context
+// directly, which is ServerError.
+[JsonSourceGenerationOptions(System.Text.Json.JsonSerializerDefaults.Web)]
+[JsonSerializable(typeof(CreateLobbyRequest))]
+[JsonSerializable(typeof(CreateLobbyResponse))]
+[JsonSerializable(typeof(LobbySnapshot))]
+[JsonSerializable(typeof(LobbyStateResponse))]
+[JsonSerializable(typeof(InviteResponse))]
+[JsonSerializable(typeof(IntroductionList))]
+[JsonSerializable(typeof(SearchRequest))]
+[JsonSerializable(typeof(CreateSearchResponse))]
+[JsonSerializable(typeof(SearchStatus))]
+[JsonSerializable(typeof(RedeemInviteRequest))]
+[JsonSerializable(typeof(JoinReservation))]
+[JsonSerializable(typeof(JoinerCandidatesRequest))]
+[JsonSerializable(typeof(ReservationStatus))]
+[JsonSerializable(typeof(ServerInfo))]
+[JsonSerializable(typeof(ServerError))]
+sealed partial class MilanJsonContext : JsonSerializerContext;
