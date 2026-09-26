@@ -1,0 +1,180 @@
+diff --git a/Src/LESDK/Common/TArray.hpp b/Src/LESDK/Common/TArray.hpp
+index ebace90..4c6a406 100644
+--- a/Src/LESDK/Common/TArray.hpp
++++ b/Src/LESDK/Common/TArray.hpp
+@@ -181,7 +181,8 @@ void TArrayBase<T, WithRAII>::Reserve(size_type const Capacity) {
+         if (CurrentCapacity == 0) {
+             Data = DoAlloc(Capacity);
+         } else {
+-            Data = DoRealloc(Data, CurrentCapacity, Capacity);
++            // Pass the true live count (CountItems), not the old capacity - see DoRealloc.
++            Data = DoRealloc(Data, CountItems, Capacity);
+         }
+         CountMax = Capacity;
+     }
+@@ -191,7 +192,7 @@ template<TArrayElement T, bool WithRAII>
+ void TArrayBase<T, WithRAII>::Shrink() {
+     if (CountItems < CountMax) {
+         if (CountItems != 0) {
+-            Data = DoRealloc(Data, CountMax, CountItems);
++            Data = DoRealloc(Data, CountItems, CountItems);
+         } else {
+             DoFree(std::exchange(Data, nullptr));
+         }
+@@ -253,7 +254,18 @@ TArrayBase<T, WithRAII>::reference
+ TArrayBase<T, WithRAII>::Insert(size_type const Position, const_reference Value) {
+     LESDK_CHECK(Position <= CountItems, "");
+ 
++    // An append (Position == CountItems, the common case) always lands in capacity that was
++    // never constructed - freshly reserved, or freshly reallocated by DoRealloc - so it must be
++    // placement-constructed, not assigned into. A true middle-insert instead overwrites a slot
++    // that DoInsertUninit's shift just vacated from an already-live element, so assignment there
++    // remains correct. See DoRealloc for the fuller explanation (same class of bug).
++    bool const bAppending = (Position >= CountItems);
++
+     pointer const Inserted = DoInsertUninit(Position, 1);
++    if (bAppending) {
++        std::construct_at(Inserted, Value);
++        return *Inserted;
++    }
+     return (*Inserted = Value);
+ }
+ 
+@@ -264,7 +276,13 @@ TArrayBase<T, WithRAII>::Insert(size_type Position, value_type&& Value)
+ {
+     LESDK_CHECK(Position <= CountItems, "");
+ 
++    bool const bAppending = (Position >= CountItems);
++
+     pointer const Inserted = DoInsertUninit(Position, 1);
++    if (bAppending) {
++        std::construct_at(Inserted, std::move(Value));
++        return *Inserted;
++    }
+     return (*Inserted = std::move(Value));
+ }
+ 
+@@ -273,8 +291,14 @@ void TArrayBase<T, WithRAII>::InsertRange(size_type const Position, size_type co
+     LESDK_CHECK(Position <= CountItems, "");
+     LESDK_CHECK(Count > 0, "");
+ 
++    bool const bAppending = (Position >= CountItems);
++
+     pointer const Inserted = DoInsertUninit(Position, Count);
+-    std::fill_n(Inserted, Count, Value);
++    if (bAppending) {
++        std::uninitialized_fill_n(Inserted, Count, Value);
++    } else {
++        std::fill_n(Inserted, Count, Value);
++    }
+ }
+ 
+ template<TArrayElement T, bool WithRAII>
+@@ -285,9 +309,15 @@ void TArrayBase<T, WithRAII>::InsertRange(size_type const Position, InputIt cons
+ 
+     if (First < Last) {
+         auto const Count = static_cast<size_type>(Last - First);
++        bool const bAppending = (Position >= CountItems);
++
+         pointer const Inserted = DoInsertUninit(Position, Count);
+-        // TODO: Should we maybe move here if possible?
+-        std::copy(First, Last, Inserted);
++        if (bAppending) {
++            std::uninitialized_copy(First, Last, Inserted);
++        } else {
++            // TODO: Should we maybe move here if possible?
++            std::copy(First, Last, Inserted);
++        }
+     }
+ }
+ 
+@@ -374,22 +404,38 @@ TArrayBase<T, WithRAII>::DoInsertUninit(size_type const Offset, size_type const
+ 
+     // 1. Find number (N) of elements to be shifted right.
+     // 2. Copy N elements from [Data + Offset] to [Data + Offset + Count].
++    //
++    // The shifted range's destination, [Offset + Count, CountItems + Count), always extends
++    // `Count` elements past the OLD CountItems - that tail is capacity that was never
++    // constructed (freshly reserved, or freshly reallocated by Reserve() above), so it must be
++    // placement-constructed, never assigned into. Only the part of the destination that still
++    // lands within the old [0, CountItems) - i.e. it is overwriting an already-live element that
++    // is itself being relocated elsewhere in this same shift - may use assignment.
+ 
+     auto const MoveCount = CountItems - Offset;
+     if (MoveCount != 0) {
+         auto const MoveBegin = Data + Offset;
+ 
+-        if constexpr (std::movable<value_type>) {
+-            if (Count >= MoveCount) {
+-                std::move(MoveBegin, MoveBegin + MoveCount, MoveBegin + Count);
++        if (Count >= MoveCount) {
++            // The whole shifted range lands beyond the old CountItems: pure construction, and
++            // since the destination starts at or after the source's end, there is no overlap.
++            if constexpr (std::movable<value_type>) {
++                std::uninitialized_move(MoveBegin, MoveBegin + MoveCount, MoveBegin + Count);
+             } else {
+-                std::move_backward(MoveBegin, MoveBegin + MoveCount, MoveBegin + Count + MoveCount);
++                std::uninitialized_copy(MoveBegin, MoveBegin + MoveCount, MoveBegin + Count);
+             }
+         } else {
+-            if (Count >= MoveCount) {
+-                std::copy(MoveBegin, MoveBegin + MoveCount, MoveBegin + Count);
++            // Split: construct the top `Count` elements of the shifted range first (their
++            // destination is beyond the old CountItems and never overlaps their own source, so
++            // reading them before anything else touches that memory is always safe), then
++            // assign-shift the remaining live-to-live portion backward to handle its overlap.
++            auto const ConstructSrc = MoveBegin + (MoveCount - Count);
++            if constexpr (std::movable<value_type>) {
++                std::uninitialized_move(ConstructSrc, ConstructSrc + Count, ConstructSrc + Count);
++                std::move_backward(MoveBegin, ConstructSrc, MoveBegin + MoveCount);
+             } else {
+-                std::copy_backward(MoveBegin, MoveBegin + MoveCount, MoveBegin + Count + MoveCount);
++                std::uninitialized_copy(ConstructSrc, ConstructSrc + Count, ConstructSrc + Count);
++                std::copy_backward(MoveBegin, ConstructSrc, MoveBegin + MoveCount);
+             }
+         }
+     }
+@@ -426,18 +472,38 @@ template<TArrayElement T, bool WithRAII>
+ TArrayBase<T, WithRAII>::pointer
+ TArrayBase<T, WithRAII>::DoRealloc(pointer const OldData, size_type const OldCount, size_type const NewCount) {
+     LESDK_CHECK(OldData != nullptr, "");
+-    LESDK_CHECK(OldCount != 0, "");
+     LESDK_CHECK(NewCount != 0, "");
++    LESDK_CHECK(OldCount <= NewCount, "");
++
++    // `OldCount` is the number of LIVE elements to preserve (Reserve()/Shrink() both pass
++    // CountItems, not the old capacity) - everything from OldCount up to the previous capacity
++    // was already just reserved-but-uninitialized memory, never constructed, so it must never be
++    // move-constructed from or destroyed.
++    //
++    // We cannot use `GMalloc->Realloc` here because copy/move constructors may need to be called
++    // for element types with meaningful custom behavior. Placement-construct (NOT assign - the
++    // destination is freshly malloc'd, unconstructed memory) into the new allocation, then
++    // destroy only the elements that were genuinely live in the old one.
++    //
++    // This used to call std::move()/std::copy() (assignment) instead of
++    // std::uninitialized_move()/std::uninitialized_copy() (construction) here, which is
++    // undefined behavior for any element type whose assignment operator inspects its own prior
++    // state - exactly what FString::operator= does (FString::Reset() frees whatever pointer
++    // happens to already be sitting in that unconstructed memory). It went unnoticed because it
++    // only crashes once the allocator hands back a reused (non-zero) block instead of a fresh
++    // one, and this container's own test doubles (Copyable/Movable in Tests/Utilities.hpp) don't
++    // read `this`'s prior state in their assignment operators, so they never exercised the bug.
++    // It also used to destroy elements using the old CAPACITY rather than the live count, which
++    // for a Reserve() called on a partially-full array would have destroyed never-constructed
++    // elements too - passing the live count from both call sites fixes that as well.
+ 
+-    // We cannot use `GMalloc->Realloc` here because copy/move constructors may need to be called.
+     pointer const Allocated = sdkMallocTyped<T>(NewCount, k_defaultAlignment);
+     LESDK_CHECK(Allocated != nullptr, "");
+ 
+-    auto const MoveCount = std::min<size_type>(OldCount, NewCount);
+     if constexpr (std::movable<value_type>) {
+-        std::move(OldData, OldData + MoveCount, Allocated);
++        std::uninitialized_move(OldData, OldData + OldCount, Allocated);
+     } else {
+-        std::copy(OldData, OldData + MoveCount, Allocated);
++        std::uninitialized_copy(OldData, OldData + OldCount, Allocated);
+     }
+     std::destroy(OldData, OldData + OldCount);
+ 

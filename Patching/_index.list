@@ -4,3 +4,6 @@ LExSDKv2:LESDK-LE3:/Src/LESDK/LE3/Core_classes.hpp:LESDK_Core_classes.hpp.diff
 LExSDKv2:LESDK-LE3:/Src/LESDK/LE3/Core_structs.hpp:LESDK_Core_structs.hpp.diff
 LExSDKv2:LESDK-LE3:/Src/LESDK/LE3/Engine_classes.hpp:LESDK_Engine_classes.hpp.diff
 LExSDKv2:LESDK-LE3:/Src/LESDK/LE3/IpDrv_classes.hpp:LESDK_IpDrv_classes.hpp.diff
+LExSDKv2:LESDK-LE3:/Src/LESDK/Common/TArray.hpp:LESDK_Common_TArray.hpp.diff
+LExSDKv2:LESDK-TESTS:/Tests/Tests.TArray.hpp:Tests_Tests.TArray.hpp.diff
+LExSDKv2:LESDK-TESTS:/Tests/Utilities.hpp:Tests_Utilities.hpp.diff
