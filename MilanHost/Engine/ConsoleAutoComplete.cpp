@@ -234,14 +234,23 @@ namespace ConsoleAutoComplete
     // ! Public interface.
     // ========================================
 
-    void Install()
+    bool TryInstall()
     {
+        static bool s_installed = false;
+        if (s_installed) return true;
+
         UClass* const ConsoleClass = HijackUtils::FindClass(SFXName(L"Console", 0));
-        MILAN_CHECKW(ConsoleClass != nullptr, L"failed to find Console class");
+        if (ConsoleClass == nullptr) return false;
 
-        INSTALL_HIJACK(ConsoleClass, BuildRuntimeAutoCompleteList);
+        UFunction* const Target = HijackUtils::FindClassMethod(ConsoleClass, SFXName(L"BuildRuntimeAutoCompleteList", 0));
+        if (Target == nullptr) return false;
 
-        MILAN_INFOW(ELOG_EngineHooks, L"installed console auto-complete hijack");
+        HijackUtils::InstallFunction(Target, BuildRuntimeAutoCompleteList_Hook,
+            reinterpret_cast<void**>(&BuildRuntimeAutoCompleteList_Original));
+        s_installed = true;
+
+        MILAN_INFOW(ELOG_EngineHooks, L"installed Engine.Console auto-complete hijack after package load");
+        return true;
     }
 
     void RebuildForCurrentLevel()

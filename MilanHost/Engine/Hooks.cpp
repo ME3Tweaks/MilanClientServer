@@ -162,6 +162,19 @@ void UGameEngine_Tick_hook(UGameEngine* const Context, float const Delta)
 #endif
 }
 
+t_LoadPackage* LoadPackage_orig = nullptr;
+UPackage* LoadPackage_hook(UObject* const Outer, WCHAR const* const Filename, INT const Flags)
+{
+    UPackage* const Result = (*LoadPackage_orig)(Outer, Filename, Flags);
+
+    if (!ConsoleAutoComplete::TryInstall())
+    {
+        MILAN_WARNW(ELOG_EngineHooks, L"Engine.Console class not available after LoadPackage('%s'); retrying after next package load", Filename);
+    }
+
+    return Result;
+}
+
 
 // ! UObject methods.
 // ========================================

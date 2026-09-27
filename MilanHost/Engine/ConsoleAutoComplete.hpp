@@ -10,8 +10,8 @@
 
 namespace ConsoleAutoComplete
 {
-    /** Hijacks Engine.Console's BuildRuntimeAutoCompleteList. Call once Engine classes are loaded. */
-    void Install();
+    /** Attempts to install the Engine.Console native hijack; false means the class is not loaded yet. */
+    bool TryInstall();
 
     /**
      * Rebuilds the live console's auto-complete list, if a viewport console currently exists.

@@ -77,6 +77,9 @@
     ::LESDK::Address::FromPostHook(/* 48 89 5C 24 ?? */ "48 89 6C 24 ?? 48 89 74 24 ?? 57 48 81 EC 50 03 00 00")
 
  // TODO: Replace this with a post-hook pattern search.
+#define GLOBAL_LOADPACKAGE_PATTERN \
+    ::LESDK::Address::FromPattern("48 8B C4 44 89 40 18 48 89 48 08 53 56 57 41 56 41 57 48 83 EC 50 48 C7 40 B8 FE FF FF FF 41 8B F0")
+
 #define GLOBAL_WNDPROC_RVA  ::LESDK::Address::FromOffset(0x99D2C0)
 
 #define GLOBAL_UUISTRING_STRINGSIZE_PHOOK \
@@ -247,6 +250,11 @@ using t_UGameEngine_Tick = void(UGameEngine*, float);
 extern t_UGameEngine_Tick* UGameEngine_Tick_orig;
 
 void UGameEngine_Tick_hook(UGameEngine* Context, float Delta);
+
+using t_LoadPackage = UPackage*(UObject*, WCHAR const*, INT);
+extern t_LoadPackage* LoadPackage_orig;
+
+UPackage* LoadPackage_hook(UObject* Outer, WCHAR const* Filename, INT Flags);
 
 
 // ! UObject methods.

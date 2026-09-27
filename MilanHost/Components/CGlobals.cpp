@@ -1,6 +1,5 @@
 #include "Components/CGlobals.hpp"
 #include "Components/CImgui.hpp"
-#include "Engine/ConsoleAutoComplete.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
 #include "Misc/GuidCacheUtils.hpp"
@@ -39,8 +38,6 @@ void CGlobals::PostInitialize(::LESDK::Initializer& Context)
     // Depends on CImgui initialization.
     InitWindowProc(Context);
 
-    // Engine is a base package, always loaded by this point (unlike e.g. SFXOnlineFoundation).
-    ConsoleAutoComplete::Install();
 }
 
 void CGlobals::UninstallSomeHooks(::LESDK::Initializer& Context)
@@ -111,6 +108,7 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(UGameEngine, Exec, GLOBAL_UGAMEENGINE_EXEC_PHOOK);
     INSTALL_HOOK_TWO(UGameEngine, LoadMap, GLOBAL_UGAMEENGINE_LOADMAP_PHOOK);
     INSTALL_HOOK_TWO(UGameEngine, Tick, GLOBAL_UGAMEENGINE_TICK_PHOOK);
+    INSTALL_HOOK_ONE(LoadPackage, GLOBAL_LOADPACKAGE_PATTERN);
 
     INSTALL_HOOK_TWO(UObject, CallFunction, BUILTIN_CALLFUNCTION_PHOOK);
     INSTALL_HOOK_TWO(UObject, ProcessDelegate, GLOBAL_UOBJECT_PROCESSDELEGATE_PHOOK);
