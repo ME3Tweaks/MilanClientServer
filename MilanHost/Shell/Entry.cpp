@@ -10,6 +10,9 @@
 #include "Base/Base.hpp"
 #include "Base/Logger.hpp"
 #include "Components/CCommands.hpp"
+#ifdef _MLN_DEBUG
+#include "Components/CDesync.hpp"
+#endif
 #include "Components/CGlobals.hpp"
 #ifdef WITH_IMGUI
 #include "Components/CImgui.hpp"
@@ -66,6 +69,10 @@ SPI_IMPLEMENT_ATTACH
     gp_componentContainer->Initialize<CRenderdoc>(*gp_sdkContext);
 #endif
 
+#ifdef _MLN_DEBUG
+    gp_componentContainer->Initialize<CDesync>(*gp_sdkContext);
+#endif
+
     // These need to run after globals.
     COMPONENT(COutput).PostInitialize(*gp_sdkContext);
     COMPONENT(CGlobals).PostInitialize(*gp_sdkContext);
@@ -115,6 +122,10 @@ void SingleDetachImpl()
 
     // Terminate subsystems in reverse.
     // ----------------------------------------
+
+#ifdef _MLN_DEBUG
+    gp_componentContainer->Terminate<CDesync>(*gp_sdkContext);
+#endif
 
 #ifndef _FINAL_RELEASE
     gp_componentContainer->Terminate<CRenderdoc>(*gp_sdkContext);

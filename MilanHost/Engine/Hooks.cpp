@@ -3,6 +3,9 @@
 #include "Base/IOUtils.hpp"
 #include "Base/Logger.hpp"
 #include "Components/CCommands.hpp"
+#ifdef _MLN_DEBUG
+#include "Components/CDesync.hpp"
+#endif
 #include "Components/CGlobals.hpp"
 #ifdef WITH_IMGUI
 #include "Components/CImgui.hpp"
@@ -154,6 +157,9 @@ void UGameEngine_Tick_hook(UGameEngine* const Context, float const Delta)
     NETPROF(CaptureFrameStart(Delta));
     (*UGameEngine_Tick_orig)(Context, Delta);
     COMPONENT(CMatchmaking).On_GameEngineTick(Delta);
+#ifdef _MLN_DEBUG
+    COMPONENT(CDesync).On_GameEngineTick(Delta);
+#endif
 }
 
 
@@ -285,6 +291,11 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     //if (IsFunctionWithinDerivedClass(Function, L"SFXOnlineComponentImageManager"))
     //    MILAN_TRACEW(ELOG_DevelUtils, L"%S: %s", __func__, *Function->GetFullName());
 
+#ifdef _MLN_DEBUG
+    // Desync snapshot requests ride on ClientMessage / ServerMutate and must not reach script.
+    if (COMPONENT(CDesync).On_UObject_ProcessEvent(Context, Function, Parms)) return;
+#endif
+
     COMPONENT(CProfilers).On_UObject_ProcessEvent(Context, Function, Parms, Result);
     COMPONENT(CRenderdoc).On_UObject_ProcessEvent(Context, Function, Parms, Result);
 
@@ -337,7 +348,8 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     {
         bCallOriginal = false;
     }
-    COMPONENT(CMatchmaking).On_ScriptCall(Stack->Node);
+    if (!COMPONENT(CMatchmaking).On_ScriptCall(Stack->Node))
+        bCallOriginal = false;
 
     if (bCallOriginal)
     {

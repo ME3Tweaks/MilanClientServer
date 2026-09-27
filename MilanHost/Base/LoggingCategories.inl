@@ -14,5 +14,6 @@ _CG_LOGCAT(NetHooks)                // Unreal networking layer hooks and injecti
 _CG_LOGCAT(NetHooksTrace)           // VERY VERBOSE Unreal networking layer hooks and injections.
 _CG_LOGCAT(NetHooksRepl)            // VERY VERBOSE Unreal networking layer hooks and injections specific to replication.
 _CG_LOGCAT(NetProf)                 // Milan Network Profiler.
+_CG_LOGCAT(Desync)                  // Replication desync snapshots (debug builds).
 _CG_LOGCAT(Matchmaking)             // MilanServer client, endpoint discovery, and peer probes.
 _CG_LOGCAT(SFXOnline)               // SFXOnlineFoundation and friends.

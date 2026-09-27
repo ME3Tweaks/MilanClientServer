@@ -21,6 +21,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Components/CCommands.hpp
   ${PROJ_FOLDER}/Components/CGlobals.cpp
   ${PROJ_FOLDER}/Components/CGlobals.hpp
+  ${PROJ_FOLDER}/Components/CDesync.cpp
+  ${PROJ_FOLDER}/Components/CDesync.hpp
   ${PROJ_FOLDER}/Components/CMatchmaking.cpp
   ${PROJ_FOLDER}/Components/CMatchmaking.hpp
   #${PROJ_FOLDER}/Components/CImgui.cpp

@@ -45,8 +45,8 @@ public:
     /** BlazeGame::AllowMatchmaking: false once the lobby commits to a match. */
     void On_AllowMatchmaking(bool bAllow);
 
-    /** UObject::ProcessInternal: watches for the multiplayer menu being shown or hidden. */
-    void On_ScriptCall(UStruct* Function);
+    /** UObject::ProcessInternal: watches the menu and handles its Invite Friends button. */
+    bool On_ScriptCall(UStruct* Function);
 
     /**
      * BlazeGame::OnConnectionError. Returns true when it handled a client losing its host

@@ -1334,20 +1334,54 @@ bool CMatchmaking::On_ConnectionError()
     return true;
 }
 
-void CMatchmaking::On_ScriptCall(UStruct* const Function)
+bool CMatchmaking::On_ScriptCall(UStruct* const Function)
 {
     if (mp_state == nullptr || Function == nullptr)
-        return;
+        return true;
 
     // Cheap name checks first; this runs for every script call.
     static SFXName const k_show{ L"ShowMultiplayerMenu", 0 };
     static SFXName const k_hide{ L"HideMultiplayerMenu", 0 };
+    static SFXName const k_invite{ L"InviteFriends", 0 };
     static FunctionNamedIntercept s_show{};
     static FunctionNamedIntercept s_hide{};
+    static FunctionNamedIntercept s_invite{};
     if (Function->Name == k_show && s_show.Applies(Function, L"SFXGameMPContent", L"SFXLobbyFlow", L"ShowMultiplayerMenu"))
         mp_state->MenuWorld = CurrentWorld();
     else if (Function->Name == k_hide && s_hide.Applies(Function, L"SFXGameMPContent", L"SFXLobbyFlow", L"HideMultiplayerMenu"))
         mp_state->MenuWorld = nullptr;
+    else if (Function->Name == k_invite && s_invite.Applies(Function, L"SFXGameMPContent", L"SFXGUI_MPLobby", L"InviteFriends"))
+    {
+        MatchmakingState const& S = *mp_state;
+        bool const HasCode = S.Role == EMatchmakingRole::Host && !S.InviteCode.empty() && IsListenServer();
+        std::wstring const Message = HasCode ? L"Invite Code: " + Widen(S.InviteCode)
+            : L"Invite code unavailable (matchmaker not connected)";
+
+        UGameEngine* const Engine = GameEngine();
+        if (Engine != nullptr && Engine->GamePlayers.Count() > 0 && Engine->GamePlayers(0) != nullptr
+            && Engine->GamePlayers(0)->Actor != nullptr
+            && Engine->GamePlayers(0)->Actor->IsA(ABioPlayerController::StaticClass()))
+        {
+            auto* const Player = static_cast<ABioPlayerController*>(Engine->GamePlayers(0)->Actor);
+            if (USFXGUIInteraction* const Gui = Player->GetSFXUIController())
+            {
+                // ShowHint creates the stock HUD hint box and sets its 10-second timer.
+                // The normal API takes stringrefs; replace its text with our live code.
+                constexpr unsigned char k_bottomHint = 2;
+                Gui->eventShowHint(0, 0, HasCode ? 10.f : 3.f, 0, k_bottomHint, FALSE, TRUE, Player);
+                if (!Gui->m_aHintStack.Empty() && Gui->m_aHintStack(0) != nullptr)
+                {
+                    FString const Text{ Message.c_str() };
+                    Gui->m_aHintStack(0)->eventAS_ShowHintMessage(Text, Text, FALSE, k_bottomHint);
+                }
+                else
+                    MILAN_WARNW(ELOG_Matchmaking, L"invite hint box was not created");
+            }
+        }
+        // The original function opens the platform invite UI, which is unavailable on PC.
+        return false;
+    }
+    return true;
 }
 
 bool CMatchmaking::StartQuickMatch(int const MapId, int const EnemyModeId, int const DifficultyId,
