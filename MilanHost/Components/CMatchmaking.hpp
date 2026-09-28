@@ -11,6 +11,10 @@
  * (-mmserver=<url>), the mm.server console command, or the control pipe; an empty
  * URL disables matchmaking. A join code from -mmjoin=<code> or the control pipe
  * runs once the multiplayer menu is open.
+ *
+ * A lobby member that loses its host asks the matchmaker to check the host. If the host is
+ * gone, one member opens a new listen lobby with the lobby's settings and takes the lobby
+ * over, and the others join it. A match in progress regroups in that lobby.
  */
 
 #pragma once

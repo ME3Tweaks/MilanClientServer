@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cwctype>
 #include <deque>
@@ -15,6 +17,7 @@
 
 #include "Components/CCommands.hpp"
 #include "Components/CMatchmaking.hpp"
+#include "Engine/ExtObject.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
 #include "Online/MatchmakingNet.hpp"
@@ -54,6 +57,23 @@ namespace
     constexpr std::chrono::seconds k_hostRetryMax{ 60 };
     // Tolerates a brief listen-socket gap, e.g. during servertravel; a longer gap means hosting ended.
     constexpr auto k_listenGrace = std::chrono::seconds(5);
+    // Host migration: how long a member waits for the matchmaker to pick a new host, how long
+    // a new host may take to load its lobby (and the others wait for it), and how long its
+    // first report waits for UDP discovery.
+    constexpr auto k_migrationDecisionTimeout = std::chrono::seconds(45);
+    constexpr auto k_adoptWindow = std::chrono::seconds(60);
+    constexpr auto k_adoptReportWait = std::chrono::seconds(3);
+    // The lobby a new host opens; origin makes it take the settings from the game settings object.
+    constexpr wchar_t const* k_migrationLobbyUrl = L"mplobby?listen?origin=MultiplayerMenu";
+    // Player latency (see TickPlayerPing). UNetConnection::AvgLag is the round trip in seconds,
+    // averaged once per StatPeriod (1 s) from packet acknowledgements, and 9999 until the first
+    // measurement (Ghidra, LE3 11.3.2: UNetConnection::Tick at 0x7ff74ad21d80).
+    constexpr std::ptrdiff_t k_netConnectionAvgLagOffset = 0x290;
+    constexpr float k_unmeasuredLag = 9999.f;
+    constexpr auto k_pingInterval = std::chrono::seconds(1);
+    // PRI.Ping is in the engine's units, ms / 4 (1-250). 0 means not measured yet, and 255,
+    // which the engine never writes, marks the host (the pause menu shows "Host").
+    constexpr unsigned char k_hostPing = 255;
     constexpr std::size_t k_maxInviteCodeLength = 64;
     constexpr int k_maxConsumedPerCall = 256;
 
@@ -125,6 +145,13 @@ namespace
         Result.sin_port = htons(Port);
         Result.sin_addr.s_addr = Address;
         return Result;
+    }
+
+    // The matchmaker's error code, or empty for a transport failure or a body without one.
+    std::string ErrorCode(MatchmakingNet::HttpResult const& Result)
+    {
+        json const Body = json::parse(Result.Body, nullptr, false);
+        return Body.is_object() && Body.contains("code") && Body["code"].is_string() ? Body["code"].get<std::string>() : std::string{};
     }
 
     std::string DescribeFailure(MatchmakingNet::HttpResult const& Result)
@@ -270,6 +297,8 @@ struct MatchmakingState
     EMatchmakingRole                Role{ EMatchmakingRole::None };
     DWORD                           GameThreadId{ 0 };
 
+    Clock::time_point               NextPingUpdate{};
+
     // From /v1/info and DNS.
     bool                            InfoReady{ false };
     std::uint32_t                   ServerAddress{ 0 };
@@ -291,10 +320,19 @@ struct MatchmakingState
     Clock::time_point               NextHeartbeat{};
     Clock::time_point               NextStateCheck{};
     long long                       IntroductionsVersion{ -1 };
+    // Set while the game is not listening: the host sends nothing until it listens again, so
+    // a game that stopped hosting cannot look alive to a migration check.
+    bool                            IntroductionsPaused{ false };
     std::vector<std::string>        LanAddresses{};
     std::map<std::string, PeerPath> Joiners{};
+    // A new host after migration: its lobby may still be loading until AdoptUntil. The UDP
+    // ticket is used once the listen socket exists, and the first report waits (until
+    // AdoptReportBy at most) for discovery so the members see the observed endpoint.
+    Clock::time_point               AdoptUntil{};
+    Clock::time_point               AdoptReportBy{};
+    std::optional<UdpTicket>        AdoptTicket{};
 
-    // Joiner.
+    // Joiner. Once joined, the reservation's ID and key identify it as a lobby member.
     std::string                     ReservationId{};
     std::string                     JoinKey{};
     std::string                     SearchId{};
@@ -302,10 +340,17 @@ struct MatchmakingState
     std::wstring                    QuickMatchTarget{};
     std::function<void(bool)>       QuickMatchDone{};
     PeerPath                        HostPath{};
+    bool                            SamePublicAddress{ false };
     bool                            TravelIssued{ false };
     int                             ReportedPort{ -1 };
     bool                            JoinedReported{ false };
     long long                       ReservationVersion{ -1 };
+    // Migration: a member that lost its host waits for the matchmaker's decision, then, if
+    // another member takes over, for that host's lobby to come up. Both end by the deadline.
+    bool                            MigrationPending{ false };
+    bool                            AwaitingHostCandidates{ false };
+    long long                       MigrationVersion{ -1 };
+    Clock::time_point               MigrationDeadline{};
 
     // Kept by ResetSession: these belong to the game, not to one lobby or reservation.
     HostedSettings                  Hosted{};
@@ -483,6 +528,106 @@ namespace
         return true;
     }
 
+    // Shows @p Message in the stock HUD hint box. ShowHint creates the box and its timer from
+    // stringrefs, so its text is then replaced with ours.
+    bool ShowHint(std::wstring const& Message, float const Seconds)
+    {
+        UGameEngine* const Engine = GameEngine();
+        if (Engine == nullptr || Engine->GamePlayers.Count() == 0 || Engine->GamePlayers(0) == nullptr
+            || Engine->GamePlayers(0)->Actor == nullptr || !Engine->GamePlayers(0)->Actor->IsA(ABioPlayerController::StaticClass()))
+        {
+            return false;
+        }
+
+        auto* const Player = static_cast<ABioPlayerController*>(Engine->GamePlayers(0)->Actor);
+        USFXGUIInteraction* const Gui = Player->GetSFXUIController();
+        if (Gui == nullptr)
+            return false;
+
+        constexpr unsigned char k_bottomHint = 2;
+        Gui->eventShowHint(0, 0, Seconds, 0, k_bottomHint, FALSE, TRUE, Player);
+        if (Gui->m_aHintStack.Empty() || Gui->m_aHintStack(0) == nullptr)
+            return false;
+        FString const Text{ Message.c_str() };
+        Gui->m_aHintStack(0)->eventAS_ShowHintMessage(Text, Text, FALSE, k_bottomHint);
+        return true;
+    }
+
+    // A client whose connection to its host closed, still in that host's world.
+    bool HasLostHostConnection()
+    {
+        UWorld* const World = CurrentWorld();
+        UNetConnection* const Server = (World != nullptr && World->NetDriver != nullptr) ? World->NetDriver->ServerConnection : nullptr;
+        UGameEngine* const Engine = GameEngine();
+        return Server != nullptr && Server->ConnectionState == USOCK_Closed && Engine != nullptr && Engine->GPendingLevel == nullptr;
+    }
+
+    // Reports a lost host the way UE3 did; CMatchmaking::On_ConnectionError then shows the
+    // stock host-left prompt.
+    void ReportConnectionLost()
+    {
+        UGameEngine* const Engine = GameEngine();
+        if (Engine == nullptr || Engine->GameViewport == nullptr || !Engine->GameViewport->IsA(USFXGameViewportClient::StaticClass()))
+            return;
+        auto* const Viewport = static_cast<USFXGameViewportClient*>(Engine->GameViewport);
+        Viewport->NotifyConnectionError(Viewport->Localize(L"Errors", L"ConnectionFailed", L"Engine"),
+            Viewport->Localize(L"Errors", L"ConnectionFailed_Title", L"Engine"));
+    }
+
+    // A lobby opened with origin=MultiplayerMenu takes its settings from the online game
+    // settings (SFXLobbyFlow.InitMatchSettings), so a new host puts the lobby's there first.
+    bool ApplyLobbySettings(HostedSettings const& H)
+    {
+        for (TypedObjectIterator<USFXOnlineComponentBlazeGame, true, false> Iter{}; Iter; ++Iter)
+        {
+            USFXOnlineGameSettings* const Settings = (*Iter)->GameSettings;
+            if (Settings == nullptr)
+                continue;
+
+            // Random has no package name; the lobby reads that back as map 0.
+            if (H.MapId > 0)
+                Settings->mME3MapName = Settings->GetMapByID(H.MapId).PackageName;
+            else
+                Settings->mME3MapName = L"";
+            Settings->EnemyType = H.EnemyModeId;
+            Settings->Difficulty = static_cast<unsigned char>(H.DifficultyId);
+            Settings->eventSetPrivacy(H.Private ? 1 : 0); // PRIVACY_PRIVATE : PRIVACY_PUBLIC
+            return true;
+        }
+        return false;
+    }
+
+    float AverageLag(UNetConnection const* const Connection)
+    {
+        return *reinterpret_cast<float const*>(reinterpret_cast<std::uint8_t const*>(Connection) + k_netConnectionAvgLagOffset);
+    }
+
+    // A round trip in PRI.Ping units, or 0 while it is not measured yet.
+    unsigned char PingFromLag(float const Lag)
+    {
+        if (!(Lag >= 0.f) || Lag >= k_unmeasuredLag)
+            return 0;
+        return static_cast<unsigned char>(std::clamp(std::lround(Lag * 1000.f / 4.f), 1L, 250L));
+    }
+
+    std::wstring DescribePing(unsigned char const Ping)
+    {
+        if (Ping == k_hostPing)
+            return L"host";
+        return Ping == 0 ? L"not measured" : std::to_wstring(Ping * 4) + L" ms";
+    }
+
+    APlayerReplicationInfo* LocalPRI()
+    {
+        UEngine* const Engine = (GEngine != nullptr) ? *GEngine : nullptr;
+        if (Engine == nullptr || Engine->GamePlayers.Count() == 0 || Engine->GamePlayers(0) == nullptr
+            || Engine->GamePlayers(0)->Actor == nullptr)
+        {
+            return nullptr;
+        }
+        return Engine->GamePlayers(0)->Actor->PlayerReplicationInfo;
+    }
+
     bool SendDatagram(FSocket* const Socket, std::span<std::uint8_t const> const Data,
         std::uint32_t const Address, std::uint16_t const Port)
     {
@@ -502,13 +647,21 @@ namespace
 namespace
 {
     // Ends the current lobby or reservation. Completions still in flight are dropped.
-    void ResetSession(MatchmakingState& S)
+    // Migration keeps the server info: it moves between sessions on the same matchmaker.
+    void ResetSession(MatchmakingState& S, bool const KeepServerInfo = false)
     {
         MatchmakingState Next{};
         Next.Box = S.Box;
         Next.BaseUrl = S.BaseUrl;
         Next.Generation = S.Generation + 1;
         Next.GameThreadId = S.GameThreadId;
+        if (KeepServerInfo)
+        {
+            Next.InfoReady = S.InfoReady;
+            Next.ServerAddress = S.ServerAddress;
+            Next.ServerUdpPort = S.ServerUdpPort;
+            Next.HeartbeatSeconds = S.HeartbeatSeconds;
+        }
         Next.Socket = S.Socket;
         Next.LocalPort = S.LocalPort;
         Next.Hosted = S.Hosted;
@@ -625,7 +778,36 @@ namespace
         ResetSession(S);
     }
 
+    bool IsHosting(MatchmakingState const& S)
+    {
+        return S.Socket != nullptr && IsListenServer();
+    }
+
+    bool WasReplaced(MatchmakingNet::HttpResult const& Result)
+    {
+        return Result.Status == 409 && ErrorCode(Result) == "host_replaced";
+    }
+
+    // The matchmaker moved the lobby to another member after this game stopped answering, so
+    // its players are gone. It stays unregistered until it stops hosting (or mm.host).
+    void HandleReplaced(MatchmakingState& S)
+    {
+        MILAN_WARNW(ELOG_Matchmaking, L"another player took over lobby %S; this game no longer hosts it", S.LobbyId.c_str());
+        S.AutoHost.Suppressed = true;
+        ResetSession(S);
+    }
+
     void PollIntroductions(MatchmakingState& S, std::chrono::milliseconds Delay = {});
+
+    // The host only polls while it is listening, because a poll shows the matchmaker the host
+    // is alive. The per-tick host work resumes a paused poll.
+    void ContinueIntroductions(MatchmakingState& S, std::chrono::milliseconds const Delay = {})
+    {
+        if (IsHosting(S))
+            PollIntroductions(S, Delay);
+        else
+            S.IntroductionsPaused = true;
+    }
 
     void ApplyIntroductions(MatchmakingState& S, json const& List)
     {
@@ -683,13 +865,18 @@ namespace
                 ResetSession(State);
                 return;
             }
+            if (WasReplaced(Result))
+            {
+                HandleReplaced(State);
+                return;
+            }
             if (std::optional<json> const List = SuccessJson(Result, "introductions poll"))
             {
                 ApplyIntroductions(State, *List);
-                PollIntroductions(State);
+                ContinueIntroductions(State);
                 return;
             }
-            PollIntroductions(State, k_pollRetryDelay);
+            ContinueIntroductions(State, k_pollRetryDelay);
         }, Delay);
     }
 
@@ -712,6 +899,11 @@ namespace
                 {
                     MILAN_WARNW(ELOG_Matchmaking, L"lobby expired on the matchmaker; registering it again");
                     ResetSession(Session);
+                    return;
+                }
+                if (WasReplaced(Result))
+                {
+                    HandleReplaced(Session);
                     return;
                 }
                 SuccessJson(Result, "lobby heartbeat");
@@ -751,7 +943,7 @@ namespace
 
                 MILAN_INFOW(ELOG_Matchmaking, L"lobby registered (%s); invite code %S (game port %d)",
                     Session.Hosted.Private ? L"private" : L"public", Session.InviteCode.c_str(), Session.LocalPort);
-                PollIntroductions(Session);
+                ContinueIntroductions(Session);
             });
         }, [](MatchmakingState& State) { RetryHostLater(State); });
     }
@@ -791,6 +983,8 @@ namespace
     }
 
     void PollReservation(MatchmakingState& S, std::chrono::milliseconds Delay = {});
+    bool TravelToHost(MatchmakingState& S, bool QuickMatch);
+    void FailMigration(MatchmakingState& S, wchar_t const* Why);
 
     void PollReservation(MatchmakingState& S, std::chrono::milliseconds const Delay)
     {
@@ -799,7 +993,9 @@ namespace
         {
             if (Result.Status == 404)
             {
-                if (!State.JoinedReported)
+                if (State.AwaitingHostCandidates)
+                    FailMigration(State, L"the new host's lobby closed");
+                else if (!State.JoinedReported)
                     MILAN_WARNW(ELOG_Matchmaking, L"reservation ended before the join completed");
                 return;
             }
@@ -811,6 +1007,7 @@ namespace
             }
 
             State.ReservationVersion = Status->at("version").get<long long>();
+            State.SamePublicAddress = Status->at("samePublicAddress").get<bool>();
             std::vector<Endpoint> Candidates = ParseCandidates(Status->at("hostCandidates"));
             if (Candidates != State.HostPath.Candidates)
             {
@@ -823,7 +1020,19 @@ namespace
                 State.HostPath.ProbeUntil = Clock::now() + k_probeWindow;
                 State.HostPath.NextProbe = Clock::now();
             }
-            PollReservation(State);
+
+            // A new host after migration has reported from its lobby, so it can be joined.
+            if (State.AwaitingHostCandidates && !State.HostPath.Candidates.empty())
+            {
+                State.AwaitingHostCandidates = false;
+                MILAN_INFOW(ELOG_Matchmaking, L"the new host's lobby is up");
+                if (!TravelToHost(State, false))
+                    FailMigration(State, L"the new host has no usable address");
+                return;
+            }
+            // Nothing more to learn once in the host's game, and the poll worker is shared.
+            if (!State.JoinedReported)
+                PollReservation(State);
         }, Delay);
     }
 
@@ -835,7 +1044,8 @@ namespace
             Done(Success);
     }
 
-    bool AcceptReservation(MatchmakingState& S, json const& Reservation, bool const QuickMatch)
+    // Takes a reservation's credentials and what is known of the path to its host.
+    bool TakeReservation(MatchmakingState& S, json const& Reservation)
     {
         S.ReservationId = Reservation.at("reservationId").get<std::string>();
         S.JoinKey = Reservation.at("joinKey").get<std::string>();
@@ -850,15 +1060,19 @@ namespace
         S.HostPath.Candidates = ParseCandidates(Reservation.at("hostCandidates"));
         S.HostPath.ProbeUntil = Clock::now() + k_probeWindow;
         S.HostPath.NextProbe = Clock::now();
-        bool const SamePublicAddress = Reservation.at("samePublicAddress").get<bool>();
+        S.SamePublicAddress = Reservation.at("samePublicAddress").get<bool>();
 
         for (auto const& Candidate : S.HostPath.Candidates)
         {
             MILAN_UNUSED(Candidate);
             MILAN_INFOW(ELOG_Matchmaking, L"host candidate %S (%S)", Candidate.ToString().c_str(), Candidate.Kind.c_str());
         }
+        return true;
+    }
 
-        std::optional<Endpoint> const Target = ChooseTravelTarget(S.HostPath.Candidates, SamePublicAddress);
+    bool TravelToHost(MatchmakingState& S, bool const QuickMatch)
+    {
+        std::optional<Endpoint> const Target = ChooseTravelTarget(S.HostPath.Candidates, S.SamePublicAddress);
         if (!Target)
         {
             MILAN_ERRORW(ELOG_Matchmaking, L"reservation has no usable host candidates");
@@ -866,7 +1080,7 @@ namespace
         }
 
         MILAN_INFOW(ELOG_Matchmaking, L"joining via %S (%S, same public address: %d)",
-            Target->ToString().c_str(), Target->Kind.c_str(), SamePublicAddress ? 1 : 0);
+            Target->ToString().c_str(), Target->Kind.c_str(), S.SamePublicAddress ? 1 : 0);
         if (QuickMatch)
         {
             S.QuickMatchTarget = Widen(Target->ToString());
@@ -882,6 +1096,11 @@ namespace
             PollReservation(S);
         }
         return true;
+    }
+
+    bool AcceptReservation(MatchmakingState& S, json const& Reservation, bool const QuickMatch)
+    {
+        return TakeReservation(S, Reservation) && TravelToHost(S, QuickMatch);
     }
 
     void PollSearch(MatchmakingState& S, std::chrono::milliseconds Delay = {});
@@ -985,9 +1204,158 @@ namespace
         {
             PostHttp(S, false, L"DELETE", "/v1/reservations/" + S.ReservationId, S.JoinKey, "", [](MatchmakingState&, MatchmakingNet::HttpResult const&) {});
         }
+        else if (S.Role == EMatchmakingRole::Joiner && !S.ReservationId.empty())
+        {
+            // A lobby member: the matchmaker stops waiting for it in a host migration.
+            PostHttp(S, false, L"DELETE", "/v1/members/" + S.ReservationId, S.JoinKey, "", [](MatchmakingState&, MatchmakingNet::HttpResult const&) {});
+        }
 
         // The delete requests above complete under the new generation and are ignored.
         ResetSession(S);
+    }
+
+    // Leaves the lobby and shows the host-left prompt; On_ConnectionError finds the session
+    // already ended. Only a game still in the lost host's world gets the prompt.
+    void FailMigration(MatchmakingState& S, wchar_t const* const Why)
+    {
+        MILAN_UNUSED(Why);
+        MILAN_WARNW(ELOG_Matchmaking, L"host migration failed: %s", Why);
+        Leave(S);
+        if (HasLostHostConnection())
+            ReportConnectionLost();
+    }
+
+    // This game hosts the lobby now. It opens a listen lobby with the lobby's settings; the
+    // per-tick host work reports once that lobby listens, which completes the handoff.
+    void AdoptLobby(MatchmakingState& S, json const& Handoff)
+    {
+        json const& Lobby = Handoff.at("state");
+        HostedSettings Settings{};
+        Settings.Known = true;
+        Settings.Private = Lobby.at("isPrivate").get<bool>();
+        Settings.MapId = Lobby.at("mapId").get<int>();
+        Settings.EnemyModeId = Lobby.at("enemyModeId").get<int>();
+        Settings.DifficultyId = Lobby.at("difficultyId").get<int>();
+        std::string LobbyId = Handoff.at("lobbyId").get<std::string>();
+        std::string HostKey = Handoff.at("hostKey").get<std::string>();
+        std::string InviteCode = Handoff.at("inviteCode").get<std::string>();
+        long long const Revision = Handoff.at("revision").get<long long>();
+        int const HeartbeatSeconds = Handoff.at("heartbeatSeconds").get<int>();
+        int const ExpectedPlayers = Handoff.at("expectedPlayers").get<int>();
+        UdpTicket const Ticket = UdpTicket::FromJson(Handoff.at("udpTicket"));
+
+        ResetSession(S, true);
+        S.Role = EMatchmakingRole::Host;
+        S.LobbyId = std::move(LobbyId);
+        S.HostKey = std::move(HostKey);
+        S.InviteCode = std::move(InviteCode);
+        // The first report changes the state, so it goes out as the next revision.
+        S.Revision = Revision;
+        S.HeartbeatSeconds = std::max(5, HeartbeatSeconds);
+        S.LanAddresses = MatchmakingNet::LanIPv4Addresses(4);
+        S.IntroductionsPaused = true;
+        S.AdoptUntil = Clock::now() + k_adoptWindow;
+        S.AdoptTicket = Ticket;
+        S.Hosted = Settings;
+        S.AutoHost = {};
+
+        MILAN_UNUSED(ExpectedPlayers);
+        MILAN_INFOW(ELOG_Matchmaking, L"this game is the new host of lobby %S (%d player(s) expected); opening the lobby",
+            S.LobbyId.c_str(), ExpectedPlayers);
+        if (!ApplyLobbySettings(Settings))
+            MILAN_WARNW(ELOG_Matchmaking, L"no online game settings to carry the lobby's settings over; the lobby starts with its defaults");
+        if (!RunConsoleCommand(std::wstring{ L"open " } + k_migrationLobbyUrl))
+        {
+            MILAN_ERRORW(ELOG_Matchmaking, L"no local player controller to open the lobby");
+            FailMigration(S, L"could not open the lobby");
+        }
+    }
+
+    // Another member hosts the lobby now. The reservation has no host candidates until that
+    // host reports from its new lobby; PollReservation then travels.
+    void RejoinLobby(MatchmakingState& S, json const& Reservation)
+    {
+        ResetSession(S, true);
+        S.Role = EMatchmakingRole::Joiner;
+        if (!TakeReservation(S, Reservation))
+        {
+            FailMigration(S, L"the matchmaker sent an invalid reservation");
+            return;
+        }
+
+        MILAN_INFOW(ELOG_Matchmaking, L"another player is the new host; rejoining with reservation %S", S.ReservationId.c_str());
+        ShowHint(L"Another player is the new host. Rejoining...", 10.f);
+        if (!S.HostPath.Candidates.empty())
+        {
+            if (!TravelToHost(S, false))
+                FailMigration(S, L"the new host has no usable address");
+            return;
+        }
+        S.AwaitingHostCandidates = true;
+        S.MigrationDeadline = Clock::now() + k_adoptWindow;
+        PollReservation(S);
+    }
+
+    void PollMember(MatchmakingState& S, std::chrono::milliseconds Delay = {});
+
+    void HandleMigrationStatus(MatchmakingState& S, json const& Status)
+    {
+        S.MigrationVersion = Status.at("version").get<long long>();
+        std::string const State = Status.at("state").get<std::string>();
+        if (State == "NewHost")
+            AdoptLobby(S, Status.at("host"));
+        else if (State == "JoinNewHost")
+            RejoinLobby(S, Status.at("reservation"));
+        else if (State == "HostAlive")
+            FailMigration(S, L"the host still answers the matchmaker, so this game lost its own connection");
+        else
+            PollMember(S);
+    }
+
+    void PollMember(MatchmakingState& S, std::chrono::milliseconds const Delay)
+    {
+        std::string const Path = "/v1/members/" + S.ReservationId + "/poll?after=" + std::to_string(S.MigrationVersion);
+        PostHttp(S, true, L"POST", Path, S.JoinKey, "", [](MatchmakingState& State, MatchmakingNet::HttpResult const& Result)
+        {
+            if (Result.Status == 404)
+            {
+                FailMigration(State, L"the lobby is gone from the matchmaker");
+                return;
+            }
+            if (std::optional<json> const Status = SuccessJson(Result, "migration poll"))
+                HandleMigrationStatus(State, *Status);
+            else
+                PollMember(State, k_pollRetryDelay);
+        }, Delay);
+    }
+
+    // A lobby member that lost its host asks the matchmaker to check the host and, if it is
+    // gone, to hand the lobby to one of the members. Returns false for a game that is not a
+    // member, which just reports the lost connection.
+    bool BeginMigration(MatchmakingState& S)
+    {
+        if (S.Role != EMatchmakingRole::Joiner || !S.JoinedReported || S.ReservationId.empty() || S.BaseUrl.empty()
+            || S.MigrationPending || S.AwaitingHostCandidates)
+        {
+            return false;
+        }
+
+        S.MigrationPending = true;
+        S.MigrationVersion = -1;
+        S.MigrationDeadline = Clock::now() + k_migrationDecisionTimeout;
+        MILAN_INFOW(ELOG_Matchmaking, L"lost the host; asking the matchmaker to check it");
+        ShowHint(L"Lost the connection to the host. Looking for a new host...", 10.f);
+
+        json const Report{ { "canHost", true } };
+        PostHttp(S, false, L"POST", "/v1/members/" + S.ReservationId + "/host-lost", S.JoinKey, Report.dump(),
+            [](MatchmakingState& State, MatchmakingNet::HttpResult const& Result)
+            {
+                if (std::optional<json> const Status = SuccessJson(Result, "host-lost report"))
+                    HandleMigrationStatus(State, *Status);
+                else
+                    FailMigration(State, L"the matchmaker did not take the report");
+            });
+        return true;
     }
 
     // An empty URL disables matchmaking. A hosted game re-registers on the new server by itself.
@@ -1136,8 +1504,27 @@ namespace
         Path.NextProbe = Now + k_probeInterval;
     }
 
-    void TickJoiner(MatchmakingState& S)
+    void TickJoiner(MatchmakingState& S, Clock::time_point const Now)
     {
+        bool const Migrating = S.MigrationPending || S.AwaitingHostCandidates;
+        if (Migrating && Now >= S.MigrationDeadline)
+        {
+            FailMigration(S, S.MigrationPending ? L"the matchmaker did not choose a new host in time"
+                : L"the new host's lobby did not come up in time");
+            return;
+        }
+
+        // A member that is no longer in (or traveling to) a host's game left it, e.g. for the menu.
+        UGameEngine* const Engine = GameEngine();
+        UNetDriver* const WorldDriver = (GWorld != nullptr && *GWorld != nullptr) ? (*GWorld)->NetDriver : nullptr;
+        bool const Traveling = Engine == nullptr || Engine->GPendingLevel != nullptr || Engine->TravelURL.Length() > 0;
+        if ((S.JoinedReported || Migrating) && !Traveling && (WorldDriver == nullptr || WorldDriver->ServerConnection == nullptr))
+        {
+            MILAN_INFOW(ELOG_Matchmaking, L"left the host's game; leaving the matchmaker lobby");
+            Leave(S);
+            return;
+        }
+
         if (!S.TravelIssued)
             return;
 
@@ -1154,10 +1541,9 @@ namespace
                 });
         }
 
-        UGameEngine* const Engine = GameEngine();
-        UNetDriver* const WorldDriver = (GWorld != nullptr && *GWorld != nullptr) ? (*GWorld)->NetDriver : nullptr;
-        if (!S.JoinedReported && Engine != nullptr && Engine->GPendingLevel == nullptr
-            && WorldDriver != nullptr && WorldDriver->ServerConnection != nullptr)
+        // A member rejoining after migration is still in the lost host's world until it travels.
+        if (!S.JoinedReported && !Traveling && WorldDriver != nullptr && WorldDriver->ServerConnection != nullptr
+            && WorldDriver->ServerConnection->ConnectionState != USOCK_Closed)
         {
             S.JoinedReported = true;
             MILAN_INFOW(ELOG_Matchmaking, L"joined the host's game; releasing the reservation");
@@ -1177,6 +1563,17 @@ namespace
             {
                 // The next hosted game publishes its own settings when its lobby starts.
                 S.Hosted = {};
+                return;
+            }
+            if (S.AdoptUntil != Clock::time_point{})
+            {
+                // A new host's lobby is still loading.
+                if (Now < S.AdoptUntil)
+                    return;
+                MILAN_WARNW(ELOG_Matchmaking, L"the new lobby did not start listening in time; giving the matchmaker lobby up");
+                Leave(S);
+                S.Hosted = {};
+                S.AutoHost = {};
                 return;
             }
             if (P.ListenLostAt == Clock::time_point{})
@@ -1201,6 +1598,91 @@ namespace
         if (S.Role == EMatchmakingRole::Joiner)
             Leave(S);
         StartHost(S);
+    }
+
+    // Host traffic for a listening game. Nothing goes out while it is not listening, so a game
+    // that stopped hosting cannot answer a migration check; TickHosting ends the lobby if that lasts.
+    void TickHostedLobby(MatchmakingState& S, Clock::time_point const Now)
+    {
+        if (S.AdoptUntil != Clock::time_point{})
+        {
+            // A new host's lobby is up: discovery starts on its listen socket.
+            S.AdoptUntil = {};
+            S.AdoptReportBy = Now + k_adoptReportWait;
+            if (S.AdoptTicket)
+                S.Discovery.Ticket = *std::exchange(S.AdoptTicket, std::nullopt);
+            S.Discovery.Restart();
+            MILAN_INFOW(ELOG_Matchmaking, L"the new lobby is listening on port %d", S.LocalPort);
+        }
+        if (S.AdoptReportBy != Clock::time_point{})
+        {
+            // Its first report completes the handoff and sends the members to its candidates,
+            // so it waits briefly for the observed endpoint.
+            bool const DiscoveryDone = S.Discovery.Answered || S.ServerUdpPort == 0 || !S.InfoReady;
+            if (!DiscoveryDone && Now < S.AdoptReportBy)
+                return;
+            S.AdoptReportBy = {};
+            S.NextHeartbeat = Now;
+            MILAN_INFOW(ELOG_Matchmaking, L"taking over lobby %S; invite code %S", S.LobbyId.c_str(), S.InviteCode.c_str());
+        }
+
+        if (S.IntroductionsPaused)
+        {
+            S.IntroductionsPaused = false;
+            PollIntroductions(S);
+        }
+
+        // Setting changes go out promptly; otherwise the full state doubles as the heartbeat.
+        bool Due = Now >= S.NextHeartbeat;
+        if (!Due && Now >= S.NextStateCheck)
+        {
+            S.NextStateCheck = Now + k_stateCheckInterval;
+            Due = BuildLobbyState(S).dump() != S.LastStateBody;
+        }
+        if (Due)
+            SendHeartbeat(S);
+        for (auto& [Id, Path] : S.Joiners)
+            TickProbes(S, Path, Rendezvous::EDirection::HostToJoiner, Now);
+    }
+
+    // The host writes each player's round trip into that player's replicated PRI.Ping, which
+    // reaches every other player. Ping never replicates to its owner, so each client writes its
+    // own locally. The engine's ServerUpdatePing is blocked (On_ScriptCall), because it only
+    // measures while a pawn moves and would overwrite these values.
+    void TickPlayerPing(MatchmakingState& S, Clock::time_point const Now)
+    {
+        if (Now < S.NextPingUpdate)
+            return;
+        S.NextPingUpdate = Now + k_pingInterval;
+
+        UWorld* const World = CurrentWorld();
+        UNetDriver* const Driver = World != nullptr ? World->NetDriver : nullptr;
+        if (Driver == nullptr)
+            return;
+
+        auto const Write = [](APlayerReplicationInfo* const PRI, unsigned char const Ping, bool const Replicate)
+        {
+            if (PRI == nullptr || PRI->Ping == Ping)
+                return;
+            PRI->Ping = Ping;
+            // Script assignments mark an actor for replication; native writes do not.
+            if (Replicate)
+                PRI->bNetDirty = TRUE;
+        };
+
+        if (IsListenServer())
+        {
+            for (UNetConnection* const Client : Driver->ChildConnections)
+            {
+                if (Client != nullptr && Client->Actor != nullptr)
+                    Write(Client->Actor->PlayerReplicationInfo, PingFromLag(AverageLag(Client)), true);
+            }
+            Write(LocalPRI(), k_hostPing, true);
+        }
+        else if (Driver->ServerConnection != nullptr && Driver->ServerConnection->ConnectionState != USOCK_Closed)
+        {
+            Write(LocalPRI(), PingFromLag(AverageLag(Driver->ServerConnection)), false);
+        }
     }
 
     // External joins wait for the multiplayer menu: that is where direct-IP travel is known to work.
@@ -1343,9 +1825,14 @@ bool CMatchmaking::On_ScriptCall(UStruct* const Function)
     static SFXName const k_show{ L"ShowMultiplayerMenu", 0 };
     static SFXName const k_hide{ L"HideMultiplayerMenu", 0 };
     static SFXName const k_invite{ L"InviteFriends", 0 };
+    static SFXName const k_serverUpdatePing{ L"ServerUpdatePing", 0 };
     static FunctionNamedIntercept s_show{};
     static FunctionNamedIntercept s_hide{};
     static FunctionNamedIntercept s_invite{};
+    static FunctionNamedIntercept s_serverUpdatePing{};
+    // Runs on the host when a client reports its ping; TickPlayerPing owns PRI.Ping instead.
+    if (Function->Name == k_serverUpdatePing && s_serverUpdatePing.Applies(Function, L"Engine", L"PlayerController", L"ServerUpdatePing"))
+        return false;
     if (Function->Name == k_show && s_show.Applies(Function, L"SFXGameMPContent", L"SFXLobbyFlow", L"ShowMultiplayerMenu"))
         mp_state->MenuWorld = CurrentWorld();
     else if (Function->Name == k_hide && s_hide.Applies(Function, L"SFXGameMPContent", L"SFXLobbyFlow", L"HideMultiplayerMenu"))
@@ -1356,28 +1843,8 @@ bool CMatchmaking::On_ScriptCall(UStruct* const Function)
         bool const HasCode = S.Role == EMatchmakingRole::Host && !S.InviteCode.empty() && IsListenServer();
         std::wstring const Message = HasCode ? L"Invite Code: " + Widen(S.InviteCode)
             : L"Invite code unavailable (matchmaker not connected)";
-
-        UGameEngine* const Engine = GameEngine();
-        if (Engine != nullptr && Engine->GamePlayers.Count() > 0 && Engine->GamePlayers(0) != nullptr
-            && Engine->GamePlayers(0)->Actor != nullptr
-            && Engine->GamePlayers(0)->Actor->IsA(ABioPlayerController::StaticClass()))
-        {
-            auto* const Player = static_cast<ABioPlayerController*>(Engine->GamePlayers(0)->Actor);
-            if (USFXGUIInteraction* const Gui = Player->GetSFXUIController())
-            {
-                // ShowHint creates the stock HUD hint box and sets its 10-second timer.
-                // The normal API takes stringrefs; replace its text with our live code.
-                constexpr unsigned char k_bottomHint = 2;
-                Gui->eventShowHint(0, 0, HasCode ? 10.f : 3.f, 0, k_bottomHint, FALSE, TRUE, Player);
-                if (!Gui->m_aHintStack.Empty() && Gui->m_aHintStack(0) != nullptr)
-                {
-                    FString const Text{ Message.c_str() };
-                    Gui->m_aHintStack(0)->eventAS_ShowHintMessage(Text, Text, FALSE, k_bottomHint);
-                }
-                else
-                    MILAN_WARNW(ELOG_Matchmaking, L"invite hint box was not created");
-            }
-        }
+        if (!ShowHint(Message, HasCode ? 10.f : 3.f))
+            MILAN_WARNW(ELOG_Matchmaking, L"invite hint box was not created");
         // The original function opens the platform invite UI, which is unavailable on PC.
         return false;
     }
@@ -1510,6 +1977,16 @@ void CMatchmaking::RegisterCommands()
                 S.Hosted.Private ? L"private" : L"public", S.Hosted.MapId, S.Hosted.EnemyModeId, S.Hosted.DifficultyId,
                 IsJoinable(S.Hosted, InLobby) ? L"joinable" : L"not joinable", InLobby ? L"lobby" : L"in progress");
         }
+        UEngine* const Engine = (GEngine != nullptr) ? *GEngine : nullptr;
+        AWorldInfo* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
+        if (Driver != nullptr && WorldInfo != nullptr && WorldInfo->GRI != nullptr)
+        {
+            for (APlayerReplicationInfo* const PRI : WorldInfo->GRI->PRIArray)
+            {
+                if (PRI != nullptr)
+                    MILAN_INFOW(ELOG_Matchmaking, L"  player %s: ping %s", *PRI->PlayerName, DescribePing(PRI->Ping).c_str());
+            }
+        }
         if (S.AutoHost.Suppressed)
             MILAN_INFOW(ELOG_Matchmaking, L"  automatic registration paused by mm.leave until hosting ends (mm.host resumes)");
         else if (S.AutoHost.Failures > 0)
@@ -1518,6 +1995,12 @@ void CMatchmaking::RegisterCommands()
             MILAN_INFOW(ELOG_Matchmaking, L"  join %S waiting for the multiplayer menu", S.PendingJoin.c_str());
         if (S.Discovery.Answered)
             MILAN_INFOW(ELOG_Matchmaking, L"  observed endpoint %S", S.Discovery.Observed.ToString().c_str());
+        if (S.MigrationPending)
+            MILAN_INFOW(ELOG_Matchmaking, L"  lost the host; waiting for the matchmaker to choose a new one");
+        else if (S.AwaitingHostCandidates)
+            MILAN_INFOW(ELOG_Matchmaking, L"  waiting for the new host's lobby to come up");
+        else if (S.AdoptUntil != Clock::time_point{})
+            MILAN_INFOW(ELOG_Matchmaking, L"  new host; waiting for this game's lobby to listen");
         if (S.Role == EMatchmakingRole::Host)
         {
             MILAN_INFOW(ELOG_Matchmaking, L"  lobby %S, invite %S, revision %lld", S.LobbyId.c_str(), S.InviteCode.c_str(), S.Revision);
@@ -1536,8 +2019,9 @@ void CMatchmaking::RegisterCommands()
 
 // UE3's UWorld::TickNetClient reported a closed server connection through
 // SetProgress(PMT_ConnectionFailure). LE3's UWorld::Tick no longer calls it, because ME3
-// learned of a departed host from Blaze, so a client never noticed. Report it the same way,
-// once per connection; On_ConnectionError then shows the host-left prompt.
+// learned of a departed host from Blaze, so a client never noticed. A lobby member asks the
+// matchmaker for a new host first; otherwise, or if that fails, the loss is reported the same
+// way as UE3 did, once per connection, and On_ConnectionError shows the host-left prompt.
 void CMatchmaking::TickLostHost()
 {
     UWorld* const World = CurrentWorld();
@@ -1556,10 +2040,10 @@ void CMatchmaking::TickLostHost()
     }
 
     mp_lostHost = Server;
+    if (mp_state != nullptr && BeginMigration(*mp_state))
+        return;
     MILAN_INFOW(ELOG_Matchmaking, L"connection to the host closed; reporting a connection failure");
-    auto* const Viewport = static_cast<USFXGameViewportClient*>(Engine->GameViewport);
-    Viewport->NotifyConnectionError(Viewport->Localize(L"Errors", L"ConnectionFailed", L"Engine"),
-        Viewport->Localize(L"Errors", L"ConnectionFailed_Title", L"Engine"));
+    ReportConnectionLost();
 }
 
 void CMatchmaking::On_GameEngineTick(float const Delta)
@@ -1576,27 +2060,19 @@ void CMatchmaking::On_GameEngineTick(float const Delta)
     TrackGameSocket(S);
 
     Clock::time_point const Now = Clock::now();
+    TickPlayerPing(S, Now);
     TickHosting(S, Now);
     TickPendingJoin(S);
     TickDiscovery(S, Now);
 
     if (S.Role == EMatchmakingRole::Host && !S.LobbyId.empty())
     {
-        // Setting changes go out promptly; otherwise the full state doubles as the heartbeat.
-        bool Due = Now >= S.NextHeartbeat;
-        if (!Due && Now >= S.NextStateCheck)
-        {
-            S.NextStateCheck = Now + k_stateCheckInterval;
-            Due = BuildLobbyState(S).dump() != S.LastStateBody;
-        }
-        if (Due)
-            SendHeartbeat(S);
-        for (auto& [Id, Path] : S.Joiners)
-            TickProbes(S, Path, Rendezvous::EDirection::HostToJoiner, Now);
+        if (IsHosting(S))
+            TickHostedLobby(S, Now);
     }
     else if (S.Role == EMatchmakingRole::Joiner)
     {
-        TickJoiner(S);
+        TickJoiner(S, Now);
         TickProbes(S, S.HostPath, Rendezvous::EDirection::JoinerToHost, Now);
     }
 }
