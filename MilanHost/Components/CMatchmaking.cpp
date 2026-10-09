@@ -2,9 +2,11 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstring>
 #include <cwctype>
 #include <deque>
 #include <functional>
+#include <future>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -14,6 +16,7 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <SPI.h>
 
 #include "Components/CCommands.hpp"
 #include "Components/CMatchmaking.hpp"
@@ -22,6 +25,7 @@
 #include "Engine/Intercept.hpp"
 #include "Online/MatchmakingNet.hpp"
 #include "Online/Rendezvous.hpp"
+#include "Public/LmpLobby.h"
 #include "Shell/ClientConfig.hpp"
 #include "Shell/CmdArgs.hpp"
 #include "Version/SharedVersion.h"
@@ -311,10 +315,14 @@ struct MatchmakingState
 
     DiscoveryState                  Discovery{};
 
-    // Host.
+    // The lobby: a host's registered one, or the one a member holds a reservation for. A member
+    // only knows the invite code when it joined with one.
     std::string                     LobbyId{};
-    std::string                     HostKey{};
     std::string                     InviteCode{};
+    int                             MemberMaxPlayers{ 0 };  // Member: the lobby's size when it reserved.
+
+    // Host.
+    std::string                     HostKey{};
     long long                       Revision{ 0 };
     std::string                     LastStateBody{};
     Clock::time_point               NextHeartbeat{};
@@ -356,6 +364,7 @@ struct MatchmakingState
     HostedSettings                  Hosted{};
     AutoHostPolicy                  AutoHost{};
     std::string                     PendingJoin{};
+    bool                            PendingJoinLeftGame{ false };   // Left a lobby or match so PendingJoin can start.
     UWorld*                         MenuWorld{ nullptr };   // World in which the multiplayer menu is showing.
     std::wstring                    PipeName{};
     std::shared_ptr<MatchmakingNet::ControlPipe> Pipe{};
@@ -516,6 +525,17 @@ namespace
             ? WorldInfo->Game->MaxPlayers : 4;
     }
 
+    // The level is changing: a pending ServerTravel (WorldInfo.NextURL, during its countdown), a
+    // seamless transition, or a hard travel. A joiner arriving now would follow a level that is going away.
+    bool IsLevelTransitioning()
+    {
+        UGameEngine* const Engine = GameEngine();
+        if (Engine == nullptr || Engine->GPendingLevel != nullptr || Engine->TravelURL.Length() > 0)
+            return true;
+        AWorldInfo* const WorldInfo = Engine->GetCurrentWorldInfo();
+        return WorldInfo != nullptr && (WorldInfo->NextURL.Length() > 0 || WorldInfo->IsInSeamlessTravel());
+    }
+
     bool RunConsoleCommand(std::wstring const& Command)
     {
         UEngine* const Engine = (GEngine != nullptr) ? *GEngine : nullptr;
@@ -528,19 +548,24 @@ namespace
         return true;
     }
 
-    // Shows @p Message in the stock HUD hint box. ShowHint creates the box and its timer from
-    // stringrefs, so its text is then replaced with ours.
-    bool ShowHint(std::wstring const& Message, float const Seconds)
+    // The local player's controller, or null before one exists.
+    ABioPlayerController* LocalBioPlayer()
     {
         UGameEngine* const Engine = GameEngine();
         if (Engine == nullptr || Engine->GamePlayers.Count() == 0 || Engine->GamePlayers(0) == nullptr
             || Engine->GamePlayers(0)->Actor == nullptr || !Engine->GamePlayers(0)->Actor->IsA(ABioPlayerController::StaticClass()))
         {
-            return false;
+            return nullptr;
         }
+        return static_cast<ABioPlayerController*>(Engine->GamePlayers(0)->Actor);
+    }
 
-        auto* const Player = static_cast<ABioPlayerController*>(Engine->GamePlayers(0)->Actor);
-        USFXGUIInteraction* const Gui = Player->GetSFXUIController();
+    // Shows @p Message in the stock HUD hint box. ShowHint creates the box and its timer from
+    // stringrefs, so its text is then replaced with ours.
+    bool ShowHint(std::wstring const& Message, float const Seconds)
+    {
+        ABioPlayerController* const Player = LocalBioPlayer();
+        USFXGUIInteraction* const Gui = Player != nullptr ? Player->GetSFXUIController() : nullptr;
         if (Gui == nullptr)
             return false;
 
@@ -551,6 +576,176 @@ namespace
         FString const Text{ Message.c_str() };
         Gui->m_aHintStack(0)->eventAS_ShowHintMessage(Text, Text, FALSE, k_bottomHint);
         return true;
+    }
+
+    // Queues the game's modal message box with an OK button, the way
+    // SFXPlayerController.NotifyInviteFailed reports a failed platform invite.
+    bool ShowMessageBox(std::wstring const& Message)
+    {
+        ABioPlayerController* const Player = LocalBioPlayer();
+        USFXGUIInteraction* const Gui = Player != nullptr ? Player->GetSFXUIController() : nullptr;
+        if (Gui == nullptr)
+            return false;
+
+        // The game's own name, so a later invite failure replaces this box rather than stacking.
+        static SFXName const k_inviteFailedBox{ L"InviteFailedMsg", 0 };
+        constexpr int k_priority = 2;
+        FBioMessageBoxOptionalParams Params{};
+        Params.srAText = Player->srOK;
+        Params.bModal = TRUE;
+        FScriptDelegate const NoCallback{};
+        return Gui->QueueNamedMessageBoxEx(k_inviteFailedBox, k_priority, FString{ Message.c_str() }, NoCallback, 0, Player, FALSE, &Params);
+    }
+
+    // Text the player sees. The string refs are Project Milan's own, in its DLC TLK
+    // (ProjectMilan/Pipelines/Mod/TLK/DLC_MOD_ProjectMilan_INT.xml); the English is used when a
+    // TLK does not have one, e.g. with an older mod build. {0} is replaced with an argument.
+    struct LocalizedText
+    {
+        int             StrRef;
+        wchar_t const*  English;
+    };
+
+    namespace Text
+    {
+        constexpr LocalizedText InviteCode{ 49875700, L"Invite Code: {0}" };
+        constexpr LocalizedText InviteCodeCopied{ 49875701, L"Invite Code: {0} (join link copied)" };
+        constexpr LocalizedText InviteCodeUnavailable{ 49875702, L"Invite code unavailable (matchmaker not connected)" };
+        constexpr LocalizedText InviteNotFound{ 49875703, L"This invite is no longer valid. The host may have left, or the lobby has closed." };
+        constexpr LocalizedText LobbyFull{ 49875704, L"This lobby is full." };
+        constexpr LocalizedText LobbyNotJoinable{ 49875705, L"This lobby is not accepting players right now. It may be changing hosts or finishing a match. Try again shortly." };
+        constexpr LocalizedText VersionMismatch{ 49875706, L"The host is running a different version of the game. You both need the same version to play together." };
+        constexpr LocalizedText AddressLimit{ 49875707, L"Too many joins from your network are in progress. Wait a minute and try again." };
+        constexpr LocalizedText ServerBusy{ 49875708, L"The matchmaking server is busy. Try again later." };
+        constexpr LocalizedText ServerUnreachable{ 49875709, L"Could not reach the matchmaking server. Check your connection and try again." };
+        constexpr LocalizedText JoinFailed{ 49875710, L"Could not join this lobby ({0})." };
+        constexpr LocalizedText HostUnreachable{ 49875711, L"Could not reach the host of this lobby. Try again shortly." };
+        constexpr LocalizedText ServerConnectFailed{ 49875712, L"Could not connect to the matchmaking server at {0}. Try again later." };
+        constexpr LocalizedText MatchmakingOff{ 49875713, L"Cannot join this lobby: matchmaking is turned off." };
+        constexpr LocalizedText NewHostRejoining{ 49875714, L"Another player is the new host. Rejoining..." };
+        constexpr LocalizedText LostHostSearching{ 49875715, L"Lost the connection to the host. Looking for a new host..." };
+    }
+
+    // Looks @p Text up in the loaded TLKs the way script does (SFXGame.GetSimpleString).
+    std::wstring Localize(LocalizedText const& Text, std::wstring const& Argument = {})
+    {
+        std::wstring Result{};
+        UClass* const GameClass = ASFXGame::StaticClass();
+        if (auto* const Game = GameClass != nullptr ? static_cast<ASFXGame*>(GameClass->ClassDefaultObject) : nullptr)
+            Result = Game->GetSimpleString(Text.StrRef, FALSE).Chars();
+        // A string no loaded TLK has comes back as its ID with a $ prefix, e.g. "$49875700".
+        if (Result.empty() || Result == L"$" + std::to_wstring(Text.StrRef))
+            Result = Text.English;
+
+        if (std::size_t const Slot = Result.find(L"{0}"); Slot != std::wstring::npos)
+            Result.replace(Slot, 3, Argument);
+        return Result;
+    }
+
+    // Percent-encodes everything but RFC 3986's unreserved characters.
+    std::string PercentEncode(std::string const& Text)
+    {
+        constexpr char k_hex[] = "0123456789ABCDEF";
+        std::string Result{};
+        for (unsigned char const C : Text)
+        {
+            if ((C >= 'A' && C <= 'Z') || (C >= 'a' && C <= 'z') || (C >= '0' && C <= '9') || C == '-' || C == '.' || C == '_' || C == '~')
+            {
+                Result.push_back(static_cast<char>(C));
+            }
+            else
+            {
+                Result.push_back('%');
+                Result.push_back(k_hex[C >> 4]);
+                Result.push_back(k_hex[C & 0xF]);
+            }
+        }
+        return Result;
+    }
+
+    // Scheme and host compare without case, and a trailing slash is the same URL.
+    bool IsDefaultMatchmaker(std::string MatchmakerUrl)
+    {
+        while (!MatchmakerUrl.empty() && MatchmakerUrl.back() == '/')
+            MatchmakerUrl.pop_back();
+        return ::_stricmp(MatchmakerUrl.c_str(), LMP_LOBBY_DEFAULT_MATCHMAKER_URL) == 0;
+    }
+
+    // An https page, so chat apps make it clickable; it opens me3tweaksmodmanager://lmpjoin with the same
+    // query, and Mod Manager starts LMP if needed and joins through the control pipe. The default
+    // matchmaker is left out to keep links short.
+    std::string JoinLink(std::string const& MatchmakerUrl, std::string const& InviteCode)
+    {
+        std::string Link = "https://me3tweaks.com/modmanager/protocol/lmpjoin?code=" + PercentEncode(InviteCode);
+        if (!IsDefaultMatchmaker(MatchmakerUrl))
+            Link += "&server=" + PercentEncode(MatchmakerUrl);
+        return Link;
+    }
+
+    // Worker thread. Every failure is a return value: the clipboard may be held open by another
+    // process, or be unavailable altogether (e.g. a locked session).
+    bool WriteClipboardText(std::wstring const& Text)
+    {
+        // A message-only window owns the data; SetClipboardData may refuse when there is no owner.
+        HWND const Owner = ::CreateWindowExW(0, L"STATIC", nullptr, 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, nullptr, nullptr);
+        bool Opened = false;
+        for (int Attempt = 0; Attempt < 10; ++Attempt)
+        {
+            if ((Opened = ::OpenClipboard(Owner) != FALSE))
+                break;
+            ::Sleep(20);
+        }
+
+        bool Copied = false;
+        if (Opened)
+        {
+            SIZE_T const Bytes = (Text.size() + 1) * sizeof(wchar_t);
+            HGLOBAL const Memory = ::GlobalAlloc(GMEM_MOVEABLE, Bytes);
+            if (void* const Data = Memory != nullptr ? ::GlobalLock(Memory) : nullptr)
+            {
+                std::memcpy(Data, Text.c_str(), Bytes);
+                ::GlobalUnlock(Memory);
+                // On success the clipboard owns the memory.
+                Copied = ::EmptyClipboard() && ::SetClipboardData(CF_UNICODETEXT, Memory) != nullptr;
+            }
+            if (!Copied && Memory != nullptr)
+                ::GlobalFree(Memory);
+            ::CloseClipboard();
+        }
+
+        if (Owner != nullptr)
+            ::DestroyWindow(Owner);
+        return Copied;
+    }
+
+    // Returns whether @p Text was copied within @p Wait. The copy runs on its own thread, so
+    // a clipboard that is stuck (EmptyClipboard messages the previous owner, which may hang)
+    // costs the game thread at most @p Wait; a copy that finishes later still lands.
+    bool CopyToClipboard(std::wstring Text, std::chrono::milliseconds const Wait)
+    {
+        try
+        {
+            auto Result = std::make_shared<std::promise<bool>>();
+            std::future<bool> Copied = Result->get_future();
+            std::thread{ [Text = std::move(Text), Result]
+            {
+                bool Done = false;
+                try
+                {
+                    Done = WriteClipboardText(Text);
+                }
+                catch (...)
+                {
+                }
+                Result->set_value(Done);
+            } }.detach();
+            return Copied.wait_for(Wait) == std::future_status::ready && Copied.get();
+        }
+        catch (...)
+        {
+            // E.g. the thread could not start.
+            return false;
+        }
     }
 
     // A client whose connection to its host closed, still in that host's world.
@@ -667,6 +862,7 @@ namespace
         Next.Hosted = S.Hosted;
         Next.AutoHost = S.AutoHost;
         Next.PendingJoin = std::move(S.PendingJoin);
+        Next.PendingJoinLeftGame = S.PendingJoinLeftGame;
         Next.MenuWorld = S.MenuWorld;
         Next.PipeName = std::move(S.PipeName);
         Next.Pipe = std::move(S.Pipe);
@@ -736,9 +932,10 @@ namespace
 
     // The lobby locks matchmaking while it commits to a match. That lock ends once the match
     // is running, so it can be joined in progress; a lock set during the match (its end) holds.
+    // Nobody can join while the level changes. Fullness is the matchmaker's check.
     bool IsJoinable(HostedSettings const& H, bool const InLobby)
     {
-        return H.AllowMatchmaking || (H.LockedToStart && !InLobby);
+        return (H.AllowMatchmaking || (H.LockedToStart && !InLobby)) && !IsLevelTransitioning();
     }
 
     // Wave progress is not read yet; an in-progress match reports wave 0.
@@ -985,6 +1182,7 @@ namespace
     void PollReservation(MatchmakingState& S, std::chrono::milliseconds Delay = {});
     bool TravelToHost(MatchmakingState& S, bool QuickMatch);
     void FailMigration(MatchmakingState& S, wchar_t const* Why);
+    void Leave(MatchmakingState& S);
 
     void PollReservation(MatchmakingState& S, std::chrono::milliseconds const Delay)
     {
@@ -1049,6 +1247,11 @@ namespace
     {
         S.ReservationId = Reservation.at("reservationId").get<std::string>();
         S.JoinKey = Reservation.at("joinKey").get<std::string>();
+        if (auto const Lobby = Reservation.find("lobby"); Lobby != Reservation.end() && Lobby->is_object())
+        {
+            S.LobbyId = Lobby->value("lobbyId", std::string{});
+            S.MemberMaxPlayers = Lobby->value("maxPlayers", 0);
+        }
         S.Discovery.Ticket = UdpTicket::FromJson(Reservation.at("udpTicket"));
         if (!Rendezvous::DecodeBase64Url(Reservation.at("traversalKey").get<std::string>(), S.HostPath.TraversalKey))
         {
@@ -1169,11 +1372,42 @@ namespace
         }, [](MatchmakingState& State) { FinishQuickMatch(State, false); });
     }
 
+    // What to tell the player when the matchmaker refuses an invite code. The codes are
+    // MilanServer's Failures.
+    std::wstring RedeemFailureMessage(MatchmakingNet::HttpResult const& Result)
+    {
+        std::string const Code = ErrorCode(Result);
+        if (Code == "invite_not_found")
+            return Localize(Text::InviteNotFound);
+        if (Code == "lobby_full")
+            return Localize(Text::LobbyFull);
+        if (Code == "lobby_not_joinable")
+            return Localize(Text::LobbyNotJoinable);
+        if (Code == "version_mismatch")
+            return Localize(Text::VersionMismatch);
+        if (Code == "address_limit")
+            return Localize(Text::AddressLimit);
+        if (Code == "server_full")
+            return Localize(Text::ServerBusy);
+        if (Result.Status == 0)
+            return Localize(Text::ServerUnreachable);
+        return Localize(Text::JoinFailed, Widen(DescribeFailure(Result)));
+    }
+
+    void ReportJoinFailure(std::wstring const& Message)
+    {
+        if (!ShowMessageBox(Message))
+            MILAN_WARNW(ELOG_Matchmaking, L"could not show the join failure: %s", Message.c_str());
+    }
+
     void StartJoin(MatchmakingState& S, std::string InviteCode)
     {
         ResetSession(S);
         S.Role = EMatchmakingRole::Joiner;
+        S.InviteCode = InviteCode;
 
+        // A failed join ends the session, so the game does not look like it is still joining,
+        // and tells the player why: the join may have come from a link or Discord.
         FetchInfo(S, [InviteCode](MatchmakingState& State)
         {
             json const Request{ { "inviteCode", InviteCode }, { "gameVersion", GameVersion() } };
@@ -1181,10 +1415,24 @@ namespace
             {
                 std::optional<json> const Reservation = SuccessJson(Result, "invite redemption");
                 if (!Reservation)
+                {
+                    ResetSession(Session);
+                    ReportJoinFailure(RedeemFailureMessage(Result));
                     return;
+                }
 
-                AcceptReservation(Session, *Reservation, false);
+                if (!AcceptReservation(Session, *Reservation, false))
+                {
+                    Leave(Session); // Releases the reservation.
+                    // Usually a reservation without a host address this game can reach.
+                    ReportJoinFailure(Localize(Text::HostUnreachable));
+                }
             });
+        }, [](MatchmakingState& State)
+        {
+            std::wstring const Server = Widen(State.BaseUrl);
+            ResetSession(State);
+            ReportJoinFailure(Localize(Text::ServerConnectFailed, Server));
         });
     }
 
@@ -1275,8 +1523,11 @@ namespace
     // host reports from its new lobby; PollReservation then travels.
     void RejoinLobby(MatchmakingState& S, json const& Reservation)
     {
+        // Still the same lobby, so a member that joined with its invite code keeps it.
+        std::string InviteCode = std::move(S.InviteCode);
         ResetSession(S, true);
         S.Role = EMatchmakingRole::Joiner;
+        S.InviteCode = std::move(InviteCode);
         if (!TakeReservation(S, Reservation))
         {
             FailMigration(S, L"the matchmaker sent an invalid reservation");
@@ -1284,7 +1535,7 @@ namespace
         }
 
         MILAN_INFOW(ELOG_Matchmaking, L"another player is the new host; rejoining with reservation %S", S.ReservationId.c_str());
-        ShowHint(L"Another player is the new host. Rejoining...", 10.f);
+        ShowHint(Localize(Text::NewHostRejoining), 10.f);
         if (!S.HostPath.Candidates.empty())
         {
             if (!TravelToHost(S, false))
@@ -1344,7 +1595,7 @@ namespace
         S.MigrationVersion = -1;
         S.MigrationDeadline = Clock::now() + k_migrationDecisionTimeout;
         MILAN_INFOW(ELOG_Matchmaking, L"lost the host; asking the matchmaker to check it");
-        ShowHint(L"Lost the connection to the host. Looking for a new host...", 10.f);
+        ShowHint(Localize(Text::LostHostSearching), 10.f);
 
         json const Report{ { "canHost", true } };
         PostHttp(S, false, L"POST", "/v1/members/" + S.ReservationId + "/host-lost", S.JoinKey, Report.dump(),
@@ -1387,8 +1638,43 @@ namespace
     {
         MILAN_UNUSED(Source);
         S.PendingJoin = std::move(Code);
+        S.PendingJoinLeftGame = false;
         MILAN_INFOW(ELOG_Matchmaking, L"join %S queued (%s); it starts once the multiplayer menu is open",
             S.PendingJoin.c_str(), Source);
+    }
+
+    // Checks a matchmaker change and/or join from outside the game thread. Returns null when
+    // it is valid, or what is wrong with it.
+    char const* ValidateExternalRequest(std::optional<std::string> const& Url, std::optional<std::string> const& Code)
+    {
+        if (!Url && !Code)
+            return "send matchmakerUrl, inviteCode, or both";
+        if (Url && !Url->empty() && !MatchmakingNet::IsValidBaseUrl(*Url))
+            return "matchmakerUrl must be an http:// or https:// URL, or empty to disable matchmaking";
+        // Codes go into a JSON body and the log, so they are kept to printable ASCII.
+        if (Code && (Code->empty() || Code->size() > k_maxInviteCodeLength
+            || !std::all_of(Code->begin(), Code->end(), [](char const C) { return C > 0x20 && C < 0x7F; })))
+        {
+            return "inviteCode must be 1-64 printable ASCII characters";
+        }
+        return nullptr;
+    }
+
+    // Hands a validated request to the game thread. Returns false once the game is shutting down.
+    bool QueueExternalRequest(Mailbox& Box, std::optional<std::string> Url, std::optional<std::string> Code,
+        wchar_t const* const Source)
+    {
+        std::lock_guard Lock{ Box.Mutex };
+        if (Box.Stop)
+            return false;
+        Box.Completions.push_back([Url = std::move(Url), Code = std::move(Code), Source](MatchmakingState& S)
+        {
+            if (Url)
+                SetMatchmaker(S, *Url, Source);
+            if (Code)
+                QueueJoin(S, *Code, Source);
+        });
+        return true;
     }
 
     // Runs on the control pipe's thread, so it only validates and hands the request to the game thread.
@@ -1412,34 +1698,299 @@ namespace
                 if (!Field->is_string())
                     return Reply("matchmakerUrl must be a string");
                 Url = Field->get<std::string>();
-                if (!Url->empty() && !MatchmakingNet::IsValidBaseUrl(*Url))
-                    return Reply("matchmakerUrl must be an http:// or https:// URL, or empty to disable matchmaking");
             }
             if (auto const Field = Request.find("inviteCode"); Field != Request.end())
             {
-                if (!Field->is_string() || Field->get<std::string>().empty() || Field->get<std::string>().size() > k_maxInviteCodeLength)
-                    return Reply("inviteCode must be a non-empty string");
+                if (!Field->is_string())
+                    return Reply("inviteCode must be a string");
                 Code = Field->get<std::string>();
             }
-            if (!Url && !Code)
-                return Reply("send matchmakerUrl, inviteCode, or both");
+            if (char const* const Error = ValidateExternalRequest(Url, Code))
+                return Reply(Error);
 
-            std::lock_guard Lock{ Box->Mutex };
-            if (Box->Stop)
+            if (!QueueExternalRequest(*Box, std::move(Url), std::move(Code), L"control pipe"))
                 return Reply("the game is shutting down");
-            Box->Completions.push_back([Url, Code](MatchmakingState& S)
-            {
-                if (Url)
-                    SetMatchmaker(S, *Url, L"control pipe");
-                if (Code)
-                    QueueJoin(S, *Code, L"control pipe");
-            });
             return Reply(nullptr);
         }
         catch (std::exception const&)
         {
             return Reply("could not process the request");
         }
+    }
+}
+
+
+// ! LMP.Lobby SPI service (Public/LmpLobby.h).
+// ========================================
+
+namespace
+{
+    // Other ASIs call in from any thread, so they only see copies the game thread publishes here.
+    // Deliberately leaked: callers may still hold the table during static destruction.
+    struct LobbyService
+    {
+        std::mutex                  Mutex{};
+        std::shared_ptr<Mailbox>    Box{};          // Null until Initialize and after Terminate.
+        LmpLobbyState               State{};
+        std::uint64_t               Generation{ 0 };
+        std::vector<std::pair<LmpLobbyInviteHandler, void*>> InviteHandlers{};
+    };
+
+    constexpr std::size_t k_maxInviteHandlers = 16;
+
+    LobbyService& TheLobbyService()
+    {
+        static LobbyService* const s_service = new LobbyService{};
+        return *s_service;
+    }
+
+    // The version 1 layout. Later versions only append, so this stays the minimum callers pass.
+    constexpr std::uint32_t k_minLobbyStateSize = sizeof(LmpLobbyState);
+
+    // Leaves the field empty rather than handing out a truncated value.
+    template<std::size_t N>
+    void CopyField(char (&Field)[N], std::string const& Value)
+    {
+        if (Value.size() < N)
+            std::memcpy(Field, Value.c_str(), Value.size() + 1);
+        else
+            Field[0] = '\0';
+    }
+
+    bool SameLobbyState(LmpLobbyState const& A, LmpLobbyState const& B)
+    {
+        return A.Role == B.Role && A.Flags == B.Flags && A.PlayerCount == B.PlayerCount && A.MaxPlayers == B.MaxPlayers
+            && std::strcmp(A.MatchmakerUrl, B.MatchmakerUrl) == 0 && std::strcmp(A.LobbyId, B.LobbyId) == 0
+            && std::strcmp(A.InviteCode, B.InviteCode) == 0;
+    }
+
+    // Game thread.
+    LmpLobbyState BuildLobbyServiceState(MatchmakingState const& S)
+    {
+        LmpLobbyState Out{};
+        Out.StructSize = sizeof(Out);
+        Out.Role = S.Role == EMatchmakingRole::Host ? LMP_LOBBY_ROLE_HOST
+            : S.Role == EMatchmakingRole::Joiner ? LMP_LOBBY_ROLE_MEMBER : LMP_LOBBY_ROLE_NONE;
+        CopyField(Out.MatchmakerUrl, S.BaseUrl);
+        CopyField(Out.LobbyId, S.LobbyId);
+        CopyField(Out.InviteCode, S.InviteCode);
+
+        if (IsHosting(S))
+        {
+            int const MaxPlayers = HostMaxPlayers();
+            bool const InLobby = HostIsInLobby();
+            Out.Flags |= LMP_LOBBY_FLAG_CONNECTED | LMP_LOBBY_FLAG_HOSTING;
+            Out.MaxPlayers = MaxPlayers;
+            Out.PlayerCount = std::min(MaxPlayers, 1 + ConnectedClientCount());
+            if (!InLobby)
+                Out.Flags |= LMP_LOBBY_FLAG_IN_PROGRESS;
+            if (S.Hosted.Known && S.Hosted.Private)
+                Out.Flags |= LMP_LOBBY_FLAG_PRIVATE;
+            // The matchmaker's rule for redeeming an invite: joinable, no host handoff underway, and
+            // a free slot after the players and the reservations still on their way in.
+            int Reserved = 0;
+            for (auto const& Joiner : S.Joiners)
+                Reserved += Joiner.second.Joined ? 0 : 1;
+            bool const HandingOff = S.AdoptUntil != Clock::time_point{} || S.AdoptReportBy != Clock::time_point{};
+            if (S.Role == EMatchmakingRole::Host && !S.LobbyId.empty() && S.Hosted.Known && !HandingOff
+                && IsJoinable(S.Hosted, InLobby) && Out.PlayerCount + Reserved < MaxPlayers)
+            {
+                Out.Flags |= LMP_LOBBY_FLAG_JOINABLE;
+            }
+        }
+        else
+        {
+            UWorld* const World = CurrentWorld();
+            UNetConnection* const Server = (World != nullptr && World->NetDriver != nullptr) ? World->NetDriver->ServerConnection : nullptr;
+            UGameEngine* const Engine = GameEngine();
+            UEngine* const BaseEngine = (GEngine != nullptr) ? *GEngine : nullptr;
+            AWorldInfo* const WorldInfo = BaseEngine != nullptr ? BaseEngine->GetCurrentWorldInfo() : nullptr;
+            if (Server != nullptr && Server->ConnectionState != USOCK_Closed && Engine != nullptr && Engine->GPendingLevel == nullptr)
+            {
+                Out.Flags |= LMP_LOBBY_FLAG_CONNECTED;
+                if (WorldInfo != nullptr && WorldInfo->GRI != nullptr)
+                    Out.PlayerCount = static_cast<std::int32_t>(WorldInfo->GRI->PRIArray.Count());
+                if (S.Role == EMatchmakingRole::Joiner)
+                    Out.MaxPlayers = S.MemberMaxPlayers;
+            }
+        }
+
+        if (!S.PendingJoin.empty() || (S.Role == EMatchmakingRole::Joiner && !S.InviteCode.empty() && !S.JoinedReported))
+            Out.Flags |= LMP_LOBBY_FLAG_JOIN_PENDING;
+        return Out;
+    }
+
+    // Game thread, once per tick.
+    void PublishLobbyServiceState(MatchmakingState const& S)
+    {
+        LmpLobbyState const Next = BuildLobbyServiceState(S);
+        LobbyService& Service = TheLobbyService();
+        std::lock_guard Lock{ Service.Mutex };
+        if (Service.Generation != 0 && SameLobbyState(Next, Service.State))
+            return;
+        Service.State = Next;
+        ++Service.Generation;
+    }
+
+    std::uint32_t LobbyService_GetState(LmpLobbyState* const State)
+    {
+        if (State == nullptr || State->StructSize < k_minLobbyStateSize)
+            return LMP_LOBBY_INVALID_ARGUMENT;
+
+        LobbyService& Service = TheLobbyService();
+        LmpLobbyState Copy{};
+        {
+            std::lock_guard Lock{ Service.Mutex };
+            Copy = Service.State;
+        }
+        Copy.StructSize = std::min<std::uint32_t>(State->StructSize, sizeof(LmpLobbyState));
+        std::memcpy(State, &Copy, Copy.StructSize);
+        return LMP_LOBBY_OK;
+    }
+
+    std::uint64_t LobbyService_GetStateGeneration()
+    {
+        LobbyService& Service = TheLobbyService();
+        std::lock_guard Lock{ Service.Mutex };
+        return Service.Generation;
+    }
+
+    std::uint32_t LobbyService_RequestJoin(char const* const MatchmakerUrl, char const* const InviteCode)
+    {
+        try
+        {
+            if (InviteCode == nullptr)
+                return LMP_LOBBY_INVALID_ARGUMENT;
+
+            // Bounded reads: anything longer than its limit is rejected without reading all of it.
+            std::optional<std::string> Url{};
+            if (MatchmakerUrl != nullptr && *MatchmakerUrl != '\0')
+            {
+                std::size_t const UrlLength = ::strnlen(MatchmakerUrl, LMP_LOBBY_URL_MAX);
+                if (UrlLength >= LMP_LOBBY_URL_MAX)
+                    return LMP_LOBBY_INVALID_ARGUMENT;
+                Url.emplace(MatchmakerUrl, UrlLength);
+            }
+            std::optional<std::string> Code{ std::in_place, InviteCode, ::strnlen(InviteCode, k_maxInviteCodeLength + 1) };
+            if (ValidateExternalRequest(Url, Code) != nullptr)
+                return LMP_LOBBY_INVALID_ARGUMENT;
+
+            std::shared_ptr<Mailbox> Box{};
+            {
+                LobbyService& Service = TheLobbyService();
+                std::lock_guard Lock{ Service.Mutex };
+                Box = Service.Box;
+            }
+            if (Box == nullptr || !QueueExternalRequest(*Box, std::move(Url), std::move(Code), L"LMP.Lobby service"))
+                return LMP_LOBBY_SHUTTING_DOWN;
+            return LMP_LOBBY_OK;
+        }
+        catch (...)
+        {
+            // Never let an exception cross into the calling ASI.
+            return LMP_LOBBY_FAILED;
+        }
+    }
+
+    std::uint32_t LobbyService_AddInviteHandler(LmpLobbyInviteHandler const Handler, void* const Context)
+    {
+        try
+        {
+            if (Handler == nullptr)
+                return LMP_LOBBY_INVALID_ARGUMENT;
+            LobbyService& Service = TheLobbyService();
+            std::lock_guard Lock{ Service.Mutex };
+            auto& Handlers = Service.InviteHandlers;
+            if (std::find(Handlers.begin(), Handlers.end(), std::pair{ Handler, Context }) != Handlers.end())
+                return LMP_LOBBY_INVALID_ARGUMENT;
+            if (Handlers.size() >= k_maxInviteHandlers)
+                return LMP_LOBBY_LIMIT_REACHED;
+            Handlers.emplace_back(Handler, Context);
+            return LMP_LOBBY_OK;
+        }
+        catch (...)
+        {
+            return LMP_LOBBY_FAILED;
+        }
+    }
+
+    std::uint32_t LobbyService_RemoveInviteHandler(LmpLobbyInviteHandler const Handler, void* const Context)
+    {
+        LobbyService& Service = TheLobbyService();
+        std::lock_guard Lock{ Service.Mutex };
+        auto& Handlers = Service.InviteHandlers;
+        auto const Found = std::find(Handlers.begin(), Handlers.end(), std::pair{ Handler, Context });
+        if (Found == Handlers.end())
+            return LMP_LOBBY_INVALID_ARGUMENT;
+        Handlers.erase(Found);
+        return LMP_LOBBY_OK;
+    }
+
+    LmpLobbyService const k_lobbyServiceTable{
+        &LobbyService_GetState,
+        &LobbyService_GetStateGeneration,
+        &LobbyService_RequestJoin,
+        &LobbyService_AddInviteHandler,
+        &LobbyService_RemoveInviteHandler,
+    };
+
+    // Game thread. Calls each invite handler outside the lock, so handlers can use the service,
+    // and returns whether any showed its own UI.
+    bool RunInviteHandlers(MatchmakingState const& S, std::string const& JoinLink)
+    {
+        std::vector<std::pair<LmpLobbyInviteHandler, void*>> Handlers{};
+        {
+            LobbyService& Service = TheLobbyService();
+            std::lock_guard Lock{ Service.Mutex };
+            Handlers = Service.InviteHandlers;
+        }
+
+        LmpLobbyState const State = BuildLobbyServiceState(S);
+        bool Shown = false;
+        for (auto const& [Handler, Context] : Handlers)
+        {
+            try
+            {
+                Shown |= Handler(&State, JoinLink.c_str(), Context) == LMP_LOBBY_INVITE_SHOWN;
+            }
+            catch (...)
+            {
+                MILAN_WARNW(ELOG_Matchmaking, L"an invite handler threw an exception");
+            }
+        }
+        return Shown;
+    }
+
+    void RegisterLobbyService(::LESDK::Initializer& Context, std::shared_ptr<Mailbox> Box)
+    {
+        {
+            LobbyService& Service = TheLobbyService();
+            std::lock_guard Lock{ Service.Mutex };
+            Service.Box = std::move(Box);
+        }
+
+        ISharedProxyInterface* const Proxy = Context.ProxyInstance;
+        unsigned long ProxyVersion = 0;
+        if (Proxy == nullptr || Proxy->GetVersion(&ProxyVersion) != SPIReturn::Success || ProxyVersion < SPI_VERSION_V4)
+        {
+            MILAN_WARNW(ELOG_Matchmaking, L"the proxy has no service registry; other ASIs cannot use %S", LMP_LOBBY_SERVICE_NAME);
+            return;
+        }
+
+        SPIReturn const Result = Proxy->RegisterService(LMP_LOBBY_SERVICE_NAME, LMP_LOBBY_SERVICE_VERSION, &k_lobbyServiceTable);
+        if (Result != SPIReturn::Success)
+            MILAN_WARNW(ELOG_Matchmaking, L"could not register %S: %s", LMP_LOBBY_SERVICE_NAME, SPIReturnToString(Result));
+    }
+
+    // The table stays registered, so it reports an empty state and refuses joins from here on.
+    void RetireLobbyService()
+    {
+        LobbyService& Service = TheLobbyService();
+        std::lock_guard Lock{ Service.Mutex };
+        Service.Box.reset();
+        Service.State = LmpLobbyState{};
+        Service.State.StructSize = sizeof(LmpLobbyState);
+        ++Service.Generation;
     }
 }
 
@@ -1694,16 +2245,60 @@ namespace
         }
     }
 
+    // What the lobby's Exit (SFXGUI_MPLobby.ConfirmExitLobby) and the pause menu's Exit Match
+    // (SFXGUI_MPPauseMenu.ConfirmExitPopupCallback) do: the match saves accomplishments, then
+    // both leave the online game and disconnect, which returns to the multiplayer menu.
+    void LeaveCurrentGame(MatchmakingState& S)
+    {
+        static SFXName const k_lobbyGri{ L"SFXGRIMP_Lobby", 0 };
+        auto* const Engine = static_cast<USFXEngine*>(GameEngine());
+        AWorldInfo* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
+        bool const InMatch = WorldInfo != nullptr && WorldInfo->GRI != nullptr && !IsInstanceOf(WorldInfo->GRI, k_lobbyGri);
+        if (InMatch && Engine->AccomplishmentManager != nullptr) {
+            Engine->AccomplishmentManager->Save();
+        }
+
+        TypedObjectIterator<USFXOnlineComponentBlazeGame, true, false> Iter{};
+        if (Iter)
+        {
+            (*Iter)->LeaveGame();
+        }
+
+        Leave(S);
+        if (!RunConsoleCommand(L"disconnect"))
+            MILAN_ERRORW(ELOG_Matchmaking, L"no local player controller to run 'disconnect'");
+    }
+
     // External joins wait for the multiplayer menu: that is where direct-IP travel is known to work.
+    // A player in a lobby or match (hosting, joined, or still connecting) leaves it first.
     void TickPendingJoin(MatchmakingState& S)
     {
-        if (S.PendingJoin.empty() || S.MenuWorld == nullptr || S.MenuWorld != CurrentWorld() || FindGameDriver() != nullptr)
+        if (S.PendingJoin.empty())
             return;
 
+        if (FindGameDriver() != nullptr)
+        {
+            // Not mid-travel (e.g. the lobby starting its match), unless still connecting to a host.
+            UGameEngine* const Engine = GameEngine();
+            bool const Connecting = Engine != nullptr && Engine->GPendingLevel != nullptr;
+            if (!S.PendingJoinLeftGame && (Connecting || !IsLevelTransitioning()))
+            {
+                MILAN_INFOW(ELOG_Matchmaking, L"leaving the current %s to join %S", IsListenServer() ? L"game (hosting)" : L"game",
+                    S.PendingJoin.c_str());
+                S.PendingJoinLeftGame = true;
+                LeaveCurrentGame(S);
+            }
+            return;
+        }
+        if (S.MenuWorld == nullptr || S.MenuWorld != CurrentWorld())
+            return;
+
+        S.PendingJoinLeftGame = false;
         std::string const Code = std::exchange(S.PendingJoin, {});
         if (S.BaseUrl.empty())
         {
             MILAN_ERRORW(ELOG_Matchmaking, L"cannot join %S: no matchmaker is configured", Code.c_str());
+            ReportJoinFailure(Localize(Text::MatchmakingOff));
             return;
         }
         MILAN_INFOW(ELOG_Matchmaking, L"multiplayer menu is open; joining %S via %S", Code.c_str(), S.BaseUrl.c_str());
@@ -1756,6 +2351,7 @@ bool CMatchmaking::Initialize(::LESDK::Initializer& Context)
     if (mp_state->Pipe == nullptr)
         MILAN_WARNW(ELOG_Matchmaking, L"control pipe unavailable: %S", PipeError.c_str());
 
+    RegisterLobbyService(Context, mp_state->Box);
     RegisterCommands();
 
     MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized (matchmaker %S, control pipe %s)", k_typeName,
@@ -1849,13 +2445,28 @@ bool CMatchmaking::On_ScriptCall(UStruct* const Function)
         mp_state->MenuWorld = nullptr;
     else if (Function->Name == k_invite && s_invite.Applies(Function, L"SFXGameMPContent", L"SFXGUI_MPLobby", L"InviteFriends"))
     {
-        MatchmakingState const& S = *mp_state;
-        bool const HasCode = S.Role == EMatchmakingRole::Host && !S.InviteCode.empty() && IsListenServer();
-        std::wstring const Message = HasCode ? L"Invite Code: " + Widen(S.InviteCode)
-            : L"Invite code unavailable (matchmaker not connected)";
-        if (!ShowHint(Message, HasCode ? 10.f : 3.f))
-            MILAN_WARNW(ELOG_Matchmaking, L"invite hint box was not created");
         // The original function opens the platform invite UI, which is unavailable on PC.
+        MatchmakingState const& S = *mp_state;
+        if (S.Role != EMatchmakingRole::Host || S.InviteCode.empty() || !IsListenServer())
+        {
+            if (!ShowHint(Localize(Text::InviteCodeUnavailable), 3.f))
+                MILAN_WARNW(ELOG_Matchmaking, L"invite hint box was not created");
+            return false;
+        }
+
+        // Copied whatever else shows, so the player can still paste it if a handler's
+        // invite UI cannot reach the friend they want.
+        std::string const Link = JoinLink(S.BaseUrl, S.InviteCode);
+        bool const Copied = CopyToClipboard(Widen(Link), std::chrono::milliseconds{ 250 });
+        if (!Copied)
+            MILAN_WARNW(ELOG_Matchmaking, L"could not copy the join link to the clipboard");
+
+        if (!RunInviteHandlers(S, Link))
+        {
+            std::wstring const Message = Localize(Copied ? Text::InviteCodeCopied : Text::InviteCode, Widen(S.InviteCode));
+            if (!ShowHint(Message, 10.f))
+                MILAN_WARNW(ELOG_Matchmaking, L"invite hint box was not created");
+        }
         return false;
     }
     return true;
@@ -1891,6 +2502,7 @@ void CMatchmaking::Terminate(::LESDK::Initializer& Context)
     if (mp_state == nullptr)
         return;
 
+    RetireLobbyService();
     if (mp_state->Pipe != nullptr)
         MatchmakingNet::StopControlPipe(*mp_state->Pipe);
 
@@ -2085,6 +2697,8 @@ void CMatchmaking::On_GameEngineTick(float const Delta)
         TickJoiner(S, Now);
         TickProbes(S, S.HostPath, Rendezvous::EDirection::JoinerToHost, Now);
     }
+
+    PublishLobbyServiceState(S);
 }
 
 bool CMatchmaking::On_ReceivedDatagram(FSocket* const Socket, BYTE const* const Data, INT const Length, SOCKADDR_IN const* const Source)
