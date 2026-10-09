@@ -52,6 +52,10 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Engine/Hooks.hpp
   ${PROJ_FOLDER}/Engine/Intercept.cpp
   ${PROJ_FOLDER}/Engine/Intercept.hpp
+  ${PROJ_FOLDER}/Engine/LinkerPatcher.cpp
+  ${PROJ_FOLDER}/Engine/LinkerPatcher.hpp
+  ${PROJ_FOLDER}/Engine/LoadGate.cpp
+  ${PROJ_FOLDER}/Engine/LoadGate.hpp
   ${PROJ_FOLDER}/Misc/GuidCacheUtils.cpp
   ${PROJ_FOLDER}/Misc/GuidCacheUtils.hpp
   ${PROJ_FOLDER}/NetProf/NetProfDecls.hpp

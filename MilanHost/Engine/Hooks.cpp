@@ -19,6 +19,8 @@
 #include "Engine/ExtObject.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
+#include "Engine/LinkerPatcher.hpp"
+#include "Engine/LoadGate.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfStream.hpp"
 #include "Online/SFXOnlineHijacks.hpp"
@@ -162,9 +164,22 @@ void UGameEngine_Tick_hook(UGameEngine* const Context, float const Delta)
 #endif
 }
 
+
+// ! Package loading and linker methods.
+// ========================================
+
 t_LoadPackage* LoadPackage_orig = nullptr;
 UPackage* LoadPackage_hook(UObject* const Outer, WCHAR const* const Filename, INT const Flags)
 {
+    // Installed before anything else in attach; parks this thread until attach has finished.
+    LoadGate::Wait(Filename);
+
+    // Only reachable with -noloadgate or a timed-out gate: nothing (logger included) is set up yet.
+    if (!LoadGate::IsOpen())
+        return (*LoadPackage_orig)(Outer, Filename, Flags);
+
+    LinkerPatcher::EnsureConfigLoaded();
+
     UPackage* const Result = (*LoadPackage_orig)(Outer, Filename, Flags);
 
     if (!ConsoleAutoComplete::TryInstall())
@@ -173,6 +188,35 @@ UPackage* LoadPackage_hook(UObject* const Outer, WCHAR const* const Filename, IN
     }
 
     return Result;
+}
+
+t_FPackageFileCache_FindPackageFile* FPackageFileCache_FindPackageFile_orig = nullptr;
+UBOOL FPackageFileCache_FindPackageFile_hook(void* const Context, WCHAR const* const InName, FGuid* const Guid,
+    FString* const OutFileName, WCHAR const* const Language, UBOOL const Unknown)
+{
+    UBOOL const Result = (*FPackageFileCache_FindPackageFile_orig)(Context, InName, Guid, OutFileName, Language, Unknown);
+    if (Result) return Result;
+
+    // Patch packages live outside PCConsoleTOC.bin, so the original lookup can never find them.
+    return LinkerPatcher::ResolvePatchPackageFile(InName, OutFileName) ? TRUE : FALSE;
+}
+
+t_ULinkerLoad_CreateExport* ULinkerLoad_CreateExport_orig = nullptr;
+UObject* ULinkerLoad_CreateExport_hook(ULinkerLoad* const Context, INT const Index)
+{
+    return LinkerPatcher::CreateExport(Context, Index);
+}
+
+t_ULinkerLoad_FinalizeCreation* ULinkerLoad_FinalizeCreation_orig = nullptr;
+INT ULinkerLoad_FinalizeCreation_hook(ULinkerLoad* const Context)
+{
+    return LinkerPatcher::FinalizeCreation(Context);
+}
+
+t_UObject_EndLoad* UObject_EndLoad_orig = nullptr;
+void UObject_EndLoad_hook()
+{
+    LinkerPatcher::EndLoad();
 }
 
 

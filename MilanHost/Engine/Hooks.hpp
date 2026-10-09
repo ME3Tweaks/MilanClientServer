@@ -18,6 +18,12 @@
 
 // ! Hooking macros.
 // ========================================
+//
+// Every hook goes through SPIv4's deferred path: the detour is created disabled, its trampoline is
+// published into X_orig, and only then is it enabled. A plain InstallHook enables the detour before
+// returning, so a game thread entering the target in between would run X_hook with X_orig still
+// null and call straight through address 0. The game keeps running on its own threads while
+// MilanHost attaches, so that window is real (see Engine/LoadGate.hpp).
 
 #define LOG_SDK_GLOBAL(pCheck, pReal)                                                       \
     MILAN_CHECKW(pCheck != nullptr, L"failed to find " #pCheck);                            \
@@ -25,11 +31,11 @@
 
 #define _INSTALL_HOOK_ADDR_NO_LOG(Address, String, Function)                                       \
     auto* const MILAN_VARCAT(Function, _target) = (MILAN_VARCAT(t_, Function)*)Address;     \
-    MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHook(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook)));
+    MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHookDeferred(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook))); \
+    if (MILAN_VARCAT(Function, _orig) != nullptr) Context.EnableHook(String)
 
 #define _INSTALL_HOOK_ADDR(Address, String, Function)                                       \
-    auto* const MILAN_VARCAT(Function, _target) = (MILAN_VARCAT(t_, Function)*)Address;     \
-    MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHook(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook))); \
+    _INSTALL_HOOK_ADDR_NO_LOG(Address, String, Function);                                   \
     MILAN_TRACEW(ELOG_StartupGlobals, L"" String L" hooked: 0x%p -> 0x%p", (void*)MILAN_VARCAT(Function, _target), (void*)MILAN_VARCAT(Function, _orig))
 
 #define _INSTALL_HOOK_INIT(Pattern, String, Function)                                       \
@@ -76,9 +82,20 @@
 #define GLOBAL_BIOREQUESTEXIT_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 89 5C 24 ?? */ "48 89 6C 24 ?? 48 89 74 24 ?? 57 48 81 EC 50 03 00 00")
 
- // TODO: Replace this with a post-hook pattern search.
-#define GLOBAL_LOADPACKAGE_PATTERN \
-    ::LESDK::Address::FromPattern("48 8B C4 44 89 40 18 48 89 48 08 53 56 57 41 56 41 57 48 83 EC 50 48 C7 40 B8 FE FF FF FF 41 8B F0")
+// Installed by LoadGate before anything else in attach, so it is an RVA rather than a pattern scan.
+// Matches the old pattern "48 8B C4 44 89 40 18 48 89 48 08 53 56 57 41 56 41 57 48 83 EC 50 ...".
+#define GLOBAL_LOADPACKAGE_RVA  ::LESDK::Address::FromOffset(0x12B250)
+
+// Linker patching. RVAs shared with the LExASIs LinkerPatcher, confirmed in Ghidra.
+#define GLOBAL_FPACKAGEFILECACHE_FINDPACKAGEFILE_RVA  ::LESDK::Address::FromOffset(0xABF790)
+#define GLOBAL_ULINKERLOAD_CREATEEXPORT_RVA           ::LESDK::Address::FromOffset(0xFBDD0)
+#define GLOBAL_ULINKERLOAD_FINALIZECREATION_RVA       ::LESDK::Address::FromOffset(0xFF520)
+#define GLOBAL_UOBJECT_STATICFINDOBJECT_RVA           ::LESDK::Address::FromOffset(0x134510)
+#define GLOBAL_UOBJECT_ENDLOAD_RVA                    ::LESDK::Address::FromOffset(0x123BF0)
+#define GLOBAL_GOBJBEGINLOADCOUNT_RVA                 ::LESDK::Address::FromOffset(0x1807D80)
+#define GLOBAL_FCONFIGCACHEINI_CREATECONFIGFILE_RVA   ::LESDK::Address::FromOffset(0x91700)
+#define GLOBAL_FCONFIGCACHEINI_GETARRAY_RVA           ::LESDK::Address::FromOffset(0x94F60)
+#define GLOBAL_GCONFIG_RVA                            ::LESDK::Address::FromOffset(0x17CD5B8)
 
 #define GLOBAL_WNDPROC_RVA  ::LESDK::Address::FromOffset(0x99D2C0)
 
@@ -251,14 +268,41 @@ extern t_UGameEngine_Tick* UGameEngine_Tick_orig;
 
 void UGameEngine_Tick_hook(UGameEngine* Context, float Delta);
 
+
+// ! Package loading and linker methods.
+// ========================================
+
 using t_LoadPackage = UPackage*(UObject*, WCHAR const*, INT);
 extern t_LoadPackage* LoadPackage_orig;
 
 UPackage* LoadPackage_hook(UObject* Outer, WCHAR const* Filename, INT Flags);
 
+using t_FPackageFileCache_FindPackageFile = UBOOL(void* Context, WCHAR const* InName, FGuid* Guid, FString* OutFileName, WCHAR const* Language, UBOOL Unknown);
+extern t_FPackageFileCache_FindPackageFile* FPackageFileCache_FindPackageFile_orig;
+
+UBOOL FPackageFileCache_FindPackageFile_hook(void* Context, WCHAR const* InName, FGuid* Guid, FString* OutFileName, WCHAR const* Language, UBOOL Unknown);
+
+using t_ULinkerLoad_CreateExport = UObject*(ULinkerLoad* Context, INT Index);
+extern t_ULinkerLoad_CreateExport* ULinkerLoad_CreateExport_orig;
+
+UObject* ULinkerLoad_CreateExport_hook(ULinkerLoad* Context, INT Index);
+
+// Last stage of ULinkerLoad::Tick; returns the ELinkerStatus (0 = timed out, 1 = loaded).
+using t_ULinkerLoad_FinalizeCreation = INT(ULinkerLoad* Context);
+extern t_ULinkerLoad_FinalizeCreation* ULinkerLoad_FinalizeCreation_orig;
+
+INT ULinkerLoad_FinalizeCreation_hook(ULinkerLoad* Context);
+
 
 // ! UObject methods.
 // ========================================
+
+// UObject::EndLoad (static, no arguments). Only the outermost EndLoad does the work: nested calls just
+// decrement GObjBeginLoadCount and return.
+using t_UObject_EndLoad = void();
+extern t_UObject_EndLoad* UObject_EndLoad_orig;
+
+void UObject_EndLoad_hook();
 
 using t_UObject_CallFunction = tCallFunction;
 extern t_UObject_CallFunction* UObject_CallFunction_orig;

@@ -25,6 +25,7 @@
 #include "Components/CRenderdoc.hpp"
 #include "Components/CConstants.hpp"
 #include "Engine/ExtObject.hpp"
+#include "Engine/LoadGate.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "Shell/ClientConfig.hpp"
 #include "Shell/CmdArgs.hpp"
@@ -40,11 +41,20 @@ SPI_IMPLEMENT_ATTACH
     ::RelativeTimer AttachTimer{};
 
 
-    // Things that component initialization depends on.
+    // Immediate phase: runs while the game thread is racing ahead into engine startup, so it must
+    // be cheap and cannot log. Only for code the game reaches before its first package load;
+    // everything else belongs after the gate (see Engine/LoadGate.hpp).
     // ----------------------------------------
 
     gp_sdkContext = new ::LESDK::Initializer{ InterfacePtr, "MilanHost" };
     CConstants::ApplyEarlyMinimumResolutionCompatibility(*gp_sdkContext);
+    LoadGate::Install(*gp_sdkContext);
+
+
+    // Gated phase: from here until LoadGate::Open(), the game is held at its first package load.
+    // Things that component initialization depends on.
+    // ----------------------------------------
+
     gp_componentContainer = new ComponentContainer;
     gb_disableSafeBreak = CmdArgs::Contain(L"-nobreak");
 
@@ -90,6 +100,9 @@ SPI_IMPLEMENT_ATTACH
 
     MILAN_INFOW(ELOG_Startup, L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
     MILAN_INFOW(ELOG_Startup, L"game ordinal instance = %d", ::GetGameInstanceOrdinal());
+
+    // Every gated hook is live; let the game start loading packages.
+    LoadGate::Open();
 
     COMPONENT(COutput).FlushEverything();
 

@@ -1,0 +1,54 @@
+diff --git a/Src/LESDK/Init.cpp b/Src/LESDK/Init.cpp
+index 30743af..2b14789 100644
+--- a/Src/LESDK/Init.cpp
++++ b/Src/LESDK/Init.cpp
+@@ -114,16 +114,49 @@ namespace LESDK {
+         if (rc != SPIReturn::Success) {
+             LESDK_CHECK(rc == SPIReturn::Success, "failed to install hook");
+             return nullptr;
+         }
+ 
+         return pOutOriginal;
+     }
+ 
++    void* Initializer::InstallHookDeferred(char const* const Name, void* const Target, void* const Detour) {
++        LESDK_CHECK(Name != nullptr, "");
++        LESDK_CHECK(Target != nullptr, "");
++        LESDK_CHECK(Detour != nullptr, "");
++
++        std::string HookName{};
++        void* pOutOriginal = nullptr;
++
++        HookName.reserve(127);
++        HookName.append(OwnerName).append("_").append(Name);
++
++        SPIReturn const rc = ProxyInstance->InstallHookDeferred(HookName.c_str(), Target, Detour, &pOutOriginal);
++        if (rc != SPIReturn::Success) {
++            LESDK_CHECK(rc == SPIReturn::Success, "failed to install deferred hook");
++            return nullptr;
++        }
++
++        return pOutOriginal;
++    }
++
++    void Initializer::EnableHook(char const* const Name) {
++        LESDK_CHECK(Name != nullptr, "");
++
++        std::string HookName{};
++        HookName.reserve(127);
++        HookName.append(OwnerName).append("_").append(Name);
++
++        SPIReturn const rc = ProxyInstance->EnableHook(HookName.c_str());
++        if (rc != SPIReturn::Success) {
++            LESDK_CHECK(rc == SPIReturn::Success, "failed to enable hook");
++        }
++    }
++
+     void Initializer::UninstallHook(char const* const Name) {
+         LESDK_CHECK(Name != nullptr, "");
+ 
+         std::string HookName{};
+         HookName.reserve(127);
+         HookName.append(OwnerName).append("_").append(Name);
+ 
+         SPIReturn const rc = ProxyInstance->UninstallHook(HookName.c_str());

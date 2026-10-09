@@ -2,6 +2,7 @@
 #include "Components/CImgui.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
+#include "Engine/LinkerPatcher.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfDecls.hpp"
 #include "Online/SFXOnlineHijacks.hpp"
@@ -108,7 +109,13 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(UGameEngine, Exec, GLOBAL_UGAMEENGINE_EXEC_PHOOK);
     INSTALL_HOOK_TWO(UGameEngine, LoadMap, GLOBAL_UGAMEENGINE_LOADMAP_PHOOK);
     INSTALL_HOOK_TWO(UGameEngine, Tick, GLOBAL_UGAMEENGINE_TICK_PHOOK);
-    INSTALL_HOOK_ONE(LoadPackage, GLOBAL_LOADPACKAGE_PATTERN);
+    // LoadPackage itself is installed by LoadGate::Install at the very start of attach.
+
+    LinkerPatcher::Initialize(Context);
+    INSTALL_HOOK_TWO(FPackageFileCache, FindPackageFile, GLOBAL_FPACKAGEFILECACHE_FINDPACKAGEFILE_RVA);
+    INSTALL_HOOK_TWO(ULinkerLoad, FinalizeCreation, GLOBAL_ULINKERLOAD_FINALIZECREATION_RVA);
+    INSTALL_HOOK_TWO(ULinkerLoad, CreateExport, GLOBAL_ULINKERLOAD_CREATEEXPORT_RVA);
+    INSTALL_HOOK_TWO(UObject, EndLoad, GLOBAL_UOBJECT_ENDLOAD_RVA);
 
     INSTALL_HOOK_TWO(UObject, CallFunction, BUILTIN_CALLFUNCTION_PHOOK);
     INSTALL_HOOK_TWO(UObject, ProcessDelegate, GLOBAL_UOBJECT_PROCESSDELEGATE_PHOOK);
