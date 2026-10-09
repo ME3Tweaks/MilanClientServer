@@ -1358,6 +1358,14 @@ namespace
         return true;
     }
 
+    // Host, join and search keys are bearer secrets, so they need TLS outside the local network.
+    void WarnIfPlainHttp(std::string const& Url)
+    {
+        if (MatchmakingNet::IsPlainHttpToRemote(Url))
+            MILAN_WARNW(ELOG_Matchmaking, L"matchmaker %S uses plain http://, so lobby and join keys cross the network unencrypted; use https://",
+                Url.c_str());
+    }
+
     // An empty URL disables matchmaking. A hosted game re-registers on the new server by itself.
     void SetMatchmaker(MatchmakingState& S, std::string Url, wchar_t const* const Source)
     {
@@ -1372,6 +1380,7 @@ namespace
             MILAN_INFOW(ELOG_Matchmaking, L"matchmaking disabled (%s)", Source);
         else
             MILAN_INFOW(ELOG_Matchmaking, L"matchmaker set to %S (%s)", S.BaseUrl.c_str(), Source);
+        WarnIfPlainHttp(S.BaseUrl);
     }
 
     void QueueJoin(MatchmakingState& S, std::string Code, wchar_t const* const Source)
@@ -1732,6 +1741,7 @@ bool CMatchmaking::Initialize(::LESDK::Initializer& Context)
         else
             MILAN_ERRORW(ELOG_Matchmaking, L"-mmserver must be an http:// or https:// URL (or empty); keeping %S", mp_state->BaseUrl.c_str());
     }
+    WarnIfPlainHttp(mp_state->BaseUrl);
     if (std::optional<std::string> Code = CommandLineValue(L"-mmjoin="); Code && !Code->empty())
         QueueJoin(*mp_state, std::move(*Code), L"command line");
 

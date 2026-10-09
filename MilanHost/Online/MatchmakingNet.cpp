@@ -12,10 +12,18 @@
 #include <sddl.h>
 #include <winhttp.h>
 
+#include <map>
 #include <memory>
+#include <mutex>
 #include <thread>
+#include <utility>
 
 #include "Online/MatchmakingNet.hpp"
+
+// Older Windows SDKs do not define it; the value is fixed by WinHTTP.
+#ifndef WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3
+#define WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3 0x00002000
+#endif
 
 
 namespace
@@ -23,6 +31,9 @@ namespace
     constexpr std::size_t k_maxResponseBytes = 256 * 1024;
     constexpr DWORD k_maxPipeMessage = 4096;
     constexpr DWORD k_pipeIoTimeoutMs = 2000;
+    constexpr int k_resolveTimeoutMs = 5000;
+    constexpr int k_connectTimeoutMs = 5000;
+    constexpr int k_sendTimeoutMs = 10000;
 
     struct WinHttpHandle
     {
@@ -43,9 +54,30 @@ namespace
         return Wide;
     }
 
+    // Meanings of the WinHTTP errors a misconfigured server or network usually causes.
+    char const* DescribeWinHttpError(DWORD const Error)
+    {
+        switch (Error)
+        {
+        case ERROR_WINHTTP_TIMEOUT:                 return "timed out";
+        case ERROR_WINHTTP_NAME_NOT_RESOLVED:       return "host name not found";
+        case ERROR_WINHTTP_CANNOT_CONNECT:          return "could not connect";
+        case ERROR_WINHTTP_CONNECTION_ERROR:        return "connection reset";
+        case ERROR_WINHTTP_SECURE_FAILURE:          return "TLS failed: certificate not trusted or not for this host name, or no TLS 1.2+";
+        case ERROR_WINHTTP_SECURE_INVALID_CA:       return "certificate not trusted";
+        case ERROR_WINHTTP_SECURE_CERT_CN_INVALID:  return "certificate is not for this host name";
+        case ERROR_WINHTTP_SECURE_CERT_DATE_INVALID: return "certificate expired or not yet valid";
+        default:                                    return nullptr;
+        }
+    }
+
     std::string LastErrorText(char const* What)
     {
-        return std::string{ What } + " failed, error " + std::to_string(::GetLastError());
+        DWORD const Error = ::GetLastError();
+        std::string Text = std::string{ What } + " failed, error " + std::to_string(Error);
+        if (char const* const Meaning = DescribeWinHttpError(Error))
+            Text += std::string{ " (" } + Meaning + ")";
+        return Text;
     }
 
     struct CrackedUrl
@@ -84,6 +116,141 @@ namespace
             || (b[0] == 192 && b[1] == 168)
             || (b[0] == 169 && b[1] == 254)
             || (b[0] == 100 && (b[1] & 0xC0) == 64);
+    }
+
+    // One WinHTTP session for the process. WinHTTP keeps finished connections open in the
+    // session's pool and reuses them, so a request skips the TCP and TLS handshakes. Handles are
+    // thread-safe: the control and poll workers each get their own pooled connection.
+    class SharedHttpClient
+    {
+    public:
+
+        // The connection handle for @p Url's server, opening the session on first use.
+        HINTERNET Connect(CrackedUrl const& Url, std::string& OutError)
+        {
+            std::lock_guard Lock{ m_mutex };
+            if (m_session == nullptr && (m_session = OpenSession(OutError)) == nullptr)
+                return nullptr;
+
+            auto const Key = std::make_pair(Url.Host, Url.Port);
+            if (auto const Found = m_connections.find(Key); Found != m_connections.end())
+                return Found->second;
+
+            HINTERNET const Connection = ::WinHttpConnect(m_session, Url.Host.c_str(), Url.Port, 0);
+            if (Connection == nullptr)
+            {
+                OutError = LastErrorText("WinHttpConnect");
+                return nullptr;
+            }
+            m_connections.emplace(Key, Connection);
+            return Connection;
+        }
+
+    private:
+
+        // TLS 1.2 is the floor; TLS 1.3 is added where Windows supports it, and older systems
+        // reject that flag. Certificates are checked against the Windows store as usual.
+        static HINTERNET OpenSession(std::string& OutError)
+        {
+            HINTERNET const Session = ::WinHttpOpen(L"MilanHost", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+            if (Session == nullptr)
+            {
+                OutError = LastErrorText("WinHttpOpen");
+                return nullptr;
+            }
+
+            DWORD Protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2 | WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
+            if (!::WinHttpSetOption(Session, WINHTTP_OPTION_SECURE_PROTOCOLS, &Protocols, sizeof(Protocols)))
+            {
+                Protocols = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
+                if (!::WinHttpSetOption(Session, WINHTTP_OPTION_SECURE_PROTOCOLS, &Protocols, sizeof(Protocols)))
+                {
+                    OutError = LastErrorText("WinHttpSetOption(TLS 1.2)");
+                    ::WinHttpCloseHandle(Session);
+                    return nullptr;
+                }
+            }
+            return Session;
+        }
+
+        std::mutex                  m_mutex{};
+        HINTERNET                   m_session{ nullptr };
+        std::map<std::pair<std::wstring, INTERNET_PORT>, HINTERNET> m_connections{};
+    };
+
+    // Never destroyed: closing WinHTTP handles from static destruction runs under the loader
+    // lock at process exit, and the pool is only useful for the process's lifetime anyway.
+    SharedHttpClient& HttpClient()
+    {
+        static SharedHttpClient* const s_client = new SharedHttpClient{};
+        return *s_client;
+    }
+
+    // Sends one request on @p Connection and reads the whole response, which lets WinHTTP
+    // return the connection to the pool. @p OutError is the Windows error of a failed request.
+    bool SendOnce(HINTERNET const Connection, bool const Secure, wchar_t const* const Method, std::wstring const& Path,
+        std::wstring const& Headers, std::string const& JsonBody, int const ReceiveTimeoutMs,
+        MatchmakingNet::HttpResult& Result, DWORD& OutError)
+    {
+        auto const Fail = [&](char const* const What)
+        {
+            OutError = ::GetLastError();
+            Result.Error = LastErrorText(What);
+            return false;
+        };
+
+        WinHttpHandle Req{ ::WinHttpOpenRequest(Connection, Method, Path.c_str(), nullptr,
+            WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, Secure ? WINHTTP_FLAG_SECURE : 0) };
+        if (!Req.Handle)
+            return Fail("WinHttpOpenRequest");
+
+        // Bearer keys go to the configured server only: a redirect is returned as its status.
+        DWORD Redirects = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
+        if (!::WinHttpSetOption(Req.Handle, WINHTTP_OPTION_REDIRECT_POLICY, &Redirects, sizeof(Redirects)))
+            return Fail("WinHttpSetOption(redirect policy)");
+        ::WinHttpSetTimeouts(Req.Handle, k_resolveTimeoutMs, k_connectTimeoutMs, k_sendTimeoutMs, ReceiveTimeoutMs);
+
+        void* const BodyData = JsonBody.empty() ? WINHTTP_NO_REQUEST_DATA : const_cast<char*>(JsonBody.data());
+        DWORD const BodySize = static_cast<DWORD>(JsonBody.size());
+        if (!::WinHttpSendRequest(Req.Handle, Headers.c_str(), static_cast<DWORD>(-1L), BodyData, BodySize, BodySize, 0)
+            || !::WinHttpReceiveResponse(Req.Handle, nullptr))
+        {
+            return Fail("HTTP request");
+        }
+
+        DWORD StatusCode = 0;
+        DWORD StatusSize = sizeof(StatusCode);
+        if (!::WinHttpQueryHeaders(Req.Handle, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+            WINHTTP_HEADER_NAME_BY_INDEX, &StatusCode, &StatusSize, WINHTTP_NO_HEADER_INDEX))
+        {
+            return Fail("WinHttpQueryHeaders");
+        }
+
+        for (;;)
+        {
+            DWORD Available = 0;
+            if (!::WinHttpQueryDataAvailable(Req.Handle, &Available))
+                return Fail("WinHttpQueryDataAvailable");
+            if (Available == 0)
+                break;
+            if (Result.Body.size() + Available > k_maxResponseBytes)
+            {
+                OutError = ERROR_SUCCESS;
+                Result.Error = "response too large";
+                return false;
+            }
+
+            std::size_t const Offset = Result.Body.size();
+            Result.Body.resize(Offset + Available);
+            DWORD Read = 0;
+            if (!::WinHttpReadData(Req.Handle, Result.Body.data() + Offset, Available, &Read))
+                return Fail("WinHttpReadData");
+            Result.Body.resize(Offset + Read);
+        }
+
+        Result.Status = static_cast<int>(StatusCode);
+        return true;
     }
 
     // A protected DACL that grants access to the current user only.
@@ -246,84 +413,42 @@ namespace MatchmakingNet
             return Result;
         }
 
-        WinHttpHandle Session{ ::WinHttpOpen(L"MilanHost", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-            WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0) };
-        if (!Session.Handle)
-        {
-            Result.Error = LastErrorText("WinHttpOpen");
+        HINTERNET const Connection = HttpClient().Connect(Url, Result.Error);
+        if (Connection == nullptr)
             return Result;
-        }
-        ::WinHttpSetTimeouts(Session.Handle, 5000, 5000, 10000, ReceiveTimeoutMs);
-
-        WinHttpHandle Connection{ ::WinHttpConnect(Session.Handle, Url.Host.c_str(), Url.Port, 0) };
-        if (!Connection.Handle)
-        {
-            Result.Error = LastErrorText("WinHttpConnect");
-            return Result;
-        }
 
         std::wstring const WidePath = Widen(Path);
-        WinHttpHandle Req{ ::WinHttpOpenRequest(Connection.Handle, Method, WidePath.c_str(), nullptr,
-            WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, Url.Secure ? WINHTTP_FLAG_SECURE : 0) };
-        if (!Req.Handle)
-        {
-            Result.Error = LastErrorText("WinHttpOpenRequest");
-            return Result;
-        }
-
         std::wstring Headers = L"Accept: application/json\r\n";
         if (!JsonBody.empty())
             Headers += L"Content-Type: application/json\r\n";
         if (!Bearer.empty())
             Headers += L"Authorization: Bearer " + Widen(Bearer) + L"\r\n";
 
-        void* const BodyData = JsonBody.empty() ? WINHTTP_NO_REQUEST_DATA : const_cast<char*>(JsonBody.data());
-        DWORD const BodySize = static_cast<DWORD>(JsonBody.size());
-        if (!::WinHttpSendRequest(Req.Handle, Headers.c_str(), static_cast<DWORD>(-1L), BodyData, BodySize, BodySize, 0)
-            || !::WinHttpReceiveResponse(Req.Handle, nullptr))
+        // A pooled connection that the server or a proxy closed while it was idle fails before
+        // any response arrives; the second attempt gets a new connection. A server that cannot
+        // be reached at all fails with CANNOT_CONNECT instead and is not retried.
+        for (int Attempt = 0;; ++Attempt)
         {
-            Result.Error = LastErrorText("HTTP request");
-            return Result;
-        }
-
-        DWORD StatusCode = 0;
-        DWORD StatusSize = sizeof(StatusCode);
-        if (!::WinHttpQueryHeaders(Req.Handle, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-            WINHTTP_HEADER_NAME_BY_INDEX, &StatusCode, &StatusSize, WINHTTP_NO_HEADER_INDEX))
-        {
-            Result.Error = LastErrorText("WinHttpQueryHeaders");
-            return Result;
-        }
-
-        for (;;)
-        {
-            DWORD Available = 0;
-            if (!::WinHttpQueryDataAvailable(Req.Handle, &Available))
-            {
-                Result.Error = LastErrorText("WinHttpQueryDataAvailable");
+            DWORD Error = ERROR_SUCCESS;
+            if (SendOnce(Connection, Url.Secure, Method, WidePath, Headers, JsonBody, ReceiveTimeoutMs, Result, Error))
                 return Result;
-            }
-            if (Available == 0)
-                break;
-            if (Result.Body.size() + Available > k_maxResponseBytes)
-            {
-                Result.Error = "response too large";
+            if (Attempt > 0 || (Error != ERROR_WINHTTP_CONNECTION_ERROR && Error != ERROR_WINHTTP_INVALID_SERVER_RESPONSE))
                 return Result;
-            }
-
-            std::size_t const Offset = Result.Body.size();
-            Result.Body.resize(Offset + Available);
-            DWORD Read = 0;
-            if (!::WinHttpReadData(Req.Handle, Result.Body.data() + Offset, Available, &Read))
-            {
-                Result.Error = LastErrorText("WinHttpReadData");
-                return Result;
-            }
-            Result.Body.resize(Offset + Read);
+            Result = {};
         }
+    }
 
-        Result.Status = static_cast<int>(StatusCode);
-        return Result;
+    bool IsPlainHttpToRemote(std::string const& BaseUrl)
+    {
+        CrackedUrl Url{};
+        if (!CrackBaseUrl(BaseUrl, Url) || Url.Secure || ::_wcsicmp(Url.Host.c_str(), L"localhost") == 0)
+            return false;
+
+        in_addr Address{};
+        if (::InetPtonW(AF_INET, Url.Host.c_str(), &Address) != 1)
+            return true;
+        auto const* const Bytes = reinterpret_cast<std::uint8_t const*>(&Address.s_addr);
+        return Bytes[0] != 127 && !IsLanAddress(Bytes);
     }
 
     bool ResolveUrlHostIPv4(std::string const& BaseUrl, std::uint32_t& OutAddress, std::string& OutError)

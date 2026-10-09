@@ -3,7 +3,16 @@
 #include <climits>
 #include <cwchar>
 
+#include "Base/IOUtils.hpp"
 #include "Online/MPProfile.hpp"
+
+// The game has no profile field for the player name, so it is cached here between load and save.
+static FString& CachedPlayerName()
+{
+    static FString PlayerName{};
+    return PlayerName;
+}
+static bool bPlayerNameLoaded = false;
 
 // Save pending online-storage changes together with the last acknowledged server value.
 // The original storage uses -1 as GetProfileSettingValue's default value-map ID.
@@ -186,6 +195,29 @@ FString const& MPProfile::GetProfilePath() const noexcept
     return ProfilePath;
 }
 
+FString const& MPProfile::GetPlayerName()
+{
+    if (bPlayerNameLoaded)
+        return CachedPlayerName();
+    bPlayerNameLoaded = true;
+
+    ::game::vector<BYTE> ProfileBuffer{};
+    if (!::ReadFileFull(static_cast<std::wstring_view>(GetProfilePathStatic()), ProfileBuffer))
+        return CachedPlayerName();
+
+    MemoryInputStream ProfileStream{ std::move(ProfileBuffer) };
+    int SettingsCount = 0;
+    ProfileStream.ReadNumeric<BIG>(SettingsCount);
+    for (int i = 0; i < SettingsCount; ++i)
+    {
+        ProfileSetting Setting{};
+        Setting.Deserialize(ProfileStream);
+        if (Setting.Id == MP_PROFILE_PLAYER_NAME_ID && Setting.DataType == PST_STRING)
+            CachedPlayerName() = Setting.CaseString;
+    }
+    return CachedPlayerName();
+}
+
 MPProfile::MPProfile(USFXEngine* const Engine)
 {
     MILAN_CHECKW(Engine != nullptr, L"");
@@ -234,6 +266,9 @@ void MPProfile::Deserialize(IInputStream& Stream)
     OnlineSave->ServerCharacterStrings.Clear();
     // Missing extension records in a legacy profile become empty kit slots.
     OnlineSave->ServerCharacterStrings.Resize(MP_PROFILE_CHARACTER_CAPACITY);
+
+    CachedPlayerName().Reset();
+    bPlayerNameLoaded = true;
 
     // Apply extended timestamps after native ReadFromStorage fills the first 750.
     FString ExtendedCompletionStrings[MP_PROFILE_EXTENDED_COMPLETION_FIELD_COUNT]{};
@@ -318,6 +353,11 @@ void MPProfile::Deserialize(IInputStream& Stream)
             MILAN_CHECKW(Setting.DataType == PST_STRING, L"");
             ExtendedCompletionStrings[Setting.Id - MP_PROFILE_EXTENDED_COMPLETION_FIRST_ID] =
                 Setting.CaseString;
+        }
+        else if (Setting.Id == MP_PROFILE_PLAYER_NAME_ID)
+        {
+            MILAN_CHECKW(Setting.DataType == PST_STRING, L"");
+            CachedPlayerName() = Setting.CaseString;
         }
         else
         {
@@ -494,6 +534,14 @@ void MPProfile::Serialize(IOutputStream& Stream) const
 
         ProfileSetting::Construct(MP_PROFILE_EXTENDED_COMPLETION_FIRST_ID + Field,
                                   Values).Serialize(Stream);
+        SettingsCount++;
+    }
+
+    // Saves rebuild the file from game memory, so keep the name an external editor wrote.
+    FString const& PlayerName = GetPlayerName();
+    if (!PlayerName.Empty())
+    {
+        ProfileSetting::Construct(MP_PROFILE_PLAYER_NAME_ID, PlayerName).Serialize(Stream);
         SettingsCount++;
     }
 

@@ -33,9 +33,16 @@ namespace MatchmakingNet
      * Performs a blocking HTTP(S) request. @p BaseUrl is e.g. "http://127.0.0.1:5080",
      * @p Path starts with '/'. Empty @p Bearer and @p JsonBody are omitted.
      * Response bodies over 256 KiB are rejected.
+     *
+     * Requests share one WinHTTP session, so they reuse open keep-alive connections. HTTPS
+     * requires TLS 1.2 or newer and a certificate Windows trusts. Redirects are never followed,
+     * so a 3xx comes back as the status.
      */
     HttpResult Request(std::string const& BaseUrl, wchar_t const* Method, std::string const& Path,
         std::string const& Bearer, std::string const& JsonBody, int ReceiveTimeoutMs);
+
+    /** True when @p BaseUrl is plain http:// to a host other than this PC or a LAN address. */
+    bool IsPlainHttpToRemote(std::string const& BaseUrl);
 
     /** Resolves the host part of @p BaseUrl to an IPv4 address in network byte order. */
     bool ResolveUrlHostIPv4(std::string const& BaseUrl, std::uint32_t& OutAddress, std::string& OutError);

@@ -48,17 +48,29 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
 {
     MILAN_UNUSED_3(Context, Stack, Result);
 
-    // Replace the offline online-subsystem placeholder with the Windows account name.
-    // Eventually this will use it from the profile
+    // Replace the offline online-subsystem placeholder with the MP_Profile player name,
+    // or the Windows account name when the profile has none.
     static FString CachedWindowsUserName{};
     static bool bWindowsUserNameLoaded = false;
     static bool bLoggedWindowsUserName = false;
+    static bool bLoggedProfilePlayerName = false;
     if (IsSFXPRIMPSetComputerName(Stack->Node))
     {
         auto* const Params = reinterpret_cast<SFXPRIMP_SetComputerName_Parms*>(Stack->Locals);
         if (Params != nullptr && (Params->ComputerName == L"Player" || Params->ComputerName == L"Local Profile"))
         {
-            if (!bWindowsUserNameLoaded)
+            FString const& ProfilePlayerName = MPProfile::GetPlayerName();
+            if (!ProfilePlayerName.Empty())
+            {
+                Params->ComputerName = ProfilePlayerName;
+                if (!bLoggedProfilePlayerName)
+                {
+                    bLoggedProfilePlayerName = true;
+                    MILAN_TRACEW(ELOG_MultiProfile, L"using MP_Profile name for lobby player name: %s",
+                                 *Params->ComputerName);
+                }
+            }
+            else if (!bWindowsUserNameLoaded)
             {
                 bWindowsUserNameLoaded = true;
                 wchar_t WindowsUserName[256]{};
@@ -67,7 +79,7 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
                     CachedWindowsUserName = FString::Printf(L"%s", WindowsUserName);
             }
 
-            if (!CachedWindowsUserName.Empty())
+            if (ProfilePlayerName.Empty() && !CachedWindowsUserName.Empty())
             {
                 Params->ComputerName = CachedWindowsUserName;
                 if (!bLoggedWindowsUserName)

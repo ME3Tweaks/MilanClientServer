@@ -152,6 +152,11 @@ inline constexpr int MP_PROFILE_EXTENDED_COMPLETION_LAST_ID =
 static_assert(MP_PROFILE_COMPLETION_TIME_CAPACITY % MP_PROFILE_COMPLETION_TIMES_PER_FIELD == 0);
 static_assert(MP_PROFILE_EXTENDED_COMPLETION_FIRST_ID > MP_PROFILE_EXTENDED_CHARACTER_LAST_ID);
 
+// MilanHost-only settings with no game storage start at 4096.
+// The player name replaces the offline "Player" placeholder before the Windows account name.
+inline constexpr int MP_PROFILE_PLAYER_NAME_ID = 4096;
+static_assert(MP_PROFILE_PLAYER_NAME_ID > MP_PROFILE_EXTENDED_COMPLETION_LAST_ID);
+
 
 struct ProfileSetting final : public NonCopyable
 {
@@ -187,4 +192,7 @@ public:
 
     static FString GetProfilePathStatic();
     FString const& GetProfilePath() const noexcept;
+
+    // Reads MP_Profile directly if SFXSaveManagerMP.Initialize has not loaded it yet.
+    static FString const& GetPlayerName();
 };
