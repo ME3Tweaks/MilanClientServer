@@ -54,6 +54,22 @@ public enum CandidateKind
     PublicReported
 }
 
+// Where a member stands after reporting that it lost its host.
+[JsonConverter(typeof(JsonStringEnumConverter<MigrationState>))]
+public enum MigrationState
+{
+    // The server is waiting to see whether the host still answers.
+    Checking,
+    // The host is gone; the server is waiting for the other members to report.
+    Electing,
+    // The host answered, so this member lost its own connection and should leave.
+    HostAlive,
+    // This member hosts the lobby now; Host carries its credentials.
+    NewHost,
+    // Another member hosts the lobby now; Reservation joins it.
+    JoinNewHost,
+}
+
 // Full host-reported lobby state. Every report replaces the previous one; a higher
 // Revision wins, so reordered requests cannot roll state back. EnemyModeId is the
 // selected option and stays 0 for Random Faction after the game resolves a faction.
@@ -162,6 +178,30 @@ public sealed record Introduction(
 // Every live reservation for the lobby, not just changed ones.
 public sealed record IntroductionList(long Version, IReadOnlyList<Introduction> Introductions);
 
+// A joiner becomes a member of the lobby once admitted, under its reservation ID and join
+// key, and stays one until it leaves. Members only talk to the server when they lose the
+// host. CanHost says whether this member could take over (it has the lobby's state).
+public sealed record HostLostReport(bool CanHost = true);
+
+// What the new host needs to take the lobby over: its new host key and UDP ticket, and
+// the last reported state and revision to continue from. ExpectedPlayers counts the new
+// host and every member the server is sending to join it.
+public sealed record HostHandoff(
+    string LobbyId,
+    string HostKey,
+    string InviteCode,
+    long Revision,
+    DateTimeOffset ExpiresAt,
+    int HeartbeatSeconds,
+    UdpTicket UdpTicket,
+    int ExpectedPlayers,
+    LobbySnapshot State);
+
+// Member long-poll result. Host is set for NewHost and Reservation for JoinNewHost; that
+// reservation's host candidates stay empty until the new host reports its game socket.
+public sealed record MigrationStatus(long Version, MigrationState State, HostHandoff? Host = null,
+    JoinReservation? Reservation = null);
+
 public sealed record ServerInfo(
     int ProtocolVersion,
     int HeartbeatSeconds,
@@ -194,5 +234,7 @@ public sealed record ServerError(string Code, string Message);
 [JsonSerializable(typeof(JoinerCandidatesRequest))]
 [JsonSerializable(typeof(ReservationStatus))]
 [JsonSerializable(typeof(ServerInfo))]
+[JsonSerializable(typeof(HostLostReport))]
+[JsonSerializable(typeof(MigrationStatus))]
 [JsonSerializable(typeof(ServerError))]
 sealed partial class MilanJsonContext : JsonSerializerContext;

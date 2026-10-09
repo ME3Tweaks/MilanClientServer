@@ -108,6 +108,33 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
     }
 
     [Fact]
+    public async Task MemberRoutes_ReportPollAndLeave()
+    {
+        HttpClient client = _factory.CreateClient();
+        CreateLobbyResponse lobby = (await (await client.PostAsJsonAsync("/v1/lobbies",
+            new CreateLobbyRequest(Version, State()), Ct)).Content.ReadFromJsonAsync<CreateLobbyResponse>(Ct))!;
+        JoinReservation member = (await (await client.PostAsJsonAsync("/v1/invites/redeem",
+            new RedeemInviteRequest(lobby.InviteCode, Version), Ct)).Content.ReadFromJsonAsync<JoinReservation>(Ct))!;
+        await client.SendAsync(Authorized(HttpMethod.Post, $"/v1/reservations/{member.ReservationId}/joined", member.JoinKey), Ct);
+
+        HttpResponseMessage reported = await client.SendAsync(Authorized(HttpMethod.Post,
+            $"/v1/members/{member.ReservationId}/host-lost", member.JoinKey, new HostLostReport(CanHost: true)), Ct);
+        Assert.Equal(HttpStatusCode.OK, reported.StatusCode);
+        Assert.Contains("\"state\":\"Checking\"", await reported.Content.ReadAsStringAsync(Ct));
+
+        // The host answering ends the check, so the poll reports the host alive at once.
+        await client.SendAsync(Authorized(HttpMethod.Put, $"/v1/lobbies/{lobby.LobbyId}/state", lobby.HostKey, State(2)), Ct);
+        HttpResponseMessage polled = await client.SendAsync(Authorized(HttpMethod.Post,
+            $"/v1/members/{member.ReservationId}/poll", member.JoinKey), Ct);
+        Assert.Equal(MigrationState.HostAlive, (await polled.Content.ReadFromJsonAsync<MigrationStatus>(Ct))?.State);
+
+        HttpResponseMessage left = await client.SendAsync(Authorized(HttpMethod.Delete, $"/v1/members/{member.ReservationId}", member.JoinKey), Ct);
+        Assert.Equal(HttpStatusCode.NoContent, left.StatusCode);
+        HttpResponseMessage gone = await client.SendAsync(Authorized(HttpMethod.Delete, $"/v1/members/{member.ReservationId}", member.JoinKey), Ct);
+        Assert.Equal("member_not_found", (await gone.Content.ReadFromJsonAsync<ServerError>(Ct))?.Code);
+    }
+
+    [Fact]
     public async Task Json_UsesCamelCaseAndStringEnums()
     {
         HttpClient client = _factory.CreateClient();

@@ -25,6 +25,7 @@ public sealed class MatchmakingStore
     readonly Dictionary<string, Lobby> _lobbiesByInvite = new(StringComparer.Ordinal);
     readonly Dictionary<string, Search> _searches = new(StringComparer.Ordinal);
     readonly Dictionary<string, Reservation> _reservations = new(StringComparer.Ordinal);
+    readonly Dictionary<string, Member> _members = new(StringComparer.Ordinal);
     readonly Dictionary<UInt128, UdpTicketRecord> _udpTickets = [];
     long _nextLobbySequence;
 
@@ -97,8 +98,8 @@ public sealed class MatchmakingStore
         DateTimeOffset now = _time.GetUtcNow();
         lock (_lock)
         {
-            if (!TryGetHostLobby(lobbyId, hostKey, now, out Lobby? lobby))
-                return Failures.LobbyNotFound;
+            if (!TryGetHostLobby(lobbyId, hostKey, now, true, out Lobby? lobby, out Failure failure))
+                return failure;
 
             bool stale = state.Revision < lobby.State.Revision;
             if (state.Revision == lobby.State.Revision && !SameContent(state, lobby.State))
@@ -122,7 +123,16 @@ public sealed class MatchmakingStore
                 // A current report reflects the host's player count after any joiner that
                 // already reported success was admitted, so those slots stop double counting.
                 foreach (Reservation joined in lobby.Reservations.Where(r => r.JoinedAt is not null).ToList())
-                    RemoveReservationLocked(joined);
+                    AdmitMemberLocked(joined);
+
+                // The new host's first report brings its own game port and LAN addresses,
+                // so the members it is waiting for can now be sent to it.
+                if (lobby.Migration is { Stage: MigrationStage.Handoff })
+                {
+                    lobby.Migration = null;
+                    SignalLocked(lobby);
+                    _logger.LogInformation("Lobby {LobbyId}: the new host is up.", lobby.Id);
+                }
             }
 
             IPAddress? publicAddress = NetworkAddresses.PublicIPv4(source);
@@ -136,13 +146,24 @@ public sealed class MatchmakingStore
         }
     }
 
+    // A host leaving a lobby that still has members hands it to one of them instead: they
+    // lose the connection at the same moment and report it.
     public Failure? DeleteLobby(string lobbyId, string? hostKey)
     {
         DateTimeOffset now = _time.GetUtcNow();
         lock (_lock)
         {
-            if (!TryGetHostLobby(lobbyId, hostKey, now, out Lobby? lobby))
-                return Failures.LobbyNotFound;
+            if (!TryGetHostLobby(lobbyId, hostKey, now, false, out Lobby? lobby, out Failure failure))
+                return failure;
+
+            if (PossibleReporters(lobby) > 0)
+            {
+                if (lobby.Migration is null)
+                    StartCheckLocked(lobby, now);
+                DeclareHostLostLocked(lobby, now, "left");
+                AdvanceMigrationLocked(lobby, now);
+                return null;
+            }
 
             RemoveLobbyLocked(lobby);
         }
@@ -156,8 +177,8 @@ public sealed class MatchmakingStore
         DateTimeOffset now = _time.GetUtcNow();
         lock (_lock)
         {
-            if (!TryGetHostLobby(lobbyId, hostKey, now, out Lobby? lobby))
-                return Failures.LobbyNotFound;
+            if (!TryGetHostLobby(lobbyId, hostKey, now, true, out Lobby? lobby, out Failure failure))
+                return failure;
 
             _lobbiesByInvite.Remove(lobby.InviteCode);
             lobby.InviteCode = NewUniqueInviteCode();
@@ -319,12 +340,13 @@ public sealed class MatchmakingStore
 
     // Whether this player could ever be matched to the lobby, before the map and enemy
     // filters that widen. Private lobbies never appear in search, extraction is
-    // invite-only, and difficulty never widens.
+    // invite-only, difficulty never widens, and a lobby changing hosts waits for its own.
     bool IsOpenTo(Lobby lobby, Search search, DateTimeOffset now)
     {
         LobbySnapshot state = lobby.State;
         SearchRequest request = search.Request;
         return lobby.ExpiresAt > now
+            && lobby.Migration is null
             && !state.IsPrivate
             && state.Joinable
             && state.Phase is (MatchPhase.Lobby or MatchPhase.InProgress)
@@ -388,8 +410,9 @@ public sealed class MatchmakingStore
             LobbySnapshot state = lobby.State;
             if (lobby.GameVersion != request.GameVersion)
                 return Failures.VersionMismatch;
-            // Invites work for private lobbies and during extraction.
-            if (!state.Joinable || state.Phase == MatchPhase.Complete)
+            // Invites work for private lobbies and during extraction, but not while the
+            // lobby is changing hosts.
+            if (!state.Joinable || state.Phase == MatchPhase.Complete || lobby.Migration is not null)
                 return Failures.LobbyNotJoinable;
             if (Occupancy(lobby, now) >= state.MaxPlayers)
                 return Failures.LobbyFull;
@@ -457,19 +480,19 @@ public sealed class MatchmakingStore
         Task changed;
         lock (_lock)
         {
-            if (!TryGetHostLobby(lobbyId, hostKey, _time.GetUtcNow(), out Lobby? lobby))
-                return Failures.LobbyNotFound;
+            if (!TryGetHostLobby(lobbyId, hostKey, _time.GetUtcNow(), true, out Lobby? lobby, out Failure failure))
+                return failure;
             if (lobby.EventVersion != after)
                 return BuildIntroductionsLocked(lobby, _time.GetUtcNow());
             changed = lobby.Changed.Task;
         }
 
-        await WaitForChangeAsync(changed, cancellationToken);
+        await WaitForChangeAsync(changed, TimeSpan.FromSeconds(_options.LongPollSeconds), cancellationToken);
 
         lock (_lock)
         {
-            if (!TryGetHostLobby(lobbyId, hostKey, _time.GetUtcNow(), out Lobby? lobby))
-                return Failures.LobbyNotFound;
+            if (!TryGetHostLobby(lobbyId, hostKey, _time.GetUtcNow(), false, out Lobby? lobby, out Failure failure))
+                return failure;
             return BuildIntroductionsLocked(lobby, _time.GetUtcNow());
         }
     }
@@ -488,7 +511,7 @@ public sealed class MatchmakingStore
             changed = reservation.Lobby.Changed.Task;
         }
 
-        await WaitForChangeAsync(changed, cancellationToken);
+        await WaitForChangeAsync(changed, TimeSpan.FromSeconds(_options.LongPollSeconds), cancellationToken);
 
         lock (_lock)
         {
@@ -498,11 +521,11 @@ public sealed class MatchmakingStore
         }
     }
 
-    async Task WaitForChangeAsync(Task changed, CancellationToken cancellationToken)
+    async Task WaitForChangeAsync(Task changed, TimeSpan timeout, CancellationToken cancellationToken)
     {
         try
         {
-            await changed.WaitAsync(TimeSpan.FromSeconds(_options.LongPollSeconds), _time, cancellationToken);
+            await changed.WaitAsync(timeout, _time, cancellationToken);
         }
         catch (TimeoutException)
         {
@@ -535,6 +558,274 @@ public sealed class MatchmakingStore
     ReservationStatus BuildReservationStatusLocked(Reservation reservation) =>
         new(reservation.Lobby.EventVersion, HostCandidates(reservation.Lobby), SamePublicAddress(reservation.Lobby, reservation),
             reservation.JoinedAt is not null, reservation.ExpiresAt);
+
+    #endregion
+
+    #region Members and host migration
+
+    // A member lost its connection to the host. The first report starts a check: the host
+    // is woken from its long-poll and has HostChallengeSeconds to send anything. If it does,
+    // the reporters lost their own connection. If not, or if the host has already left, the
+    // server waits for the other members and hands the lobby to one of them.
+    public Outcome<MigrationStatus> ReportHostLost(string memberId, string? memberKey, HostLostReport report)
+    {
+        DateTimeOffset now = _time.GetUtcNow();
+        lock (_lock)
+        {
+            if (!TryGetMember(memberId, memberKey, now, out Member? member))
+                return Failures.MemberNotFound;
+
+            Lobby lobby = member.Lobby;
+            AdvanceMigrationLocked(lobby, now);
+            // Too late: the lobby closed, or moved on without this member.
+            if (lobby.Removed || (member.Outcome is null && !lobby.Members.Contains(member)))
+                return Failures.MemberNotFound;
+
+            if (member.Outcome is null && member.ReportedLostAt is null)
+            {
+                // A report while waiting for a new host's first report checks that host.
+                if (lobby.Migration is null or { Stage: MigrationStage.Handoff })
+                {
+                    // The host proved itself moments ago, so there is nothing to check again.
+                    if (lobby.HostConfirmedAliveAt is { } alive && now - alive < TimeSpan.FromSeconds(_options.HostChallengeSeconds))
+                    {
+                        SettleLocked(member, MigrationState.HostAlive, now);
+                        return BuildMigrationStatusLocked(member);
+                    }
+                    StartCheckLocked(lobby, now);
+                    _logger.LogInformation("Lobby {LobbyId}: a member lost the host; checking whether the host still answers.", lobby.Id);
+                }
+                member.ReportedLostAt = now;
+                member.CanHost = report.CanHost;
+                AdvanceMigrationLocked(lobby, now);
+            }
+            return BuildMigrationStatusLocked(member);
+        }
+    }
+
+    // Member long-poll during a migration. It also returns when the current check or report
+    // window ends, so the next step does not wait for another request.
+    public async Task<Outcome<MigrationStatus>> PollMemberAsync(string memberId, string? memberKey, long after,
+        CancellationToken cancellationToken)
+    {
+        Task changed;
+        TimeSpan wait;
+        lock (_lock)
+        {
+            DateTimeOffset now = _time.GetUtcNow();
+            if (!TryGetMember(memberId, memberKey, now, out Member? member))
+                return Failures.MemberNotFound;
+            AdvanceMigrationLocked(member.Lobby, now);
+            if (member.Lobby.EventVersion != after)
+                return BuildMigrationStatusLocked(member);
+
+            changed = member.Lobby.Changed.Task;
+            wait = TimeSpan.FromSeconds(_options.LongPollSeconds);
+            if (member.Lobby.Migration is { } migration && migration.Stage != MigrationStage.Handoff)
+            {
+                DateTimeOffset deadline = migration.Stage == MigrationStage.Checking ? migration.ChallengeDeadline : migration.ReportDeadline;
+                wait = TimeSpan.FromTicks(Math.Clamp((deadline - now).Ticks, 0, wait.Ticks));
+            }
+        }
+
+        await WaitForChangeAsync(changed, wait, cancellationToken);
+
+        lock (_lock)
+        {
+            DateTimeOffset now = _time.GetUtcNow();
+            if (!TryGetMember(memberId, memberKey, now, out Member? member))
+                return Failures.MemberNotFound;
+            AdvanceMigrationLocked(member.Lobby, now);
+            return BuildMigrationStatusLocked(member);
+        }
+    }
+
+    public Failure? LeaveLobby(string memberId, string? memberKey)
+    {
+        DateTimeOffset now = _time.GetUtcNow();
+        lock (_lock)
+        {
+            if (!TryGetMember(memberId, memberKey, now, out Member? member))
+                return Failures.MemberNotFound;
+
+            RemoveMemberLocked(member);
+            // A migration waiting for this member's report can go ahead without it.
+            AdvanceMigrationLocked(member.Lobby, now);
+            return null;
+        }
+    }
+
+    MigrationStatus BuildMigrationStatusLocked(Member member)
+    {
+        long version = member.Lobby.EventVersion;
+        if (member.Outcome is { } outcome)
+            return new MigrationStatus(version, outcome, member.Handoff, member.Reservation);
+
+        return member.Lobby.Migration?.Stage switch
+        {
+            MigrationStage.Checking => new MigrationStatus(version, MigrationState.Checking),
+            MigrationStage.Electing => new MigrationStatus(version, MigrationState.Electing),
+            // A member that never reported only asks while the host is fine.
+            _ => new MigrationStatus(version, MigrationState.HostAlive),
+        };
+    }
+
+    // Joined reservations become members once the host has counted them, or when a member
+    // route first uses them. Member records stay small: no ticket and no candidates.
+    Member AdmitMemberLocked(Reservation reservation)
+    {
+        Lobby lobby = reservation.Lobby;
+        Member member = new()
+        {
+            Id = reservation.Id,
+            KeyHash = reservation.JoinKeyHash,
+            Lobby = lobby,
+            SourceKey = reservation.SourceKey,
+            PublicAddress = reservation.ObservedEndpoint?.Address ?? reservation.PublicAddress,
+            JoinedAt = reservation.JoinedAt ?? _time.GetUtcNow(),
+        };
+        RemoveReservationLocked(reservation);
+
+        // Members that disconnect without saying so are only dropped by a migration or when
+        // the lobby closes, so a long-lived lobby keeps at most this many.
+        int maxMembers = 2 * _options.MaxPlayersCeiling;
+        if (lobby.Members.Count >= maxMembers)
+            RemoveMemberLocked(lobby.Members[0]);
+
+        lobby.Members.Add(member);
+        _members[member.Id] = member;
+        return member;
+    }
+
+    void RemoveMemberLocked(Member member)
+    {
+        _members.Remove(member.Id);
+        member.Lobby.Members.Remove(member);
+    }
+
+    // Members that could still report: current members, plus joined reservations the host
+    // has not counted yet.
+    static int PossibleReporters(Lobby lobby) =>
+        lobby.Members.Count + lobby.Reservations.Count(r => r.JoinedAt is not null);
+
+    void StartCheckLocked(Lobby lobby, DateTimeOffset now)
+    {
+        lobby.Migration = new Migration
+        {
+            StartedAt = now,
+            ChallengeDeadline = now.AddSeconds(_options.HostChallengeSeconds),
+        };
+        // The lobby must outlive the check and the report window, whatever its lease says.
+        DateTimeOffset needed = lobby.Migration.ChallengeDeadline.AddSeconds(_options.MigrationReportSeconds + 1);
+        if (lobby.ExpiresAt < needed)
+            lobby.ExpiresAt = needed;
+        // Completes the host's pending long-poll: a host that is still there polls again at once.
+        SignalLocked(lobby);
+    }
+
+    // The old host key stops working, and a later request with it gets host_replaced.
+    void DeclareHostLostLocked(Lobby lobby, DateTimeOffset now, string how)
+    {
+        Migration migration = lobby.Migration!;
+        migration.Stage = MigrationStage.Electing;
+        migration.ReportDeadline = now.AddSeconds(_options.MigrationReportSeconds);
+        DateTimeOffset needed = migration.ReportDeadline.AddSeconds(1);
+        if (lobby.ExpiresAt < needed)
+            lobby.ExpiresAt = needed;
+
+        lobby.ReplacedHostKeyHashes.Add(lobby.HostKeyHash);
+        lobby.HostKeyHash = Secrets.Hash(Secrets.NewKey());
+        SignalLocked(lobby);
+        _logger.LogInformation("Lobby {LobbyId}: the host {How}; waiting for {Count} member(s) to report.",
+            lobby.Id, how, PossibleReporters(lobby));
+    }
+
+    void AdvanceMigrationLocked(Lobby lobby, DateTimeOffset now)
+    {
+        if (lobby.Migration is not { } migration)
+            return;
+
+        if (migration.Stage == MigrationStage.Checking)
+        {
+            if (lobby.HostLastSeen > migration.StartedAt)
+            {
+                foreach (Member reporter in lobby.Members.Where(m => m.ReportedLostAt is not null).ToList())
+                    SettleLocked(reporter, MigrationState.HostAlive, now);
+                lobby.Migration = null;
+                lobby.HostConfirmedAliveAt = now;
+                SignalLocked(lobby);
+                _logger.LogInformation("Lobby {LobbyId}: the host answered; the reporting member(s) lost their own connection.", lobby.Id);
+                return;
+            }
+            if (now < migration.ChallengeDeadline)
+                return;
+            DeclareHostLostLocked(lobby, now, "stopped answering");
+        }
+
+        if (migration.Stage == MigrationStage.Electing
+            && (now >= migration.ReportDeadline || lobby.Members.Count(m => m.ReportedLostAt is not null) >= PossibleReporters(lobby)))
+        {
+            ElectLocked(lobby, now);
+        }
+    }
+
+    // Picks the new host among the members that reported: one that can host, then the one
+    // that joined first. Members that did not report are gone, and so are reservations that
+    // were heading to the old host.
+    void ElectLocked(Lobby lobby, DateTimeOffset now)
+    {
+        List<Member> reporters = [.. lobby.Members
+            .Where(m => m.ReportedLostAt is not null)
+            .OrderByDescending(m => m.CanHost)
+            .ThenBy(m => m.JoinedAt)
+            .ThenBy(m => m.Id, StringComparer.Ordinal)];
+        foreach (Member silent in lobby.Members.Except(reporters).ToList())
+            RemoveMemberLocked(silent);
+        foreach (Reservation stale in lobby.Reservations.ToList())
+            RemoveReservationLocked(stale);
+
+        if (reporters.Count == 0)
+        {
+            RemoveLobbyLocked(lobby);
+            _logger.LogInformation("Lobby {LobbyId}: no member reported, so the lobby closed.", lobby.Id);
+            return;
+        }
+
+        Member newHost = reporters[0];
+        string hostKey = Secrets.NewKey();
+        lobby.HostKeyHash = Secrets.Hash(hostKey);
+        lobby.SourceKey = newHost.SourceKey;
+        lobby.PublicAddress = newHost.PublicAddress;
+        lobby.ObservedEndpoint = null;
+        _udpTickets.Remove(lobby.UdpTicketId);
+        UdpTicket udpTicket = NewUdpTicketLocked(lobby, null, out UInt128 ticketId);
+        lobby.UdpTicketId = ticketId;
+        lobby.ExpiresAt = now.AddSeconds(_options.LobbyLeaseSeconds);
+        lobby.Migration!.Stage = MigrationStage.Handoff;
+
+        // Settling takes the reporters off the member list; each joins the new host as a new member.
+        newHost.Handoff = new HostHandoff(lobby.Id, hostKey, Secrets.FormatInviteCode(lobby.InviteCode), lobby.State.Revision,
+            lobby.ExpiresAt, _options.HeartbeatSeconds, udpTicket, reporters.Count, lobby.State);
+        SettleLocked(newHost, MigrationState.NewHost, now);
+        foreach (Member joiner in reporters.Skip(1))
+        {
+            joiner.Reservation = CreateReservationLocked(lobby, joiner.SourceKey, joiner.PublicAddress, now, out _,
+                _options.MigrationJoinSeconds);
+            SettleLocked(joiner, MigrationState.JoinNewHost, now);
+        }
+        SignalLocked(lobby);
+        _logger.LogInformation("Lobby {LobbyId}: member {MemberId} is the new host; {Count} member(s) will join it.",
+            lobby.Id, newHost.Id, reporters.Count - 1);
+    }
+
+    // The member keeps answering polls with this outcome until it is swept.
+    void SettleLocked(Member member, MigrationState outcome, DateTimeOffset now)
+    {
+        member.Outcome = outcome;
+        member.SettledAt = now;
+        member.ReportedLostAt = null;
+        member.Lobby.Members.Remove(member);
+    }
 
     #endregion
 
@@ -599,7 +890,7 @@ public sealed class MatchmakingStore
     }
 
     JoinReservation CreateReservationLocked(Lobby lobby, string sourceKey, IPAddress? joinerPublicAddress,
-        DateTimeOffset now, out Reservation record)
+        DateTimeOffset now, out Reservation record, int? lifetimeSeconds = null)
     {
         string joinKey = Secrets.NewKey();
         record = new Reservation
@@ -610,7 +901,7 @@ public sealed class MatchmakingStore
             SourceKey = sourceKey,
             PublicAddress = joinerPublicAddress,
             TraversalKey = Secrets.NewKey(),
-            ExpiresAt = now.AddSeconds(_options.ReservationSeconds),
+            ExpiresAt = now.AddSeconds(lifetimeSeconds ?? _options.ReservationSeconds),
         };
         _reservations.Add(record.Id, record);
         lobby.Reservations.Add(record);
@@ -626,10 +917,13 @@ public sealed class MatchmakingStore
     }
 
     // Observed mapping first, then the unverified forward guess if it differs, then LAN.
+    // None while the lobby changes hosts: until the new host reports, they are the old one's.
     static List<EndpointCandidate> HostCandidates(Lobby lobby)
     {
         LobbySnapshot state = lobby.State;
         List<EndpointCandidate> candidates = [];
+        if (lobby.Migration is not null)
+            return candidates;
         if (lobby.ObservedEndpoint is { } observed)
             candidates.Add(new EndpointCandidate(observed.Address.ToString(), observed.Port, CandidateKind.PublicObserved));
         if (lobby.PublicAddress is not null
@@ -670,12 +964,30 @@ public sealed class MatchmakingStore
 
     int SweepLocked(DateTimeOffset now)
     {
+        // Checks and report windows end on time even when no member is polling.
+        foreach (Lobby lobby in _lobbies.Values.Where(l => l.Migration is not null).ToList())
+            AdvanceMigrationLocked(lobby, now);
+
         List<Lobby> expiredLobbies = [.. _lobbies.Values.Where(l => l.ExpiresAt <= now)];
         foreach (Lobby lobby in expiredLobbies)
             RemoveLobbyLocked(lobby);
 
+        // A joiner that reported success stays a member even if the host never counted it.
         foreach (Reservation reservation in _reservations.Values.Where(r => r.ExpiresAt <= now).ToList())
-            RemoveReservationLocked(reservation);
+        {
+            if (reservation.JoinedAt is not null && !reservation.Lobby.Removed)
+                AdmitMemberLocked(reservation);
+            else
+                RemoveReservationLocked(reservation);
+        }
+
+        // Settled members only need to answer polls until their next step is under way.
+        TimeSpan settledRetention = TimeSpan.FromSeconds(_options.MigrationJoinSeconds);
+        foreach (Member member in _members.Values.Where(m => (m.Outcome is not null && now - m.SettledAt >= settledRetention)
+            || m.Lobby.Removed).ToList())
+        {
+            _members.Remove(member.Id);
+        }
 
         foreach (Search search in _searches.Values.Where(s => s.Deadline + SearchRetention <= now).ToList())
             _searches.Remove(search.Id);
@@ -687,14 +999,49 @@ public sealed class MatchmakingStore
 
     #region Helpers
 
-    bool TryGetHostLobby(string lobbyId, string? hostKey, DateTimeOffset now, [NotNullWhen(true)] out Lobby? lobby)
+    // A request that arrives with the host key shows the host is still there, which answers
+    // a migration check. A long-poll re-checking its key after waiting does not: the host
+    // sent nothing new. Neither does closing the lobby.
+    bool TryGetHostLobby(string lobbyId, string? hostKey, DateTimeOffset now, bool arrived,
+        [NotNullWhen(true)] out Lobby? lobby, out Failure failure)
     {
-        if (!_lobbies.TryGetValue(lobbyId, out lobby) || !IsLive(lobby, now) || !Secrets.Matches(lobby.HostKeyHash, hostKey))
+        failure = Failures.LobbyNotFound;
+        if (!_lobbies.TryGetValue(lobbyId, out lobby) || !IsLive(lobby, now))
         {
             lobby = null;
             return false;
         }
+        if (!Secrets.Matches(lobby.HostKeyHash, hostKey))
+        {
+            if (lobby.ReplacedHostKeyHashes.Any(hash => Secrets.Matches(hash, hostKey)))
+                failure = Failures.HostReplaced;
+            lobby = null;
+            return false;
+        }
+        if (arrived)
+        {
+            lobby.HostLastSeen = now;
+            AdvanceMigrationLocked(lobby, now);
+        }
         return true;
+    }
+
+    // A joined reservation becomes a member here if the host has not reported it yet.
+    bool TryGetMember(string memberId, string? memberKey, DateTimeOffset now, [NotNullWhen(true)] out Member? member)
+    {
+        if (_members.TryGetValue(memberId, out member) && Secrets.Matches(member.KeyHash, memberKey)
+            && !member.Lobby.Removed && IsLive(member.Lobby, now))
+        {
+            return true;
+        }
+        if (_reservations.TryGetValue(memberId, out Reservation? reservation) && reservation.JoinedAt is not null
+            && reservation.ExpiresAt > now && Secrets.Matches(reservation.JoinKeyHash, memberKey) && IsLive(reservation.Lobby, now))
+        {
+            member = AdmitMemberLocked(reservation);
+            return true;
+        }
+        member = null;
+        return false;
     }
 
     bool TryGetSearch(string searchId, string? searchKey, DateTimeOffset now, [NotNullWhen(true)] out Search? search)
@@ -739,6 +1086,7 @@ public sealed class MatchmakingStore
 
     void RemoveLobbyLocked(Lobby lobby)
     {
+        lobby.Removed = true;
         _lobbies.Remove(lobby.Id);
         _lobbiesByInvite.Remove(lobby.InviteCode);
         _udpTickets.Remove(lobby.UdpTicketId);
@@ -748,6 +1096,9 @@ public sealed class MatchmakingStore
             _udpTickets.Remove(reservation.UdpTicketId);
         }
         lobby.Reservations.Clear();
+        foreach (Member member in lobby.Members)
+            _members.Remove(member.Id);
+        lobby.Members.Clear();
         // Wakes long-polls so they observe the removal.
         SignalLocked(lobby);
     }
@@ -866,9 +1217,10 @@ public sealed class MatchmakingStore
     {
         public required string Id { get; init; }
         public required long Sequence { get; init; }
-        public required byte[] HostKeyHash { get; init; }
+        public required byte[] HostKeyHash { get; set; }
         public required string GameVersion { get; init; }
-        public required string SourceKey { get; init; }
+        // The current host's address group, for per-address limits.
+        public required string SourceKey { get; set; }
         public required string InviteCode { get; set; }
         public required LobbySnapshot State { get; set; }
         // When the lobby opened or last returned to the Lobby phase; search ranks older first.
@@ -877,11 +1229,56 @@ public sealed class MatchmakingStore
         public required IPAddress? PublicAddress { get; set; }
         public required DateTimeOffset ExpiresAt { get; set; }
         public List<Reservation> Reservations { get; } = [];
+        // Admitted joiners, oldest first.
+        public List<Member> Members { get; } = [];
         public UInt128 UdpTicketId { get; set; }
         public IPEndPoint? ObservedEndpoint { get; set; }
         // Bumped on every change a long-poll cares about; Changed completes at the same time.
         public long EventVersion { get; set; }
         public TaskCompletionSource Changed { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Host migration.
+        public Migration? Migration { get; set; }
+        // When the current host last sent a request (not a long-poll re-check).
+        public DateTimeOffset HostLastSeen { get; set; } = DateTimeOffset.MinValue;
+        public DateTimeOffset? HostConfirmedAliveAt { get; set; }
+        public List<byte[]> ReplacedHostKeyHashes { get; } = [];
+        public bool Removed { get; set; }
+    }
+
+    enum MigrationStage
+    {
+        // Waiting for the host to answer until ChallengeDeadline.
+        Checking,
+        // The host is lost; waiting for member reports until ReportDeadline.
+        Electing,
+        // A new host was chosen; waiting for its first state report.
+        Handoff,
+    }
+
+    sealed class Migration
+    {
+        public required DateTimeOffset StartedAt { get; init; }
+        public required DateTimeOffset ChallengeDeadline { get; init; }
+        public MigrationStage Stage { get; set; } = MigrationStage.Checking;
+        public DateTimeOffset ReportDeadline { get; set; }
+    }
+
+    // Keyed by the reservation ID it joined with; its key is that reservation's join key.
+    sealed class Member
+    {
+        public required string Id { get; init; }
+        public required byte[] KeyHash { get; init; }
+        public required Lobby Lobby { get; init; }
+        public required string SourceKey { get; init; }
+        public required IPAddress? PublicAddress { get; init; }
+        public required DateTimeOffset JoinedAt { get; init; }
+        public DateTimeOffset? ReportedLostAt { get; set; }
+        public bool CanHost { get; set; }
+        public MigrationState? Outcome { get; set; }
+        public DateTimeOffset SettledAt { get; set; }
+        public HostHandoff? Handoff { get; set; }
+        public JoinReservation? Reservation { get; set; }
     }
 
     sealed class Reservation

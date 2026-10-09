@@ -70,6 +70,16 @@ public static class Api
 
         v1.MapDelete("/reservations/{reservationId}", (string reservationId, HttpContext http, MatchmakingStore store) =>
             Respond(store.CancelReservation(reservationId, BearerToken(http))));
+
+        // Members use their reservation ID and join key. They only call in when they lose the host.
+        v1.MapPost("/members/{memberId}/host-lost", (string memberId, HostLostReport? report, HttpContext http, MatchmakingStore store) =>
+            Respond(store.ReportHostLost(memberId, BearerToken(http), report ?? new HostLostReport()), Results.Ok));
+
+        v1.MapPost("/members/{memberId}/poll", async (string memberId, long? after, HttpContext http, MatchmakingStore store) =>
+            Respond(await store.PollMemberAsync(memberId, BearerToken(http), after ?? -1, http.RequestAborted), Results.Ok));
+
+        v1.MapDelete("/members/{memberId}", (string memberId, HttpContext http, MatchmakingStore store) =>
+            Respond(store.LeaveLobby(memberId, BearerToken(http))));
     }
 
     public static IResult Error(Failure failure) =>

@@ -40,6 +40,12 @@ public static class Failures
         new(404, "reservation_not_found", "The reservation does not exist, has expired, or the join key is wrong.");
     public static readonly Failure InviteNotFound =
         new(404, "invite_not_found", "The invite code is unknown or its lobby has expired.");
+    public static readonly Failure MemberNotFound =
+        new(404, "member_not_found", "The member does not exist, its lobby has closed, or the member key is wrong.");
+    // The key was valid, but the host was declared lost and another member took the lobby
+    // over. Unlike lobby_not_found, the old host must not register the lobby again.
+    public static readonly Failure HostReplaced =
+        new(409, "host_replaced", "This lobby has a new host after the previous one stopped answering.");
 
     public static readonly Failure LobbyFull = new(409, "lobby_full", "The lobby has no free slots.");
     public static readonly Failure LobbyNotJoinable = new(409, "lobby_not_joinable", "The lobby is not accepting joins.");

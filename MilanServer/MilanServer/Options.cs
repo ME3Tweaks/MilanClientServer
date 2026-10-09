@@ -22,6 +22,16 @@ public sealed class MilanServerOptions
     // lobbies get the first chance. With no such lobby, they are candidates straight away.
     public int InProgressAfterSeconds { get; set; } = 10;
     public int SearchPollMilliseconds { get; set; } = 2000;
+
+    // Host migration. When a member reports its host lost, the host has this long to show
+    // it is still there (any authenticated request) before it is declared lost.
+    public int HostChallengeSeconds { get; set; } = 5;
+    // Once the host is lost, the other members have this long to report before the server
+    // picks a new host among those that did. It picks sooner once all of them have.
+    public int MigrationReportSeconds { get; set; } = 8;
+    // Lifetime of the reservations that move members to the new host, which first has to
+    // load its map.
+    public int MigrationJoinSeconds { get; set; } = 90;
     // Upper bound on how long introduction and reservation polls wait for a change.
     public int LongPollSeconds { get; set; } = 25;
 
@@ -72,6 +82,8 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
             errors.Add("InProgressAfterSeconds must be between 0 and SearchSeconds.");
         if (options.SearchPollMilliseconds < 100)
             errors.Add("SearchPollMilliseconds must be at least 100.");
+        if (options.HostChallengeSeconds < 1 || options.MigrationReportSeconds < 1 || options.MigrationJoinSeconds < 1)
+            errors.Add("HostChallengeSeconds, MigrationReportSeconds, and MigrationJoinSeconds must be at least 1.");
         if (options.LongPollSeconds is < 1 or > 120)
             errors.Add("LongPollSeconds must be between 1 and 120.");
         if (options.UdpPort is < 0 or > 65535)

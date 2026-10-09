@@ -134,7 +134,7 @@ A wrong key and a missing object return the same 404.
 | GET | `/v1/info` | none | Protocol version and timings |
 | POST | `/v1/lobbies` | none | Create a lobby; returns `lobbyId`, `hostKey`, `inviteCode` |
 | PUT | `/v1/lobbies/{id}/state` | host key | Full-state report. Used for prompt setting changes and the heartbeat |
-| DELETE | `/v1/lobbies/{id}` | host key | Close the lobby |
+| DELETE | `/v1/lobbies/{id}` | host key | Close the lobby, or hand it to a member if any remain |
 | POST | `/v1/lobbies/{id}/invite` | host key | Replace the invite code |
 | POST | `/v1/searches` | none | Start a quick-match search (may match immediately) |
 | POST | `/v1/searches/{id}/poll` | search key | Advance the search; may reserve a slot |
@@ -145,6 +145,9 @@ A wrong key and a missing object return the same 404.
 | POST | `/v1/reservations/{id}/poll?after=N` | join key | Long-poll: current host candidates |
 | POST | `/v1/reservations/{id}/joined` | join key | Joiner was admitted; slot is released on the host's next current report |
 | DELETE | `/v1/reservations/{id}` | join key | Give up a reservation |
+| POST | `/v1/members/{id}/host-lost` | join key | A member lost its host; body `{ "canHost": true }` |
+| POST | `/v1/members/{id}/poll?after=N` | join key | Long-poll: the member's migration status |
+| DELETE | `/v1/members/{id}` | join key | A member left the lobby |
 
 Credentials use `Authorization: Bearer <key>`.
 
@@ -172,6 +175,29 @@ Long-polls return immediately when `after` is omitted or differs from the lobby'
 current event version. Otherwise they wait up to `LongPollSeconds` (25) for a change.
 Pass the returned `version` back as `after`. Lease heartbeats with unchanged state do
 not wake them.
+
+### Host migration
+
+A joined reservation becomes a lobby member under the same ID and join key. Members send
+nothing while the host is fine, so they cost the server only a small record. A host that
+pulls its network cable cannot tell anyone it left, so the members report it:
+
+1. A member that loses its host calls `host-lost`. The server wakes the host's pending
+   introductions poll and gives it `HostChallengeSeconds` (5) to poll or report again. A
+   host that answers keeps the lobby, and the member gets `HostAlive`: its own connection
+   failed. A host that closes the lobby (`DELETE`) with members left skips the check.
+2. Once the host counts as gone, its key stops working (`host_replaced`, 409) and the
+   other members have `MigrationReportSeconds` (8) to report. The server stops waiting
+   when all have reported.
+3. The new host is the reporter that can host and joined first. It gets `NewHost` with a
+   new host key and UDP ticket, the invite code, and the last state and revision. Every
+   other reporter gets `JoinNewHost` with a reservation that holds its slot for
+   `MigrationJoinSeconds` (90). That reservation has no host candidates until the new host
+   reports from its new game socket. Members that did not report are dropped.
+
+While a lobby is changing hosts, searches and invites skip it. If no member reports, the
+lobby closes; if the new host never reports, its lease runs out. Member poll states are
+`Checking`, `Electing`, `HostAlive`, `NewHost`, and `JoinNewHost`.
 
 ## UDP endpoint discovery v1
 
