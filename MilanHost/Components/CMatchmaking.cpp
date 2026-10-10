@@ -268,6 +268,7 @@ struct HostedSettings
     int                             MapId{ 0 };             // 0 is Random, for maps and enemies alike.
     int                             EnemyModeId{ 0 };
     int                             DifficultyId{ 0 };
+    int                             MaxPlayers{ 0 };        // Lobby size a migrated lobby reopens with; 0 keeps the game's.
     std::optional<int>              ResolvedMapId{};        // Random picks, once the lobby commits.
     std::optional<int>              ResolvedEnemyId{};
 };
@@ -308,6 +309,7 @@ struct MatchmakingState
     std::uint32_t                   ServerAddress{ 0 };
     std::uint16_t                   ServerUdpPort{ 0 };
     int                             HeartbeatSeconds{ 20 };
+    int                             ServerMaxPlayersCeiling{ 0 };   // 0 until known.
 
     // Current UE3 game socket.
     FSocket*                        Socket{ nullptr };
@@ -515,14 +517,23 @@ namespace
         return WorldInfo == nullptr || WorldInfo->Game == nullptr || IsInstanceOf(WorldInfo->Game, k_lobbyGameInfo);
     }
 
-    // UE3 admits players up to GameInfo.MaxPlayers ([Engine.GameInfo] config, capped by
-    // MaxPlayersAllowed). The Blaze slot counts in SFXOnlineGameSettings are not used.
+    // The lobby size: UE3 admits players up to GameInfo.MaxPlayers. Milan's SFXGameInfoMP.InitGame
+    // sets it on every map from the host's chosen size (the connection counts in
+    // SFXOnlineGameSettings), capped at MaxPlayersAllowed (config MaxLobbySize).
     int HostMaxPlayers()
     {
         UEngine* const Engine = (GEngine != nullptr) ? *GEngine : nullptr;
         AWorldInfo* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
         return (WorldInfo != nullptr && WorldInfo->Game != nullptr && WorldInfo->Game->MaxPlayers > 0)
             ? WorldInfo->Game->MaxPlayers : 4;
+    }
+
+    // The largest lobby size this game allows (GameInfo.MaxPlayersAllowed), or 0 without a game.
+    int CurrentMaxPlayersAllowed()
+    {
+        UEngine* const Engine = (GEngine != nullptr) ? *GEngine : nullptr;
+        AWorldInfo* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
+        return (WorldInfo != nullptr && WorldInfo->Game != nullptr) ? WorldInfo->Game->MaxPlayersAllowed : 0;
     }
 
     // The level is changing: a pending ServerTravel (WorldInfo.NextURL, during its countdown), a
@@ -624,6 +635,7 @@ namespace
         constexpr LocalizedText MatchmakingOff{ 49875713, L"Cannot join this lobby: matchmaking is turned off." };
         constexpr LocalizedText NewHostRejoining{ 49875714, L"Another player is the new host. Rejoining..." };
         constexpr LocalizedText LostHostSearching{ 49875715, L"Lost the connection to the host. Looking for a new host..." };
+        constexpr LocalizedText InvitesOff{ 49875716, L"This lobby is set to 1 player, so invites are off." };
     }
 
     // Looks @p Text up in the loaded TLKs the way script does (SFXGame.GetSimpleString).
@@ -786,6 +798,13 @@ namespace
                 Settings->mME3MapName = L"";
             Settings->EnemyType = H.EnemyModeId;
             Settings->Difficulty = static_cast<unsigned char>(H.DifficultyId);
+            // The lobby size is the two connection counts together. Milan's SetPrivacy keeps that
+            // total and splits it by privacy, and SFXGameInfoMP.InitGame applies it to the lobby.
+            if (H.MaxPlayers > 0)
+            {
+                Settings->NumPublicConnections = H.MaxPlayers;
+                Settings->NumPrivateConnections = 0;
+            }
             Settings->eventSetPrivacy(H.Private ? 1 : 0); // PRIVACY_PRIVATE : PRIVACY_PUBLIC
             return true;
         }
@@ -912,6 +931,7 @@ namespace
                     State.ServerAddress = Address;
                     State.ServerUdpPort = static_cast<std::uint16_t>(Info->at("udpPort").get<int>());
                     State.HeartbeatSeconds = std::max(5, Info->at("heartbeatSeconds").get<int>());
+                    State.ServerMaxPlayersCeiling = Info->value("maxPlayersCeiling", 0);
                     State.InfoReady = true;
                     if (State.ServerUdpPort == 0)
                         MILAN_WARNW(ELOG_Matchmaking, L"matchmaker has UDP discovery disabled; no observed endpoints");
@@ -938,11 +958,30 @@ namespace
         return (H.AllowMatchmaking || (H.LockedToStart && !InLobby)) && !IsLevelTransitioning();
     }
 
+    // The lobby size the matchmaker is told: the game's, capped at the matchmaker's ceiling, which
+    // rejects every report of a larger lobby. Raising the game's MaxLobbySize past the server's
+    // MaxPlayersCeiling is a configuration mismatch, logged once per size.
+    int ReportedMaxPlayers(MatchmakingState const& S)
+    {
+        int const MaxPlayers = HostMaxPlayers();
+        if (S.ServerMaxPlayersCeiling <= 0 || MaxPlayers <= S.ServerMaxPlayersCeiling)
+            return MaxPlayers;
+
+        static int s_warnedSize = 0;
+        if (s_warnedSize != MaxPlayers)
+        {
+            s_warnedSize = MaxPlayers;
+            MILAN_WARNW(ELOG_Matchmaking, L"lobby size %d is above the matchmaker's limit of %d players; advertising %d",
+                MaxPlayers, S.ServerMaxPlayersCeiling, S.ServerMaxPlayersCeiling);
+        }
+        return S.ServerMaxPlayersCeiling;
+    }
+
     // Wave progress is not read yet; an in-progress match reports wave 0.
     json BuildLobbyState(MatchmakingState const& S)
     {
         HostedSettings const& H = S.Hosted;
-        int const MaxPlayers = HostMaxPlayers();
+        int const MaxPlayers = ReportedMaxPlayers(S);
         bool const InLobby = HostIsInLobby();
         json State{
             { "isPrivate", H.Private },
@@ -1484,6 +1523,7 @@ namespace
         Settings.MapId = Lobby.at("mapId").get<int>();
         Settings.EnemyModeId = Lobby.at("enemyModeId").get<int>();
         Settings.DifficultyId = Lobby.at("difficultyId").get<int>();
+        Settings.MaxPlayers = Lobby.value("maxPlayers", 0);
         std::string LobbyId = Handoff.at("lobbyId").get<std::string>();
         std::string HostKey = Handoff.at("hostKey").get<std::string>();
         std::string InviteCode = Handoff.at("inviteCode").get<std::string>();
@@ -2151,7 +2191,17 @@ namespace
         }
 
         P.ListenLostAt = {};
-        if (S.Role == EMatchmakingRole::Host || P.Suppressed || S.BaseUrl.empty() || !S.Hosted.Known || Now < P.NextAttempt)
+
+        // A lobby of 1 player takes no invites, so it has no matchmaker lobby. The host can only
+        // pick 1 while alone; raising the size registers the lobby again below.
+        bool const Solo = HostMaxPlayers() <= 1;
+        if (Solo && S.Role == EMatchmakingRole::Host && S.AdoptUntil == Clock::time_point{})
+        {
+            MILAN_INFOW(ELOG_Matchmaking, L"lobby size is 1 player; closing the matchmaker lobby");
+            Leave(S);
+            return;
+        }
+        if (S.Role == EMatchmakingRole::Host || Solo || P.Suppressed || S.BaseUrl.empty() || !S.Hosted.Known || Now < P.NextAttempt)
             return;
 
         // A joiner that is now listening has left that game and is hosting its own.
@@ -2447,6 +2497,13 @@ bool CMatchmaking::On_ScriptCall(UStruct* const Function)
     {
         // The original function opens the platform invite UI, which is unavailable on PC.
         MatchmakingState const& S = *mp_state;
+        // The lobby disables the button at size 1; this covers any other way in.
+        if (IsListenServer() && HostMaxPlayers() <= 1)
+        {
+            if (!ShowHint(Localize(Text::InvitesOff), 5.f))
+                MILAN_WARNW(ELOG_Matchmaking, L"invite hint box was not created");
+            return false;
+        }
         if (S.Role != EMatchmakingRole::Host || S.InviteCode.empty() || !IsListenServer())
         {
             if (!ShowHint(Localize(Text::InviteCodeUnavailable), 3.f))
@@ -2592,6 +2649,11 @@ void CMatchmaking::RegisterCommands()
             Driver != nullptr ? *Driver->Class->GetName() : L"none", IsListenServer() ? 1 : 0,
             SocketOf(Driver) != nullptr ? L"found" : L"not found", S.MenuWorld != nullptr && S.MenuWorld == CurrentWorld() ? 1 : 0,
             S.Pipe ? S.PipeName.c_str() : L"none");
+        if (IsListenServer())
+        {
+            MILAN_INFOW(ELOG_Matchmaking, L"  lobby size %d (largest allowed %d, matchmaker limit %d)", HostMaxPlayers(),
+                CurrentMaxPlayersAllowed(), S.ServerMaxPlayersCeiling);
+        }
         if (S.Hosted.Known)
         {
             bool const InLobby = HostIsInLobby();
