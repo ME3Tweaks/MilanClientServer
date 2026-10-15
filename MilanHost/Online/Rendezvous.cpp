@@ -162,6 +162,23 @@ namespace Rendezvous
         return Pair;
     }
 
+    std::string AdmissionProof(Key const& TraversalKey)
+    {
+        constexpr std::string_view label = "milan-game-admission-v2";
+        std::array<std::uint8_t, 32> full{};
+        if (!MatchmakingNet::HmacSha256(TraversalKey,
+            std::span{ reinterpret_cast<std::uint8_t const*>(label.data()), label.size() }, full))
+            return {};
+        constexpr char hex[] = "0123456789abcdef";
+        std::string proof(32, '0');
+        for (std::size_t i = 0; i < 16; ++i)
+        {
+            proof[2 * i] = hex[full[i] >> 4];
+            proof[2 * i + 1] = hex[full[i] & 15];
+        }
+        return proof;
+    }
+
     void WriteProbe(std::span<std::uint8_t, k_probeLength> const Out, EProbeType const Type, EDirection const Direction,
         Id16 const& Pair, std::uint64_t const Sequence, Key const& TraversalKey)
     {

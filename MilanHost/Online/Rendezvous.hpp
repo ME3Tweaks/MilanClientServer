@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <span>
 #include <string_view>
+#include <string>
 
 
 namespace Rendezvous
@@ -56,6 +57,8 @@ namespace Rendezvous
         std::uint64_t& OutSequence, std::uint32_t& OutAddressNetworkOrder, std::uint16_t& OutPort);
 
     Id16 DerivePairId(Key const& TraversalKey);
+    /** Purpose-specific proof linking a reservation to its admitted UE3 connection. */
+    std::string AdmissionProof(Key const& TraversalKey);
 
     void WriteProbe(std::span<std::uint8_t, k_probeLength> Out, EProbeType Type, EDirection Direction,
         Id16 const& Pair, std::uint64_t Sequence, Key const& TraversalKey);
