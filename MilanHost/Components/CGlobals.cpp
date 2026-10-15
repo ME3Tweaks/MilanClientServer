@@ -5,6 +5,7 @@
 #include "Engine/LinkerPatcher.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfDecls.hpp"
+#include "Online/AchievementGuard.hpp"
 #include "Online/SFXOnlineHijacks.hpp"
 
 // ! CGlobals implementation.
@@ -111,6 +112,8 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(UGameEngine, Tick, GLOBAL_UGAMEENGINE_TICK_PHOOK);
     // LoadPackage itself is installed by LoadGate::Install at the very start of attach.
 
+    // Never uninstalled, so shutdown profile saves stay blocked too.
+    AchievementGuard::Initialize(Context);
     LinkerPatcher::Initialize(Context);
     INSTALL_HOOK_TWO(FPackageFileCache, FindPackageFile, GLOBAL_FPACKAGEFILECACHE_FINDPACKAGEFILE_RVA);
     INSTALL_HOOK_TWO(ULinkerLoad, FinalizeCreation, GLOBAL_ULINKERLOAD_FINALIZECREATION_RVA);
