@@ -13,6 +13,8 @@
 bool ReadFileFull(std::wstring_view InPath, ::game::vector<byte>& OutBuffer);
 /** Writes contents of an entire buffer into a file. */
 void WriteFileFull(std::wstring_view InPath, std::span<byte const> InBuffer);
+/** Replaces a file only after the entire buffer has been written and closed successfully. */
+bool TryWriteFileFullAtomic(std::wstring_view InPath, std::span<byte const> InBuffer);
 
 /** Logs current callstack with the given severity and _as if_ at the given place. */
 __declspec(noinline) void WriteCallstackLog(CodePlaceW&& Place, ESeverity Severity, int Skip = 0);

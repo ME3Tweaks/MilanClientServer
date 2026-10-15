@@ -35,6 +35,32 @@ void WriteFileFull(std::wstring_view const InPath, std::span<byte const> const I
     Stream.write(reinterpret_cast<char const*>(InBuffer.data()), static_cast<std::streamsize>(InBuffer.size()));
 }
 
+bool TryWriteFileFullAtomic(std::wstring_view const InPath, std::span<byte const> const InBuffer)
+{
+    std::wstring const Target{ InPath };
+    std::wstring const Temporary = Target + L"." + std::to_wstring(::GetCurrentProcessId()) + L".tmp";
+    std::ofstream Stream{ Temporary, std::ios::binary | std::ios::out | std::ios::trunc };
+    if (!Stream.is_open())
+        return false;
+
+    Stream.write(reinterpret_cast<char const*>(InBuffer.data()), static_cast<std::streamsize>(InBuffer.size()));
+    Stream.flush();
+    bool const bWritten = Stream.good();
+    Stream.close();
+    if (!bWritten || Stream.fail())
+    {
+        ::DeleteFileW(Temporary.c_str());
+        return false;
+    }
+
+    if (!::MoveFileExW(Temporary.c_str(), Target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    {
+        ::DeleteFileW(Temporary.c_str());
+        return false;
+    }
+    return true;
+}
+
 void WriteCallstackLog(CodePlaceW&& Place, ESeverity const Severity, int const Skip)
 {
     MILAN_VERIFYW(Skip >= 0, L"");
