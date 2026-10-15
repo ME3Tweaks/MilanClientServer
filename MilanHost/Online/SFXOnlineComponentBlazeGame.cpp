@@ -660,7 +660,7 @@ void SFXOnlineComponentBlazeGame::KickPlayer_Hook(USFXOnlineComponentBlazeGame* 
 
     MILAN_DEBUGW(ELOG_SFXOnline, L"BlazeGame::KickPlayer - PlayerId = %d-%d", PlayerID.Uid.A, PlayerID.Uid.B);
 
-    *(UBOOL*)Result = TRUE;
+    *(UBOOL*)Result = COMPONENT(CMatchmaking).On_KickPlayer(Context, PlayerID) ? TRUE : FALSE;
 }
 
 void SFXOnlineComponentBlazeGame::OnTick_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
