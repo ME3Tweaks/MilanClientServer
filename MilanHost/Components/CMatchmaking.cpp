@@ -27,6 +27,7 @@
 #include "Online/MatchmakingNet.hpp"
 #include "Online/Rendezvous.hpp"
 #include "Online/PeerSecurity.hpp"
+#include "Online/ModVersion.hpp"
 #include "Public/LmpLobby.h"
 #include "Shell/ClientConfig.hpp"
 #include "Shell/CmdArgs.hpp"
@@ -48,7 +49,7 @@ namespace
     constexpr std::ptrdiff_t k_tcpNetDriverSocketOffset = 0x1F8;
     constexpr std::ptrdiff_t k_socketWinHandleOffset = 0x1C;
 
-    constexpr int k_protocolVersion = 1;
+    constexpr int k_protocolVersion = 2;
     constexpr int k_requestTimeoutMs = 10'000;
     constexpr int k_longPollTimeoutMs = 35'000;
     constexpr auto k_discoveryRetry = std::chrono::seconds(1);
@@ -94,11 +95,6 @@ namespace
     std::wstring Widen(std::string const& Text)
     {
         return std::wstring(Text.begin(), Text.end());
-    }
-
-    std::string GameVersion()
-    {
-        return std::string{ "milanhost-" } + VERSION_STRING_A;
     }
 
     struct Endpoint
@@ -309,15 +305,41 @@ struct Mailbox
     bool                            Stop{ false };
 };
 
+struct PendingLobbyKick
+{
+    UNetDriver* Driver{};
+    UNetConnection* Connection{};
+    FUniqueNetId PlayerId{};
+    Clock::time_point CloseAt{};
+};
+
+// Presence: while this game is in no lobby and no search, it tells the matchmaker it is
+// running, so the server's statistics can count it. Only a matchmaker that asks for it in
+// /v1/info gets it. This outlives a session (ResetSession), unlike most of MatchmakingState.
+struct PresenceState
+{
+    std::string                     Id{};               // Random, made up for this run of the game.
+    std::string                     Url{};              // The matchmaker the fields below are about.
+    bool                            InfoKnown{ false };
+    int                             Seconds{ 0 };       // The matchmaker's interval; 0 means it wants none.
+    bool                            Reported{ false };  // The matchmaker may hold a report from this game.
+    Clock::time_point               Next{};
+};
+
 struct MatchmakingState
 {
     std::shared_ptr<Mailbox>        Box{ std::make_shared<Mailbox>() };
     std::string                     BaseUrl{};
+    std::string                     ModVersion{};
     std::uint64_t                   Generation{ 0 };
     EMatchmakingRole                Role{ EMatchmakingRole::None };
     DWORD                           GameThreadId{ 0 };
 
     Clock::time_point               NextPingUpdate{};
+    Clock::time_point               LastServiceContact{};
+    Clock::time_point               NextInviteUiUpdate{};
+    std::vector<PendingLobbyKick>    PendingKicks{};
+    UWorld*                         PendingKickWorld{ nullptr }; // Local kick: defer travel out of the script/RPC stack.
 
     // From /v1/info and DNS.
     bool                            InfoReady{ false };
@@ -326,6 +348,7 @@ struct MatchmakingState
     std::uint16_t                   ServerUdpPort{ 0 };
     int                             HeartbeatSeconds{ 20 };
     int                             ServerMaxPlayersCeiling{ 0 };   // 0 until known.
+    PresenceState                   Presence{};
 
     // Current UE3 game socket.
     FSocket*                        Socket{ nullptr };
@@ -365,7 +388,7 @@ struct MatchmakingState
     std::string                     SearchId{};
     std::string                     SearchKey{};
     std::wstring                    QuickMatchTarget{};
-    std::function<void(bool)>       QuickMatchDone{};
+    std::function<void(CMatchmaking::EQuickMatchOutcome)> QuickMatchDone{};
     PeerPath                        HostPath{};
     bool                            SamePublicAddress{ false };
     bool                            TravelIssued{ false };
@@ -438,6 +461,10 @@ namespace
             {
                 if (Generation != S.Generation)
                     return;
+                if (Result.Status >= 200 && Result.Status < 300)
+                    S.LastServiceContact = Clock::now();
+                else if (Result.Status == 0 || Result.Status == 401)
+                    S.LastServiceContact = {};
                 try
                 {
                     Done(S, Result);
@@ -652,7 +679,8 @@ namespace
         constexpr LocalizedText MatchmakingOff{ 49875713, L"Cannot join this lobby: matchmaking is turned off." };
         constexpr LocalizedText NewHostRejoining{ 49875714, L"Another player is the new host. Rejoining..." };
         constexpr LocalizedText LostHostSearching{ 49875715, L"Lost the connection to the host. Looking for a new host..." };
-        constexpr LocalizedText InvitesOff{ 49875716, L"This lobby is set to 1 player, so invites are off." };
+        constexpr LocalizedText InvitesOff{ 49875716, L"Invites are disabled when the lobby size is set to 1." };
+        constexpr LocalizedText InvitesHostOnly{ 49875717, L"Only the host can invite players to a private lobby." };
         constexpr LocalizedText AccessKeyRejected{ 49875718, L"The matchmaking server's password is missing or wrong. Check it in Options > Multiplayer Settings." };
     }
 
@@ -838,7 +866,7 @@ namespace
                 Settings->NumPublicConnections = H.MaxPlayers;
                 Settings->NumPrivateConnections = 0;
             }
-            Settings->eventSetPrivacy(H.Private ? 1 : 0); // PRIVACY_PRIVATE : PRIVACY_PUBLIC
+            Settings->eventSetPrivacy(PrivacyMode(H));
             return true;
         }
         return false;
@@ -875,6 +903,44 @@ namespace
         return Engine->GamePlayers(0)->Actor->PlayerReplicationInfo;
     }
 
+    bool SamePlayerId(FUniqueNetId const& A, FUniqueNetId const& B)
+    {
+        return A.Uid.A == B.Uid.A && A.Uid.B == B.Uid.B;
+    }
+
+    // Never dereference a stored connection until it is found in the current driver's
+    // connections with the same player ID. Travel/disconnect can destroy either object.
+    void TickPendingKicks(MatchmakingState& S, Clock::time_point const Now)
+    {
+        UWorld* const World = CurrentWorld();
+        UNetDriver* const Driver = World != nullptr ? World->NetDriver : nullptr;
+        // Closing a connection can update the roster and queue another kick. Work on a
+        // separate list so those callbacks cannot invalidate the pending-kick iteration.
+        std::vector<PendingLobbyKick> Pending = std::exchange(S.PendingKicks, {});
+        for (PendingLobbyKick const& Kick : Pending)
+        {
+            if (Driver == nullptr || Driver != Kick.Driver || Driver->ServerConnection != nullptr)
+                continue;
+            for (UNetConnection* const Client : Driver->ChildConnections)
+            {
+                if (Client != Kick.Connection)
+                    continue;
+                APlayerReplicationInfo* const PRI = Client->Actor != nullptr ? Client->Actor->PlayerReplicationInfo : nullptr;
+                if (Client->ConnectionState == USOCK_Closed || PRI == nullptr || !SamePlayerId(PRI->UniqueId, Kick.PlayerId))
+                    break;
+                if (Now < Kick.CloseAt)
+                {
+                    S.PendingKicks.push_back(Kick);
+                    break;
+                }
+                MILAN_INFOW(ELOG_Matchmaking, L"vote kick: enforcing removal of %s (%d-%d)",
+                    *PRI->PlayerName, Kick.PlayerId.Uid.A, Kick.PlayerId.Uid.B);
+                UNetConnection_Close_hook(Client);
+                break;
+            }
+        }
+    }
+
     bool SendDatagram(FSocket* const Socket, std::span<std::uint8_t const> const Data,
         std::uint32_t const Address, std::uint16_t const Port)
     {
@@ -900,10 +966,16 @@ namespace
         MatchmakingState Next{};
         Next.Box = S.Box;
         Next.BaseUrl = S.BaseUrl;
+        Next.ModVersion = S.ModVersion;
         Next.Generation = S.Generation + 1;
         Next.GameThreadId = S.GameThreadId;
+        // Kicks belong to these UE3 connections, even if matchmaking resets its session.
+        Next.PendingKicks = std::move(S.PendingKicks);
+        Next.PendingKickWorld = S.PendingKickWorld;
+        Next.Presence = S.Presence;
         if (KeepServerInfo)
         {
+            Next.ServerMaxPlayersCeiling = S.ServerMaxPlayersCeiling;
             Next.InfoReady = S.InfoReady;
             Next.ServerAddress = S.ServerAddress;
             Next.ServerUdpPort = S.ServerUdpPort;
@@ -966,6 +1038,10 @@ namespace
                     State.ServerUdpPort = static_cast<std::uint16_t>(Info->at("udpPort").get<int>());
                     State.HeartbeatSeconds = std::max(5, Info->at("heartbeatSeconds").get<int>());
                     State.ServerMaxPlayersCeiling = Info->value("maxPlayersCeiling", 0);
+                    State.Presence.Url = Url;
+                    State.Presence.InfoKnown = true;
+                    State.Presence.Seconds = Info->value("presenceSeconds", 0);
+                    State.Presence.Next = {};
                     State.InfoReady = true;
                     if (State.ServerUdpPort == 0)
                         MILAN_WARNW(ELOG_Matchmaking, L"matchmaker has UDP discovery disabled; no observed endpoints");
@@ -1249,6 +1325,13 @@ namespace
 
     void StartHost(MatchmakingState& S)
     {
+        if (S.ModVersion.empty())
+        {
+            if (S.AutoHost.Failures++ == 0)
+                MILAN_WARNW(ELOG_Matchmaking, L"mod version is unknown; local hosting continues but matchmaking registration is disabled. Set [milan.game] version or mm.version.");
+            S.AutoHost.NextAttempt = Clock::now() + k_hostRetryMax;
+            return;
+        }
         ResetSession(S);
         S.Role = EMatchmakingRole::Host;
         S.LanAddresses = MatchmakingNet::LanIPv4Addresses(4);
@@ -1259,7 +1342,7 @@ namespace
             State.LastStateBody = State0.dump();
             State.Revision = 1;
             State0["revision"] = State.Revision;
-            json const Request{ { "gameVersion", GameVersion() }, { "state", State0 } };
+            json const Request{ { "gameVersion", State.ModVersion }, { "state", State0 } };
 
             PostHttp(State, false, L"POST", "/v1/lobbies", "", Request.dump(), [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
             {
@@ -1375,12 +1458,14 @@ namespace
         }, Delay);
     }
 
-    void FinishQuickMatch(MatchmakingState& S, bool const Success)
+    using QuickMatchOutcome = CMatchmaking::EQuickMatchOutcome;
+
+    void FinishQuickMatch(MatchmakingState& S, QuickMatchOutcome const Outcome)
     {
         auto Done = std::move(S.QuickMatchDone);
         S.QuickMatchDone = {};
         if (Done)
-            Done(Success);
+            Done(Outcome);
     }
 
     // A failed request to the matchmaker is a refused key when /v1/info said so; otherwise it is unavailable.
@@ -1407,7 +1492,8 @@ namespace
         }
         S.HostPath.ReservationId = S.ReservationId;
         S.HostPath.Pair = Rendezvous::DerivePairId(S.HostPath.TraversalKey);
-        S.HostPath.Candidates = ParseCandidates(Reservation.at("hostCandidates"));
+        S.HostPath.Candidates = ParseCandidates(Reservation.at("hostCandidates"),
+            reinterpret_cast<std::uint8_t const*>(&S.ServerAddress)[0] == 127);
         S.HostPath.ProbeUntil = Clock::now() + k_probeWindow;
         S.HostPath.NextProbe = Clock::now();
         S.SamePublicAddress = Reservation.at("samePublicAddress").get<bool>();
@@ -1437,14 +1523,14 @@ namespace
         std::string const TravelUrl = Target->ToString() + "?MilanMember=" + S.ReservationId + "?MilanProof=" + Proof;
         if (QuickMatch)
         {
-            S.QuickMatchTarget = Widen(Target->ToString());
+            S.QuickMatchTarget = Widen(TravelUrl);
             S.TravelIssued = true; // The script callback issues the travel command.
             PollReservation(S);
-            FinishQuickMatch(S, true);
+            FinishQuickMatch(S, QuickMatchOutcome::Matched);
         }
         else
         {
-            S.TravelIssued = RunConsoleCommand(L"open " + Widen(Target->ToString()));
+            S.TravelIssued = RunConsoleCommand(L"open " + Widen(TravelUrl));
             if (!S.TravelIssued)
                 MILAN_ERRORW(ELOG_Matchmaking, L"no local player controller to run 'open'");
             PollReservation(S);
@@ -1465,7 +1551,7 @@ namespace
         if (State == "Matched")
         {
             if (!AcceptReservation(S, Status.at("reservation"), true))
-                FinishQuickMatch(S, false);
+                FinishQuickMatch(S, QuickMatchOutcome::NoMatch);
         }
         else if (State == "Searching")
         {
@@ -1475,7 +1561,7 @@ namespace
         else
         {
             MILAN_INFOW(ELOG_Matchmaking, L"quick match found no lobby");
-            FinishQuickMatch(S, false);
+            FinishQuickMatch(S, QuickMatchOutcome::NoMatch);
         }
     }
 
@@ -1487,7 +1573,7 @@ namespace
                 if (std::optional<json> const Status = SuccessJson(Result, "quick match poll"))
                     HandleSearchStatus(State, *Status);
                 else
-                    FinishQuickMatch(State, false);
+                    FinishQuickMatch(State, QuickMatchOutcome::ServerUnavailable);
             }, Delay);
     }
 
@@ -1511,7 +1597,7 @@ namespace
         FetchInfo(S, [MapId, EnemyModeId, DifficultyId](MatchmakingState& State)
         {
             json const Request{
-                { "gameVersion", GameVersion() },
+                { "gameVersion", State.ModVersion },
                 { "mapId", MapId },
                 { "enemyModeId", EnemyModeId },
                 { "difficultyId", DifficultyId },
@@ -1530,7 +1616,7 @@ namespace
                     Session.SearchKey = Created->at("searchKey").get<std::string>();
                     HandleSearchStatus(Session, Created->at("status"));
                 });
-        }, [](MatchmakingState& State) { FinishQuickMatch(State, false); });
+        }, [](MatchmakingState& State) { FinishQuickMatch(State, QuickMatchServerFailure(State)); });
     }
 
     // What to tell the player when the matchmaker refuses an invite code. The codes are
@@ -1565,6 +1651,11 @@ namespace
 
     void StartJoin(MatchmakingState& S, std::string InviteCode)
     {
+        if (S.ModVersion.empty())
+        {
+            ReportJoinFailure(L"The installed Project Milan version could not be identified. Set the mod version before using matchmaking.");
+            return;
+        }
         ResetSession(S);
         S.Role = EMatchmakingRole::Joiner;
         S.InviteCode = InviteCode;
@@ -1573,7 +1664,7 @@ namespace
         // and tells the player why: the join may have come from a link or Discord.
         FetchInfo(S, [InviteCode](MatchmakingState& State)
         {
-            json const Request{ { "inviteCode", InviteCode }, { "gameVersion", GameVersion() } };
+            json const Request{ { "inviteCode", InviteCode }, { "gameVersion", State.ModVersion } };
             PostHttp(State, false, L"POST", "/v1/invites/redeem", "", Request.dump(), [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
             {
                 std::optional<json> const Reservation = SuccessJson(Result, "invite redemption");
@@ -1603,7 +1694,7 @@ namespace
             else if (bDefaultServer)
                 ReportJoinFailure(Localize(Text::ServerUnreachable));
             else
-            ReportJoinFailure(Localize(Text::ServerConnectFailed, Server));
+                ReportJoinFailure(Localize(Text::ServerConnectFailed, Server));
         });
     }
 
@@ -2134,6 +2225,123 @@ namespace
         return Shown;
     }
 
+    USFXGUIMovie* FocusedPauseMovie()
+    {
+        ABioPlayerController* const Player = LocalBioPlayer();
+        USFXGUIInteraction* const Gui = Player != nullptr ? Player->GetSFXUIController() : nullptr;
+        if (Gui == nullptr)
+            return nullptr;
+
+        USFXGUIMovie* const Movie = Gui->GetFocusMovieForPlayerController(Player);
+        static SFXName const k_pauseMenu{ L"SFXGUI_MPPauseMenu", 0 };
+        if (Movie == nullptr || Movie->Class == nullptr || Movie->Class->Name != k_pauseMenu || !Movie->IsOpen())
+            return nullptr;
+
+        return Movie;
+    }
+
+    // A created lobby or reservation alone does not prove the service is still reachable.
+    // The next request can fail after it goes down, so the button times out after contact stops.
+    bool CanInvite(MatchmakingState const& S, Clock::time_point const Now)
+    {
+        if (S.BaseUrl.empty() || S.LastServiceContact == Clock::time_point{}
+            || Now - S.LastServiceContact > std::chrono::seconds{ 60 })
+            return false;
+
+        if (S.Role == EMatchmakingRole::Host && !S.InviteCode.empty() && IsListenServer())
+            return 1 + ConnectedClientCount() < HostMaxPlayers();
+
+        if (S.Role == EMatchmakingRole::Joiner && S.JoinedReported && !S.ReservationId.empty()
+            && !S.MigrationPending)
+        {
+            UWorld* const World = CurrentWorld();
+            UNetConnection* const Server = World != nullptr && World->NetDriver != nullptr
+                ? World->NetDriver->ServerConnection : nullptr;
+            if (Server == nullptr || Server->ConnectionState == USOCK_Closed)
+                return false;
+            UEngine* const Engine = GEngine != nullptr ? *GEngine : nullptr;
+            AWorldInfo* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
+            if (S.MemberMaxPlayers <= 0 || WorldInfo == nullptr || WorldInfo->GRI == nullptr)
+                return false;
+            return static_cast<int>(WorldInfo->GRI->PRIArray.Count()) < S.MemberMaxPlayers;
+        }
+
+        return false;
+    }
+
+    void UpdatePauseInviteAvailability(MatchmakingState& S, Clock::time_point const Now)
+    {
+        if (Now < S.NextInviteUiUpdate)
+            return;
+        S.NextInviteUiUpdate = Now + std::chrono::seconds{ 1 };
+        if (USFXGUIMovie* const Movie = FocusedPauseMovie())
+        {
+            Movie->SetVariableBool(FString{ L"screen.Menu.ButtonsMC.InviteEnabled" }, CanInvite(S, Now));
+            Movie->ActionScriptVoid(FString{ L"screen.Menu.ButtonsMC.ApplyInviteEnabled" });
+        }
+    }
+
+    // The pause movie sits above the stock HUD hint layer. Put invite feedback
+    // in its own authored text field while that movie has focus.
+    bool ShowPauseInviteFeedback(std::wstring const& Message, float const Seconds)
+    {
+        USFXGUIMovie* const Movie = FocusedPauseMovie();
+        if (Movie == nullptr)
+            return false;
+
+        Movie->SetVariableString(FString{ L"screen.Menu.ButtonsMC.InviteFeedback.text" }, FString{ Message.c_str() });
+        Movie->SetVariableNumber(FString{ L"screen.Menu.ButtonsMC.InviteFeedbackDuration" }, Seconds * 1000.f);
+        Movie->ActionScriptVoid(FString{ L"screen.Menu.ButtonsMC.ShowInviteFeedback" });
+        return true;
+    }
+
+    void ShowInviteHint(std::wstring const& Message, float const Seconds)
+    {
+        if (!ShowPauseInviteFeedback(Message, Seconds) && !ShowHint(Message, Seconds))
+            MILAN_WARNW(ELOG_Matchmaking, L"invite hint box was not created");
+    }
+
+    // Game thread. Shares the lobby's invite code (S.InviteCode): copies the join link, lets the
+    // invite handlers show their own UI, and shows the code if none did.
+    void ShareInvite(MatchmakingState const& S)
+    {
+        // Copied whatever else shows, so the player can still paste it if a handler's
+        // invite UI cannot reach the friend they want.
+        std::string const Link = JoinLink(S.BaseUrl, S.InviteCode);
+        bool const Copied = CopyToClipboard(Widen(Link), std::chrono::milliseconds{ 250 });
+        if (!Copied)
+            MILAN_WARNW(ELOG_Matchmaking, L"could not copy the join link to the clipboard");
+
+        if (!RunInviteHandlers(S, Link))
+            ShowInviteHint(Localize(Copied ? Text::InviteCodeCopied : Text::InviteCode, Widen(S.InviteCode)), 10.f);
+    }
+
+    // A member that joined through a search never saw the invite code. The matchmaker hands it
+    // out while the lobby lets its members invite (Public, not Private), and it is
+    // asked each time because the host can rotate the code or change the mode.
+    void RequestMemberInvite(MatchmakingState& S)
+    {
+        PostHttp(S, false, L"GET", "/v1/members/" + S.ReservationId + "/invite", S.JoinKey, "",
+            [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
+        {
+            if (Result.Status == 403 && ErrorCode(Result) == "invites_host_only")
+            {
+                ShowInviteHint(Localize(Text::InvitesHostOnly), 5.f);
+                return;
+            }
+
+            std::optional<json> const Body = SuccessJson(Result, "invite code request");
+            std::string Code = Body ? Body->value("inviteCode", std::string{}) : std::string{};
+            if (Code.empty())
+            {
+                ShowInviteHint(Localize(Text::InviteCodeUnavailable), 3.f);
+                return;
+            }
+            Session.InviteCode = std::move(Code);
+            ShareInvite(Session);
+        });
+    }
+
     void RegisterLobbyService(::LESDK::Initializer& Context, std::shared_ptr<Mailbox> Box)
     {
         {
@@ -2286,6 +2494,85 @@ namespace
     }
 
     // Registers a hosted game once its settings are known, and closes the lobby when hosting ends.
+    std::string NewPresenceId()
+    {
+        static constexpr char k_hex[] = "0123456789abcdef";
+        std::random_device Device{};
+        std::string Id(32, '0');
+        for (std::size_t i = 0; i < Id.size(); i += 8)
+        {
+            std::uint32_t const Value = Device();
+            for (std::size_t j = 0; j < 8; ++j)
+                Id[i + j] = k_hex[(Value >> (4 * j)) & 0xF];
+        }
+        return Id;
+    }
+
+    // Reports this game to the matchmaker every Presence.Seconds while nothing else counts it:
+    // a registered lobby counts its host and members, and a search counts its player. That
+    // leaves the menus and a 1-player lobby. The interval comes from the /v1/info that hosting,
+    // joining and searching read anyway, so a game that has done none of them sends nothing,
+    // and a matchmaker that does not ask for presence never gets a report.
+    void TickPresence(MatchmakingState& S, Clock::time_point const Now)
+    {
+        constexpr std::chrono::seconds k_infoRetry{ 300 };
+        PresenceState& P = S.Presence;
+        if (P.Url != S.BaseUrl)
+        {
+            // Another matchmaker: its interval is not known yet, and it holds no report.
+            std::string Id = std::move(P.Id);
+            P = {};
+            P.Id = std::move(Id);
+            P.Url = S.BaseUrl;
+        }
+        if (S.BaseUrl.empty())
+            return;
+
+        if (S.Role != EMatchmakingRole::None)
+        {
+            // Counted by its lobby or search from here on, so the report is withdrawn rather
+            // than left to expire and count this player twice.
+            if (P.Reported)
+            {
+                P.Reported = false;
+                PostHttp(S, false, L"DELETE", "/v1/presence/" + P.Id, "", "", [](MatchmakingState&, MatchmakingNet::HttpResult const&) {});
+            }
+            P.Next = {};
+            return;
+        }
+
+        if (Now < P.Next)
+            return;
+
+        if (!P.InfoKnown)
+        {
+            // FetchInfo records the interval whenever this game hosts, joins or searches. The
+            // one case that reads no /v1/info is a 1-player lobby, which is hosted without
+            // being registered, so it is read here. A failure is retried at this pace.
+            if (!IsListenServer())
+                return;
+            P.Next = Now + k_infoRetry;
+            FetchInfo(S, [](MatchmakingState&) {});
+            return;
+        }
+        if (P.Seconds <= 0)
+            return;
+
+        if (P.Id.empty())
+            P.Id = NewPresenceId();
+        P.Next = Now + std::chrono::seconds{ std::clamp(P.Seconds, 30, 3600) };
+        P.Reported = true;
+        PostHttp(S, false, L"PUT", "/v1/presence/" + P.Id, "", "", [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
+        {
+            // The matchmaker turned presence off since /v1/info was read.
+            if (Result.Status == 404)
+            {
+                Session.Presence.Seconds = 0;
+                Session.Presence.Reported = false;
+            }
+        });
+    }
+
     void TickHosting(MatchmakingState& S, Clock::time_point const Now)
     {
         AutoHostPolicy& P = S.AutoHost;
@@ -2511,7 +2798,31 @@ bool CMatchmaking::Initialize(::LESDK::Initializer& Context)
     MILAN_UNUSED(Context);
 
     mp_state = new MatchmakingState{};
-    mp_state->BaseUrl = (gp_clientConfig != nullptr) ? std::string{ gp_clientConfig->MatchmakerUrl.c_str() } : std::string{ "http://127.0.0.1:5080" };
+    mp_state->BaseUrl = (gp_clientConfig != nullptr) ? std::string{ gp_clientConfig->MatchmakerUrl.c_str() } : std::string{ k_defaultMatchmakerUrl };
+    std::wstring executable(32768, L'\0');
+    DWORD const executableLength = ::GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
+    if (executableLength == 0 || executableLength >= executable.size())
+        executable.clear();
+    else
+        executable.resize(executableLength);
+    auto version = ModVersion::Resolve(std::filesystem::path{ executable },
+        gp_clientConfig != nullptr ? std::string_view{ gp_clientConfig->ModVersion.c_str() } : std::string_view{},
+        CommandLineValue(L"-mmversion="));
+    if (!version.Version.empty())
+    {
+        mp_state->ModVersion = std::move(version.Version);
+        if (version.From == ModVersion::Source::Metadata)
+            MILAN_INFOW(ELOG_Matchmaking, L"mod version %S from %s", mp_state->ModVersion.c_str(), version.MetadataPath.c_str());
+        else
+            MILAN_INFOW(ELOG_Matchmaking, L"mod version %S from %s", mp_state->ModVersion.c_str(),
+                version.From == ModVersion::Source::CommandLine ? L"-mmversion" : L"[milan.game] version");
+    }
+    else
+        MILAN_WARNW(ELOG_Matchmaking, L"mod version is unknown: %S (metadata: %s). Matchmaking is disabled; check the installed _metacmm.txt or set [milan.game] version / mm.version.",
+            version.Error.data(), version.MetadataPath.empty() ? L"explicit override or executable path unavailable" : version.MetadataPath.c_str());
+    // Tied to the configured server, so -mmserver naming another one sends no key.
+    if (gp_clientConfig != nullptr)
+        MatchmakingNet::SetAccessKey(mp_state->BaseUrl, gp_clientConfig->SelectedAccessKey().c_str());
 
     if (std::optional<std::string> Url = CommandLineValue(L"-mmserver="))
     {
@@ -2607,6 +2918,120 @@ bool CMatchmaking::On_ConnectionError()
     return true;
 }
 
+// Like mm.server: a hosted lobby re-registers on the new server by itself.
+void CMatchmaking::ApplySettings(std::string const& Url, std::string const& AccessKey)
+{
+    if (mp_state == nullptr)
+        return;
+    if (!Url.empty())
+        MatchmakingNet::SetAccessKey(Url, AccessKey);
+    SetMatchmaker(*mp_state, Url, L"multiplayer settings");
+}
+
+bool CMatchmaking::SetModVersion(std::string const& Version)
+{
+    if (mp_state == nullptr || (!Version.empty() && !PeerSecurity::IsModVersion(Version)))
+        return false;
+    if (mp_state->ModVersion == Version)
+        return true;
+    Leave(*mp_state);
+    mp_state->ModVersion = Version;
+    mp_state->AutoHost.Failures = 0;
+    mp_state->AutoHost.NextAttempt = Clock::now();
+    MILAN_INFOW(ELOG_Matchmaking, L"matchmaking mod identity: %S", Version.empty() ? "unknown (matchmaking disabled)" : Version.c_str());
+    return true;
+}
+
+bool CMatchmaking::IsInSession() const
+{
+    UGameEngine* const Engine = GameEngine();
+    UWorld* const World = CurrentWorld();
+    UNetDriver* const Driver = World != nullptr ? World->NetDriver : nullptr;
+    if (Engine != nullptr && Engine->GPendingLevel != nullptr)
+        return true;
+    if (Driver != nullptr && (Driver->ServerConnection != nullptr || Driver->ChildConnections.Count() > 0))
+        return true;
+    return mp_state != nullptr && (mp_state->Role == EMatchmakingRole::Joiner || !mp_state->PendingJoin.empty());
+}
+
+bool CMatchmaking::On_KickPlayer(USFXOnlineComponentBlazeGame* const Game, FUniqueNetId const& PlayerId)
+{
+    UWorld* const World = CurrentWorld();
+    UGameEngine* const Engine = GameEngine();
+    AWorldInfo* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
+    static SFXName const k_lobbyGri{ L"SFXGRIMP_Lobby", 0 };
+    if (mp_state == nullptr || Game == nullptr || World == nullptr || World->NetDriver == nullptr
+        || WorldInfo == nullptr || WorldInfo->GRI == nullptr || !IsInstanceOf(WorldInfo->GRI, k_lobbyGri)
+        || (PlayerId.Uid.A == 0 && PlayerId.Uid.B == 0))
+    {
+        return false;
+    }
+
+    MatchmakingState& S = *mp_state;
+    APlayerReplicationInfo* const Local = LocalPRI();
+    if (Local != nullptr && SamePlayerId(Local->UniqueId, PlayerId))
+    {
+        Game->SetKickedOutOfGame(TRUE);
+        if (IsListenServer())
+        {
+            // Stop heartbeats without deleting the lobby: the remaining members can
+            // report the departed host and use the existing host-migration path.
+            ResetSession(S, true);
+        }
+        else
+        {
+            // An intentional kick must release membership before the connection closes,
+            // so it cannot be treated as a lost host or rejoin during host migration.
+            Leave(S);
+        }
+        S.PendingKickWorld = World;
+        MILAN_INFOW(ELOG_Matchmaking, L"vote kick: local player %s is leaving the lobby", *Local->PlayerName);
+        return true;
+    }
+
+    // A client may only handle its own directed ClientKickPlayer notification.
+    if (!IsListenServer() || UNetConnection_Close_orig == nullptr)
+        return false;
+    UNetDriver* const Driver = World->NetDriver;
+    for (UNetConnection* const Client : Driver->ChildConnections)
+    {
+        APlayerController* const PC = Client != nullptr ? Client->Actor : nullptr;
+        APlayerReplicationInfo* const PRI = PC != nullptr ? PC->PlayerReplicationInfo : nullptr;
+        if (Client == nullptr || Client->ConnectionState == USOCK_Closed || PRI == nullptr || !SamePlayerId(PRI->UniqueId, PlayerId))
+            continue;
+        for (PendingLobbyKick const& Kick : S.PendingKicks)
+        {
+            if (Kick.Driver == Driver && Kick.Connection == Client && SamePlayerId(Kick.PlayerId, PlayerId))
+                return true;
+        }
+        UFunction* const Notify = UObject::FindObject<UFunction>(L"Function SFXGameMPContent.SFXPlayerControllerMP.ClientKickPlayer");
+        if (Notify == nullptr)
+        {
+            MILAN_ERRORW(ELOG_Matchmaking, L"vote kick: ClientKickPlayer RPC was not found");
+            return false;
+        }
+        // Let the reliable RPC reach the target and release its lobby membership. Close
+        // the host's connection after one second even if the target ignores the RPC.
+        S.PendingKicks.push_back({ Driver, Client, PlayerId, Clock::now() + std::chrono::seconds{ 1 } });
+        for (auto it = S.AdmittedMembers.begin(); it != S.AdmittedMembers.end();)
+        {
+            if (SamePlayerId(it->second.PlayerId, PlayerId))
+            {
+                S.Joiners.erase(it->first);
+                it = S.AdmittedMembers.erase(it);
+            }
+            else
+                ++it;
+        }
+        S.NextHeartbeat = Clock::now();
+        struct { FUniqueNetId kickedPlayer; } Parms{ PlayerId };
+        PC->ProcessEvent(Notify, &Parms);
+        MILAN_INFOW(ELOG_Matchmaking, L"vote kick: removing %s (%d-%d)", *PRI->PlayerName, PlayerId.Uid.A, PlayerId.Uid.B);
+        return true;
+    }
+    return false;
+}
+
 bool CMatchmaking::On_ScriptCall(UStruct* const Function)
 {
     if (mp_state == nullptr || Function == nullptr)
@@ -2620,6 +3045,7 @@ bool CMatchmaking::On_ScriptCall(UStruct* const Function)
     static FunctionNamedIntercept s_show{};
     static FunctionNamedIntercept s_hide{};
     static FunctionNamedIntercept s_invite{};
+    static FunctionNamedIntercept s_pauseInvite{};
     static FunctionNamedIntercept s_serverUpdatePing{};
     // Runs on the host when a client reports its ping; TickPlayerPing owns PRI.Ping instead.
     if (Function->Name == k_serverUpdatePing && s_serverUpdatePing.Applies(Function, L"Engine", L"PlayerController", L"ServerUpdatePing"))
@@ -2628,44 +3054,31 @@ bool CMatchmaking::On_ScriptCall(UStruct* const Function)
         mp_state->MenuWorld = CurrentWorld();
     else if (Function->Name == k_hide && s_hide.Applies(Function, L"SFXGameMPContent", L"SFXLobbyFlow", L"HideMultiplayerMenu"))
         mp_state->MenuWorld = nullptr;
-    else if (Function->Name == k_invite && s_invite.Applies(Function, L"SFXGameMPContent", L"SFXGUI_MPLobby", L"InviteFriends"))
+    else if (Function->Name == k_invite &&
+        (s_invite.Applies(Function, L"SFXGameMPContent", L"SFXGUI_MPLobby", L"InviteFriends") ||
+         s_pauseInvite.Applies(Function, L"SFXGameMPContent", L"SFXGUI_MPPauseMenu", L"InviteFriends")))
     {
         // The original function opens the platform invite UI, which is unavailable on PC.
-        MatchmakingState const& S = *mp_state;
+        MatchmakingState& S = *mp_state;
         // The lobby disables the button at size 1; this covers any other way in.
         if (IsListenServer() && HostMaxPlayers() <= 1)
-        {
-            if (!ShowHint(Localize(Text::InvitesOff), 5.f))
-                MILAN_WARNW(ELOG_Matchmaking, L"invite hint box was not created");
-            return false;
-        }
-        if (S.Role != EMatchmakingRole::Host || S.InviteCode.empty() || !IsListenServer())
-        {
-            if (!ShowHint(Localize(Text::InviteCodeUnavailable), 3.f))
-                MILAN_WARNW(ELOG_Matchmaking, L"invite hint box was not created");
-            return false;
-        }
-
-        // Copied whatever else shows, so the player can still paste it if a handler's
-        // invite UI cannot reach the friend they want.
-        std::string const Link = JoinLink(S.BaseUrl, S.InviteCode);
-        bool const Copied = CopyToClipboard(Widen(Link), std::chrono::milliseconds{ 250 });
-        if (!Copied)
-            MILAN_WARNW(ELOG_Matchmaking, L"could not copy the join link to the clipboard");
-
-        if (!RunInviteHandlers(S, Link))
-        {
-            std::wstring const Message = Localize(Copied ? Text::InviteCodeCopied : Text::InviteCode, Widen(S.InviteCode));
-            if (!ShowHint(Message, 10.f))
-                MILAN_WARNW(ELOG_Matchmaking, L"invite hint box was not created");
-        }
+            ShowInviteHint(Localize(Text::InvitesOff), 5.f);
+        else if (S.Role == EMatchmakingRole::Host && !S.InviteCode.empty() && IsListenServer()
+            && CanInvite(S, Clock::now()))
+            ShareInvite(S);
+        // A player in someone else's lobby asks the matchmaker for the code.
+        else if (S.Role == EMatchmakingRole::Joiner && S.JoinedReported && !S.ReservationId.empty()
+            && CanInvite(S, Clock::now()))
+            RequestMemberInvite(S);
+        else
+            ShowInviteHint(Localize(Text::InviteCodeUnavailable), 3.f);
         return false;
     }
     return true;
 }
 
 bool CMatchmaking::StartQuickMatch(int const MapId, int const EnemyModeId, int const DifficultyId,
-    std::function<void(bool)> Done)
+    std::function<void(EQuickMatchOutcome)> Done)
 {
     if (mp_state == nullptr || !Done)
         return false;
@@ -2771,6 +3184,21 @@ void CMatchmaking::RegisterCommands()
         return true;
     });
 
+    Commands.RegisterCommand(L"mm", L"version", [this](wchar_t const* const Params) -> bool
+    {
+        std::string value = Narrow(Params);
+        auto first = value.find_first_not_of(' ');
+        if (first != std::string::npos)
+        {
+            value = value.substr(first, value.find_last_not_of(' ') - first + 1);
+            if (!SetModVersion(value == "off" ? std::string{} : value))
+                MILAN_WARNW(ELOG_Matchmaking, L"mm.version: expected 1-64 printable ASCII characters without spaces, or off");
+        }
+        if (mp_state != nullptr)
+            MILAN_INFOW(ELOG_Matchmaking, L"mod version: %S", mp_state->ModVersion.empty() ? "unknown" : mp_state->ModVersion.c_str());
+        return true;
+    });
+
     Commands.RegisterCommand(L"mm", L"status", [this](wchar_t const* const Params) -> bool
     {
         MILAN_UNUSED(Params);
@@ -2793,7 +3221,7 @@ void CMatchmaking::RegisterCommands()
         {
             bool const InLobby = HostIsInLobby();
             MILAN_INFOW(ELOG_Matchmaking, L"  hosted settings: %s, map %d, enemy %d, difficulty %d, %s, %s",
-                S.Hosted.Private ? L"private" : L"public", S.Hosted.MapId, S.Hosted.EnemyModeId, S.Hosted.DifficultyId,
+                PrivacyName(S.Hosted), S.Hosted.MapId, S.Hosted.EnemyModeId, S.Hosted.DifficultyId,
                 IsJoinable(S.Hosted, InLobby) ? L"joinable" : L"not joinable", InLobby ? L"lobby" : L"in progress");
         }
         UEngine* const Engine = (GEngine != nullptr) ? *GEngine : nullptr;
@@ -2806,6 +3234,13 @@ void CMatchmaking::RegisterCommands()
                     MILAN_INFOW(ELOG_Matchmaking, L"  player %s: ping %s", *PRI->PlayerName, DescribePing(PRI->Ping).c_str());
             }
         }
+        if (!S.Presence.InfoKnown)
+            MILAN_INFOW(ELOG_Matchmaking, L"  presence: not known yet (learned when this game first hosts, joins or searches)");
+        else if (S.Presence.Seconds <= 0)
+            MILAN_INFOW(ELOG_Matchmaking, L"  presence: off (the matchmaker does not ask for it)");
+        else
+            MILAN_INFOW(ELOG_Matchmaking, L"  presence: every %d s while in no lobby or search%s", S.Presence.Seconds,
+                S.Presence.Reported ? L" (reporting)" : L"");
         if (S.AutoHost.Suppressed)
             MILAN_INFOW(ELOG_Matchmaking, L"  automatic registration paused by mm.leave until hosting ends (mm.host resumes)");
         else if (S.AutoHost.Failures > 0)
@@ -2868,6 +3303,16 @@ void CMatchmaking::TickLostHost()
 void CMatchmaking::On_GameEngineTick(float const Delta)
 {
     MILAN_UNUSED(Delta);
+    if (mp_state != nullptr && mp_state->PendingKickWorld != nullptr)
+    {
+        UWorld* const KickedWorld = std::exchange(mp_state->PendingKickWorld, nullptr);
+        if (KickedWorld == CurrentWorld())
+        {
+            if (!RunConsoleCommand(L"disconnect"))
+                MILAN_ERRORW(ELOG_Matchmaking, L"vote kick: no local player controller to disconnect");
+            return;
+        }
+    }
     TickLostHost();
     if (mp_state == nullptr)
         return;
@@ -2879,10 +3324,13 @@ void CMatchmaking::On_GameEngineTick(float const Delta)
     TrackGameSocket(S);
 
     Clock::time_point const Now = Clock::now();
+    TickPendingKicks(S, Now);
     TickPlayerPing(S, Now);
     TickHosting(S, Now);
+    TickPresence(S, Now);
     TickPendingJoin(S);
     TickDiscovery(S, Now);
+    UpdatePauseInviteAvailability(S, Now);
 
     if (S.Role == EMatchmakingRole::Host && !S.LobbyId.empty())
     {

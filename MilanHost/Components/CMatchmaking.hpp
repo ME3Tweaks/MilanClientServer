@@ -7,7 +7,8 @@
  * background once its listen server is up; if the matchmaker is unreachable the
  * game carries on and registration is retried.
  *
- * The matchmaker URL comes from config (milan.matchmaker.url), the command line
+ * The matchmaker URL comes from config ([milan.matchmaker], which the in-game Multiplayer
+ * Settings screen edits through ApplySettings), the command line
  * (-mmserver=<url>), the mm.server console command, or the control pipe; an empty
  * URL disables matchmaking. A join code from -mmjoin=<code> or the control pipe
  * runs once the multiplayer menu is open.
@@ -58,8 +59,32 @@ public:
      */
     bool On_ConnectionError();
 
+    /** Authority removes a lobby player; the target's ClientKickPlayer RPC leaves locally. */
+    bool On_KickPlayer(USFXOnlineComponentBlazeGame* Game, FUniqueNetId const& PlayerId);
+
+    /**
+     * Game thread. The multiplayer settings screen saved a matchmaker (empty disables
+     * matchmaking) and the access key to send it (empty for none).
+     */
+    void ApplySettings(std::string const& Url, std::string const& AccessKey);
+    /** Game thread: supplies the installed mod identity, not the ASI version. Empty disables matchmaking. */
+    bool SetModVersion(std::string const& Version);
+
+    /** True while connected to other players or joining a lobby. */
+    bool IsInSession() const;
+
+    /** How a menu Quick Match ended. The failures map to the script's distinct error prompts. */
+    enum class EQuickMatchOutcome
+    {
+        Matched,            // A host was reserved; travel to it.
+        NoMatch,            // The search ended without a usable lobby.
+        MatchmakingOff,     // Matchmaking is turned off (or the mod version is unknown, which disables it).
+        ServerUnavailable,  // The matchmaker could not be reached or answered with an error.
+        AccessKeyRejected,  // The matchmaker refused the configured access key.
+    };
+
     /** Starts a menu Quick Match. Completion runs on the game thread. */
-    bool StartQuickMatch(int MapId, int EnemyModeId, int DifficultyId, std::function<void(bool)> Done);
+    bool StartQuickMatch(int MapId, int EnemyModeId, int DifficultyId, std::function<void(EQuickMatchOutcome)> Done);
     void CancelQuickMatch();
     std::wstring QuickMatchConnectString() const;
 
