@@ -50,6 +50,9 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Engine/ExtObject.hpp
   ${PROJ_FOLDER}/Engine/Hooks.cpp
   ${PROJ_FOLDER}/Engine/Hooks.hpp
+  ${PROJ_FOLDER}/Engine/InputPromptFix.cpp
+  ${PROJ_FOLDER}/Engine/InputPromptFix.hpp
+  ${PROJ_FOLDER}/Engine/InputPromptPolicy.hpp
   ${PROJ_FOLDER}/Engine/Intercept.cpp
   ${PROJ_FOLDER}/Engine/Intercept.hpp
   ${PROJ_FOLDER}/Engine/LinkerPatcher.cpp
@@ -63,8 +66,11 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/NetProf/NetProfHandlers.cpp
   ${PROJ_FOLDER}/NetProf/NetProfStream.cpp
   ${PROJ_FOLDER}/NetProf/NetProfStream.hpp
+  ${PROJ_FOLDER}/Online/AchievementGuard.cpp
+  ${PROJ_FOLDER}/Online/AchievementGuard.hpp
   ${PROJ_FOLDER}/Online/MatchmakingNet.cpp
   ${PROJ_FOLDER}/Online/MatchmakingNet.hpp
+  ${PROJ_FOLDER}/Online/ModVersion.hpp
   ${PROJ_FOLDER}/Online/MPProfile.cpp
   ${PROJ_FOLDER}/Online/MPProfile.hpp
   ${PROJ_FOLDER}/Online/Rendezvous.cpp
