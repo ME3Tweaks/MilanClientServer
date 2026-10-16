@@ -2,6 +2,7 @@
 #include "Components/CImgui.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
+#include "Engine/InputPromptFix.hpp"
 #include "Engine/LinkerPatcher.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfDecls.hpp"
@@ -44,6 +45,7 @@ void CGlobals::PostInitialize(::LESDK::Initializer& Context)
 
 void CGlobals::UninstallSomeHooks(::LESDK::Initializer& Context)
 {
+    InputPromptFix::Uninstall(Context);
     Context.UninstallHook("UWorld::Tick");
     Context.UninstallHook("UObject::ProcessInternal");
     Context.UninstallHook("UObject::ProcessEvent");
@@ -112,6 +114,7 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(UGameEngine, Tick, GLOBAL_UGAMEENGINE_TICK_PHOOK);
     // LoadPackage itself is installed by LoadGate::Install at the very start of attach.
 
+    InputPromptFix::Initialize(Context);
     // Never uninstalled, so shutdown profile saves stay blocked too.
     AchievementGuard::Initialize(Context);
     LinkerPatcher::Initialize(Context);
