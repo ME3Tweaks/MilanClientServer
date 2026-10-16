@@ -30,7 +30,7 @@ namespace MatchmakingNet
     };
 
     /**
-     * Performs a blocking HTTP(S) request. @p BaseUrl is e.g. "http://127.0.0.1:5080",
+     * Performs a blocking HTTP(S) request.
      * @p Path starts with '/'. Empty @p Bearer and @p JsonBody are omitted.
      * Response bodies over 256 KiB are rejected.
      *
@@ -41,6 +41,15 @@ namespace MatchmakingNet
     HttpResult Request(std::string const& BaseUrl, wchar_t const* Method, std::string const& Path,
         std::string const& Bearer, std::string const& JsonBody, int ReceiveTimeoutMs);
 
+    /** True when @p Key can be sent by SetAccessKey: printable ASCII without spaces, at most 256 characters. */
+    bool IsValidAccessKey(std::string const& Key);
+
+    /**
+     * Sends @p Key as the X-Milan-Access-Key header on requests to @p BaseUrl and to no other
+     * server. An empty or invalid key removes that server's key. Other servers keep theirs.
+     */
+    void SetAccessKey(std::string const& BaseUrl, std::string const& Key);
+
     /** True when @p BaseUrl is plain http:// to a host other than this PC or a LAN address. */
     bool IsPlainHttpToRemote(std::string const& BaseUrl);
 
@@ -50,10 +59,12 @@ namespace MatchmakingNet
     bool HmacSha256(std::span<std::uint8_t const> Key, std::span<std::uint8_t const> Data, std::span<std::uint8_t, 32> Out);
 
     /**
-     * Canonical dotted-quad private IPv4 addresses of up adapters (RFC 1918, 169.254/16, 100.64/10),
+     * Canonical dotted-quad private IPv4 addresses of up adapters (RFC 1918, 100.64/10),
      * adapters with a default gateway first.
      */
     std::vector<std::string> LanIPv4Addresses(std::size_t Max);
+    /** Private candidates must be on a local subnet or explicit on-link VPN route; never gateways/link-local. */
+    bool IsSafePeerAddress(std::uint32_t AddressNetworkOrder, bool AllowLoopback = false);
 
     /** Local port of a bound IPv4 socket handle, or -1. */
     int LocalPort(std::uintptr_t SocketHandle);

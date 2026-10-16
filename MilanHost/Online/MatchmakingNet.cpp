@@ -12,6 +12,8 @@
 #include <sddl.h>
 #include <winhttp.h>
 
+#include <algorithm>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -19,6 +21,7 @@
 #include <utility>
 
 #include "Online/MatchmakingNet.hpp"
+#include "Online/PeerSecurity.hpp"
 
 // Older Windows SDKs do not define it; the value is fixed by WinHTTP.
 #ifndef WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3
@@ -114,7 +117,6 @@ namespace
         return b[0] == 10
             || (b[0] == 172 && (b[1] & 0xF0) == 16)
             || (b[0] == 192 && b[1] == 168)
-            || (b[0] == 169 && b[1] == 254)
             || (b[0] == 100 && (b[1] & 0xC0) == 64);
     }
 
@@ -317,6 +319,20 @@ namespace
         }
         return ::GetOverlappedResult(Instance, &Overlapped, &OutBytes, FALSE) ? EPipeIo::Done : EPipeIo::Failed;
     }
+
+    // Set on the game thread, read by the HTTP worker threads. Keys stay per server, so requests
+    // still queued for a previous matchmaker (such as leaving its lobby) keep sending its key.
+    struct AccessKeyState
+    {
+        std::mutex                          Mutex{};
+        std::map<std::string, std::string>  Keys{};
+    };
+
+    AccessKeyState& AccessKey()
+    {
+        static AccessKeyState State{};
+        return State;
+    }
 }
 
 
@@ -413,16 +429,29 @@ namespace MatchmakingNet
             return Result;
         }
 
-        HINTERNET const Connection = HttpClient().Connect(Url, Result.Error);
-        if (Connection == nullptr)
-            return Result;
-
         std::wstring const WidePath = Widen(Path);
         std::wstring Headers = L"Accept: application/json\r\n";
         if (!JsonBody.empty())
             Headers += L"Content-Type: application/json\r\n";
         if (!Bearer.empty())
             Headers += L"Authorization: Bearer " + Widen(Bearer) + L"\r\n";
+        {
+            AccessKeyState& Access = AccessKey();
+            std::lock_guard Lock{ Access.Mutex };
+            if (auto const Key = Access.Keys.find(BaseUrl); Key != Access.Keys.end())
+            {
+                if (!Url.Secure)
+                {
+                    Result.Error = "server passwords require an https:// matchmaker URL";
+                    return Result; // Never transmit the password, even to a local HTTP server.
+                }
+                Headers += L"X-Milan-Access-Key: " + Widen(Key->second) + L"\r\n";
+            }
+        }
+
+        HINTERNET const Connection = HttpClient().Connect(Url, Result.Error);
+        if (Connection == nullptr)
+            return Result;
 
         // A pooled connection that the server or a proxy closed while it was idle fails before
         // any response arrives; the second attempt gets a new connection. A server that cannot
@@ -436,6 +465,21 @@ namespace MatchmakingNet
                 return Result;
             Result = {};
         }
+    }
+
+    bool IsValidAccessKey(std::string const& Key)
+    {
+        return Key.size() <= 256 && std::all_of(Key.begin(), Key.end(), [](char const C) { return C > 0x20 && C < 0x7F; });
+    }
+
+    void SetAccessKey(std::string const& BaseUrl, std::string const& Key)
+    {
+        AccessKeyState& Access = AccessKey();
+        std::lock_guard Lock{ Access.Mutex };
+        if (!Key.empty() && IsValidAccessKey(Key))
+            Access.Keys[BaseUrl] = Key;
+        else
+            Access.Keys.erase(BaseUrl);
     }
 
     bool IsPlainHttpToRemote(std::string const& BaseUrl)
@@ -544,6 +588,74 @@ namespace MatchmakingNet
             }
         }
         return Addresses;
+    }
+
+    bool IsSafePeerAddress(std::uint32_t const AddressNetworkOrder, bool const AllowLoopback)
+    {
+        PeerSecurity::IPv4 target{};
+        std::memcpy(target.data(), &AddressNetworkOrder, target.size());
+        if (target[0] == 127)
+            return AllowLoopback;
+        if (target[0] == 0 || target[0] >= 224 || (target[0] == 169 && target[1] == 254))
+            return false;
+        if (!PeerSecurity::IsPrivate(target))
+            return true;
+
+        ULONG size = 16 * 1024;
+        std::unique_ptr<std::uint8_t[]> buffer;
+        ULONG status = ERROR_BUFFER_OVERFLOW;
+        for (int attempt = 0; attempt < 3 && status == ERROR_BUFFER_OVERFLOW; ++attempt)
+        {
+            buffer = std::make_unique<std::uint8_t[]>(size);
+            status = ::GetAdaptersAddresses(AF_INET,
+                GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_INCLUDE_GATEWAYS,
+                nullptr, reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buffer.get()), &size);
+        }
+        if (status != NO_ERROR)
+            return false;
+        bool onSubnet = false;
+        for (auto* adapter = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buffer.get()); adapter != nullptr; adapter = adapter->Next)
+        {
+            if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK)
+                continue;
+            for (auto* gateway = adapter->FirstGatewayAddress; gateway != nullptr; gateway = gateway->Next)
+            {
+                auto* address = reinterpret_cast<sockaddr_in*>(gateway->Address.lpSockaddr);
+                if (address != nullptr && address->sin_family == AF_INET && address->sin_addr.s_addr == AddressNetworkOrder)
+                    return false;
+            }
+            for (auto* unicast = adapter->FirstUnicastAddress; unicast != nullptr; unicast = unicast->Next)
+            {
+                auto* address = reinterpret_cast<sockaddr_in*>(unicast->Address.lpSockaddr);
+                if (address == nullptr || address->sin_family != AF_INET)
+                    continue;
+                PeerSecurity::IPv4 local{};
+                std::memcpy(local.data(), &address->sin_addr.s_addr, local.size());
+                unsigned const prefix = unicast->OnLinkPrefixLength;
+                if (PeerSecurity::IsPrivate(local) && prefix > 0 && prefix < 31)
+                {
+                    std::uint32_t const mask = 0xFFFFFFFFu << (32 - prefix);
+                    if ((PeerSecurity::Number(target) & mask) == (PeerSecurity::Number(local) & mask)
+                        && !PeerSecurity::OnSubnet(target, local, prefix))
+                        return false;
+                }
+                onSubnet = onSubnet || PeerSecurity::OnSubnet(target, local, unicast->OnLinkPrefixLength);
+            }
+        }
+        if (onSubnet)
+            return true;
+        // Overlay adapters may use /32 local addresses plus explicit on-link routes.
+        SOCKADDR_INET destination{};
+        destination.Ipv4.sin_family = AF_INET;
+        destination.Ipv4.sin_addr.s_addr = AddressNetworkOrder;
+        MIB_IPFORWARD_ROW2 route{};
+        SOCKADDR_INET source{};
+        if (::GetBestRoute2(nullptr, 0, nullptr, &destination, 0, &route, &source) != NO_ERROR
+            || route.DestinationPrefix.PrefixLength == 0 || route.NextHop.Ipv4.sin_addr.s_addr != 0)
+            return false;
+        PeerSecurity::IPv4 local{};
+        std::memcpy(local.data(), &source.Ipv4.sin_addr.s_addr, local.size());
+        return PeerSecurity::IsPrivate(local);
     }
 
     int LocalPort(std::uintptr_t const SocketHandle)

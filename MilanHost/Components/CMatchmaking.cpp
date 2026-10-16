@@ -10,6 +10,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <random>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -25,6 +26,7 @@
 #include "Engine/Intercept.hpp"
 #include "Online/MatchmakingNet.hpp"
 #include "Online/Rendezvous.hpp"
+#include "Online/PeerSecurity.hpp"
 #include "Public/LmpLobby.h"
 #include "Shell/ClientConfig.hpp"
 #include "Shell/CmdArgs.hpp"
@@ -136,7 +138,8 @@ namespace
         std::vector<Endpoint> Result{};
         for (auto const& Candidate : Array)
         {
-            if (auto Parsed = ParseCandidate(Candidate); Parsed && Result.size() < 8)
+            if (auto Parsed = ParseCandidate(Candidate); Parsed && Result.size() < 8
+                && MatchmakingNet::IsSafePeerAddress(Parsed->Address, AllowLoopback))
                 Result.push_back(std::move(*Parsed));
         }
         return Result;
@@ -259,10 +262,22 @@ struct PeerPath
 };
 
 // The hosted lobby's settings as the game last published them through UpdateOnlineGame.
+struct AdmittedPeer
+{
+    FUniqueNetId PlayerId{};
+    UNetDriver* Driver{ nullptr };
+    UNetConnection* Connection{ nullptr };
+    std::string Proof{};
+};
+
 struct HostedSettings
 {
     bool                            Known{ false };
-    bool                            Private{ false };       // LMP only has Public and Private.
+    // The game's privacy modes (EMatchPrivacySetting) as the matchmaker sees them: Public is
+    // listed and members invite, Friends is unlisted and members invite, Private is unlisted and
+    // only the host invites.
+    bool                            Private{ false };       // Unlisted: Private or Friends.
+    bool                            MemberInvites{ true };  // Members may invite: Public or Friends.
     bool                            AllowMatchmaking{ true };
     bool                            LockedToStart{ false }; // Locked by the lobby committing to a match.
     int                             MapId{ 0 };             // 0 is Random, for maps and enemies alike.
@@ -306,6 +321,7 @@ struct MatchmakingState
 
     // From /v1/info and DNS.
     bool                            InfoReady{ false };
+    bool                            AccessKeyRejected{ false };   // The last /v1/info refused the access key.
     std::uint32_t                   ServerAddress{ 0 };
     std::uint16_t                   ServerUdpPort{ 0 };
     int                             HeartbeatSeconds{ 20 };
@@ -335,6 +351,7 @@ struct MatchmakingState
     bool                            IntroductionsPaused{ false };
     std::vector<std::string>        LanAddresses{};
     std::map<std::string, PeerPath> Joiners{};
+    std::map<std::string, AdmittedPeer> AdmittedMembers{};
     // A new host after migration: its lobby may still be loading until AdoptUntil. The UDP
     // ticket is used once the listen socket exists, and the first report waits (until
     // AdoptReportBy at most) for discovery so the members see the observed endpoint.
@@ -783,6 +800,21 @@ namespace
 
     // A lobby opened with origin=MultiplayerMenu takes its settings from the online game
     // settings (SFXLobbyFlow.InitMatchSettings), so a new host puts the lobby's there first.
+    // EMatchPrivacySetting.
+    constexpr unsigned char k_privacyPublic = 0;
+    constexpr unsigned char k_privacyPrivate = 1;
+    constexpr unsigned char k_privacyFriends = 2;
+
+    unsigned char PrivacyMode(HostedSettings const& H)
+    {
+        return !H.Private ? k_privacyPublic : H.MemberInvites ? k_privacyFriends : k_privacyPrivate;
+    }
+
+    wchar_t const* PrivacyName(HostedSettings const& H)
+    {
+        return !H.Private ? L"public" : H.MemberInvites ? L"friends" : L"private";
+    }
+
     bool ApplyLobbySettings(HostedSettings const& H)
     {
         for (TypedObjectIterator<USFXOnlineComponentBlazeGame, true, false> Iter{}; Iter; ++Iter)
@@ -909,6 +941,7 @@ namespace
                 try
                 {
                     std::optional<json> const Info = SuccessJson(Result, "server info");
+                    State.AccessKeyRejected = !Info && Result.Status == 401 && ErrorCode(Result) == "access_key_invalid";
                     if (!Info)
                     {
                         if (Failed) Failed(State);
@@ -977,6 +1010,63 @@ namespace
         return S.ServerMaxPlayersCeiling;
     }
 
+    // Bind admission to a connection the game accepted. Counts and peer probes
+    // alone cannot establish that a reservation holder actually joined the game.
+    void RefreshAdmittedMembers(MatchmakingState& S)
+    {
+        if (IsLevelTransitioning())
+            return;
+        UWorld* const World = CurrentWorld();
+        UNetDriver* const Driver = World != nullptr ? World->NetDriver : nullptr;
+        if (Driver == nullptr || Driver->ServerConnection != nullptr)
+            return;
+        std::map<std::string, AdmittedPeer> active;
+        for (UNetConnection* const Client : Driver->ChildConnections)
+        {
+            APlayerReplicationInfo* const PRI = Client != nullptr && Client->Actor != nullptr ? Client->Actor->PlayerReplicationInfo : nullptr;
+            if (Client == nullptr || Client->ConnectionState != USOCK_Open || PRI == nullptr)
+                continue;
+            if (std::any_of(S.PendingKicks.begin(), S.PendingKicks.end(), [&](PendingLobbyKick const& kick)
+                { return kick.Driver == Driver && kick.Connection == Client && SamePlayerId(kick.PlayerId, PRI->UniqueId); }))
+                continue;
+            bool known = false;
+            for (auto const& [Id, Peer] : S.AdmittedMembers)
+            {
+                if (Peer.Driver == Driver && Peer.Connection == Client && SamePlayerId(Peer.PlayerId, PRI->UniqueId))
+                {
+                    active.emplace(Id, Peer);
+                    known = true;
+                    break;
+                }
+            }
+            if (known)
+                continue;
+            std::string const url = Client->RequestURL.Length() <= 4096 ? Narrow(*Client->RequestURL) : std::string{};
+            auto const id = PeerSecurity::UrlOption(url, "MilanMember");
+            auto const proof = PeerSecurity::UrlOption(url, "MilanProof");
+            if (!id || !proof || id->size() != 22 || proof->size() != 32)
+                continue;
+            std::string expected;
+            auto const previous = S.AdmittedMembers.find(std::string{ *id });
+            if (previous != S.AdmittedMembers.end() && SamePlayerId(previous->second.PlayerId, PRI->UniqueId))
+                expected = previous->second.Proof;
+            else if (auto const pending = S.Joiners.find(std::string{ *id }); pending != S.Joiners.end())
+                expected = Rendezvous::AdmissionProof(pending->second.TraversalKey);
+            if (!PeerSecurity::EqualProof(*proof, expected))
+                continue;
+            active.emplace(std::string{ *id }, AdmittedPeer{ PRI->UniqueId, Driver, Client, expected });
+            if (previous == S.AdmittedMembers.end())
+                MILAN_INFOW(ELOG_Matchmaking, L"listen host confirmed member %S", std::string{ *id }.c_str());
+        }
+        for (auto const& [Id, Peer] : S.AdmittedMembers)
+        {
+            MILAN_UNUSED(Peer);
+            if (!active.contains(Id))
+                MILAN_INFOW(ELOG_Matchmaking, L"listen host revoked member %S", Id.c_str());
+        }
+        S.AdmittedMembers = std::move(active);
+    }
+
     // Wave progress is not read yet; an in-progress match reports wave 0.
     json BuildLobbyState(MatchmakingState const& S)
     {
@@ -985,6 +1075,7 @@ namespace
         bool const InLobby = HostIsInLobby();
         json State{
             { "isPrivate", H.Private },
+            { "memberInvites", H.MemberInvites },
             { "joinable", IsJoinable(H, InLobby) },
             { "mapId", H.MapId },
             { "enemyModeId", H.EnemyModeId },
@@ -995,7 +1086,15 @@ namespace
             { "waveNumber", 0 },
             { "gamePort", S.LocalPort },
             { "lanAddresses", S.LanAddresses },
+            { "memberIds", json::array() },
         };
+        for (auto const& [Id, Peer] : S.AdmittedMembers)
+        {
+            MILAN_UNUSED(Peer);
+            if (State["memberIds"].size() >= static_cast<std::size_t>(MaxPlayers - 1))
+                break;
+            State["memberIds"].push_back(Id);
+        }
         if (H.ResolvedMapId)
             State["resolvedMapId"] = *H.ResolvedMapId;
         if (H.ResolvedEnemyId)
@@ -1069,7 +1168,8 @@ namespace
                 MILAN_INFOW(ELOG_Matchmaking, L"joiner reserved a slot (reservation %S)", Id.c_str());
             }
 
-            std::vector<Endpoint> Candidates = ParseCandidates(Introduction.at("joinerCandidates"));
+            std::vector<Endpoint> Candidates = ParseCandidates(Introduction.at("joinerCandidates"),
+                reinterpret_cast<std::uint8_t const*>(&S.ServerAddress)[0] == 127);
             if (Candidates != Path.Candidates)
             {
                 for (auto const& Candidate : Candidates)
@@ -1178,7 +1278,7 @@ namespace
                 Session.AutoHost.Failures = 0;
 
                 MILAN_INFOW(ELOG_Matchmaking, L"lobby registered (%s); invite code %S (game port %d)",
-                    Session.Hosted.Private ? L"private" : L"public", Session.InviteCode.c_str(), Session.LocalPort);
+                    PrivacyName(Session.Hosted), Session.InviteCode.c_str(), Session.LocalPort);
                 ContinueIntroductions(Session);
             });
         }, [](MatchmakingState& State) { RetryHostLater(State); });
@@ -1245,7 +1345,8 @@ namespace
 
             State.ReservationVersion = Status->at("version").get<long long>();
             State.SamePublicAddress = Status->at("samePublicAddress").get<bool>();
-            std::vector<Endpoint> Candidates = ParseCandidates(Status->at("hostCandidates"));
+            std::vector<Endpoint> Candidates = ParseCandidates(Status->at("hostCandidates"),
+                reinterpret_cast<std::uint8_t const*>(&State.ServerAddress)[0] == 127);
             if (Candidates != State.HostPath.Candidates)
             {
                 for (auto const& Candidate : Candidates)
@@ -1323,6 +1424,10 @@ namespace
 
         MILAN_INFOW(ELOG_Matchmaking, L"joining via %S (%S, same public address: %d)",
             Target->ToString().c_str(), Target->Kind.c_str(), S.SamePublicAddress ? 1 : 0);
+        std::string const Proof = Rendezvous::AdmissionProof(S.HostPath.TraversalKey);
+        if (Proof.empty())
+            return false;
+        std::string const TravelUrl = Target->ToString() + "?MilanMember=" + S.ReservationId + "?MilanProof=" + Proof;
         if (QuickMatch)
         {
             S.QuickMatchTarget = Widen(Target->ToString());
@@ -1438,6 +1543,8 @@ namespace
             return Localize(Text::AddressLimit);
         if (Code == "server_full")
             return Localize(Text::ServerBusy);
+        if (Code == "access_key_invalid")
+            return Localize(Text::AccessKeyRejected);
         if (Result.Status == 0)
             return Localize(Text::ServerUnreachable);
         return Localize(Text::JoinFailed, Widen(DescribeFailure(Result)));
@@ -1480,7 +1587,15 @@ namespace
         }, [](MatchmakingState& State)
         {
             std::wstring const Server = Widen(State.BaseUrl);
+            bool const bKeyRejected = State.AccessKeyRejected;
+            bool const bDefaultServer = State.BaseUrl == k_defaultMatchmakerUrl;
             ResetSession(State);
+            // The default server's address is not shown to players.
+            if (bKeyRejected)
+                ReportJoinFailure(Localize(Text::AccessKeyRejected));
+            else if (bDefaultServer)
+                ReportJoinFailure(Localize(Text::ServerUnreachable));
+            else
             ReportJoinFailure(Localize(Text::ServerConnectFailed, Server));
         });
     }
@@ -1530,6 +1645,7 @@ namespace
         HostedSettings Settings{};
         Settings.Known = true;
         Settings.Private = Lobby.at("isPrivate").get<bool>();
+        Settings.MemberInvites = Lobby.value("memberInvites", !Settings.Private);
         Settings.MapId = Lobby.at("mapId").get<int>();
         Settings.EnemyModeId = Lobby.at("enemyModeId").get<int>();
         Settings.DifficultyId = Lobby.at("difficultyId").get<int>();
@@ -1840,7 +1956,7 @@ namespace
             // a free slot after the players and the reservations still on their way in.
             int Reserved = 0;
             for (auto const& Joiner : S.Joiners)
-                Reserved += Joiner.second.Joined ? 0 : 1;
+                Reserved += S.AdmittedMembers.contains(Joiner.first) ? 0 : 1;
             bool const HandingOff = S.AdoptUntil != Clock::time_point{} || S.AdoptReportBy != Clock::time_point{};
             if (S.Role == EMatchmakingRole::Host && !S.LobbyId.empty() && S.Hosted.Known && !HandingOff
                 && IsJoinable(S.Hosted, InLobby) && Out.PlayerCount + Reserved < MaxPlayers)
@@ -2252,6 +2368,7 @@ namespace
             PollIntroductions(S);
         }
 
+        RefreshAdmittedMembers(S);
         // Setting changes go out promptly; otherwise the full state doubles as the heartbeat.
         bool Due = Now >= S.NextHeartbeat;
         if (!Due && Now >= S.NextStateCheck)
@@ -2443,7 +2560,8 @@ void CMatchmaking::On_HostSettingsChanged(USFXOnlineGameSettings* const Settings
         H.ResolvedEnemyId = EnemyModeId;
     }
     H.DifficultyId = Settings->Difficulty;
-    H.Private = Settings->mPrivacySetting != 0;
+    H.Private = Settings->mPrivacySetting != k_privacyPublic;
+    H.MemberInvites = Settings->mPrivacySetting != k_privacyPrivate;
     H.Known = true;
 }
 
