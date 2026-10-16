@@ -1380,8 +1380,18 @@ namespace
     }
 
     void StartSearch(MatchmakingState& S, int const MapId, int const EnemyModeId, int const DifficultyId,
-        std::function<void(bool)> Done)
+        std::function<void(QuickMatchOutcome)> Done)
     {
+        // An empty URL is matchmaking turned off (Multiplayer Settings or mm.server off); an unknown mod version disables it too.
+        if (S.BaseUrl.empty() || S.ModVersion.empty())
+        {
+            MILAN_WARNW(ELOG_Matchmaking, S.BaseUrl.empty()
+                ? L"quick match is unavailable: matchmaking is turned off"
+                : L"quick match requires a known mod version; set [milan.game] version or mm.version");
+            if (Done)
+                Done(QuickMatchOutcome::MatchmakingOff);
+            return;
+        }
         ResetSession(S);
         S.Role = EMatchmakingRole::Joiner;
         S.QuickMatchDone = std::move(Done);
@@ -1401,7 +1411,7 @@ namespace
                     std::optional<json> const Created = SuccessJson(Result, "quick match search");
                     if (!Created)
                     {
-                        FinishQuickMatch(Session, false);
+                        FinishQuickMatch(Session, QuickMatchServerFailure(Session));
                         return;
                     }
                     Session.SearchId = Created->at("searchId").get<std::string>();

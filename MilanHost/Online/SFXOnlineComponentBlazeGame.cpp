@@ -720,7 +720,28 @@ enum EQuickMatchResult : BYTE
     EQMR_StartGame = 2u,
     EQMR_RetryQuickMatch = 3u,
     EQMR_Failure = 4u,
+    // Milan additions. The lobby script (SFXGameInfoMP_Lobby.OnQuickMatchComplete) shows a reason for each error
+    EQMR_MatchmakingOff = 5u,
+    EQMR_ServerUnavailable = 6u,
+    EQMR_AccessKeyRejected = 7u,
 };
+
+/// <summary>
+/// Converts outcome to enum value for unrealscript
+/// </summary>
+/// <param name="Outcome"></param>
+/// <returns></returns>
+static EQuickMatchResult ToQuickMatchResult(CMatchmaking::EQuickMatchOutcome const Outcome)
+{
+    switch (Outcome)
+    {
+    case CMatchmaking::EQuickMatchOutcome::Matched:             return EQMR_StartGame;
+    case CMatchmaking::EQuickMatchOutcome::MatchmakingOff:      return EQMR_MatchmakingOff;
+    case CMatchmaking::EQuickMatchOutcome::ServerUnavailable:   return EQMR_ServerUnavailable;
+    case CMatchmaking::EQuickMatchOutcome::AccessKeyRejected:   return EQMR_AccessKeyRejected;
+    default:                                                    return EQMR_Failure;
+    }
+}
 
 void SFXOnlineComponentBlazeGame::QuickMatch_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
 {
@@ -741,10 +762,10 @@ void SFXOnlineComponentBlazeGame::QuickMatch_Hook(USFXOnlineComponentBlazeGame* 
     int const EnemyModeId = Settings->EnemyType;
     int const DifficultyId = Settings->Difficulty;
     *(UBOOL*)Result = COMPONENT(CMatchmaking).StartQuickMatch(MapId, EnemyModeId, DifficultyId,
-        [Context](bool const Matched)
+        [Context](CMatchmaking::EQuickMatchOutcome const Outcome)
         {
             USFXOnlineComponentBlazeGame_execOnQuickMatchComplete_Parms Parms{};
-            Parms.Result = Matched ? EQMR_StartGame : EQMR_Failure;
+            Parms.Result = ToQuickMatchResult(Outcome);
             SFXName const Name(L"OnQuickMatchComplete", 0);
             // A script callback may clear its delegate. Snapshot the array before dispatch.
             std::vector<FScriptDelegate> Delegates{};
