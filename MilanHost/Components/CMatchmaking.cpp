@@ -133,7 +133,7 @@ namespace
         return Result;
     }
 
-    std::vector<Endpoint> ParseCandidates(json const& Array)
+    std::vector<Endpoint> ParseCandidates(json const& Array, bool const AllowLoopback)
     {
         std::vector<Endpoint> Result{};
         for (auto const& Candidate : Array)
@@ -653,6 +653,7 @@ namespace
         constexpr LocalizedText NewHostRejoining{ 49875714, L"Another player is the new host. Rejoining..." };
         constexpr LocalizedText LostHostSearching{ 49875715, L"Lost the connection to the host. Looking for a new host..." };
         constexpr LocalizedText InvitesOff{ 49875716, L"This lobby is set to 1 player, so invites are off." };
+        constexpr LocalizedText AccessKeyRejected{ 49875718, L"The matchmaking server's password is missing or wrong. Check it in Options > Multiplayer Settings." };
     }
 
     // Looks @p Text up in the loaded TLKs the way script does (SFXGame.GetSimpleString).
@@ -1380,6 +1381,12 @@ namespace
         S.QuickMatchDone = {};
         if (Done)
             Done(Success);
+    }
+
+    // A failed request to the matchmaker is a refused key when /v1/info said so; otherwise it is unavailable.
+    QuickMatchOutcome QuickMatchServerFailure(MatchmakingState const& S)
+    {
+        return S.AccessKeyRejected ? QuickMatchOutcome::AccessKeyRejected : QuickMatchOutcome::ServerUnavailable;
     }
 
     // Takes a reservation's credentials and what is known of the path to its host.
