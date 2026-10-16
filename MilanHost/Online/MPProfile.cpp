@@ -178,7 +178,7 @@ ProfileSetting ProfileSetting::Construct(int const InId, FString const& InValue)
 // ! MPProfile implementation.
 // ========================================
 
-FString MPProfile::GetProfilePathStatic()
+static FString GetSharedProfilePath()
 {
     FString ProfilePath{};
     WCHAR* DocumentPath = nullptr;
@@ -188,6 +188,27 @@ FString MPProfile::GetProfilePathStatic()
 
     ::CoTaskMemFree(DocumentPath);
     return *ProfilePath;
+}
+
+// Each game rewrites the whole profile from memory, so concurrent instances sharing
+// one file overwrite each other's saves. Extra instances write their own file.
+FString MPProfile::GetProfilePathStatic()
+{
+    FString ProfilePath = GetSharedProfilePath();
+    int const Ordinal = ::GetGameInstanceOrdinal();
+    if (Ordinal > 0)
+        ProfilePath.AppendFormat(L"-%d", Ordinal);
+    return ProfilePath;
+}
+
+// Extra instances start from the shared profile until they have saved their own.
+FString MPProfile::GetLoadProfilePathStatic()
+{
+    FString ProfilePath = GetProfilePathStatic();
+    if (::GetGameInstanceOrdinal() > 0 &&
+        ::GetFileAttributesW(*ProfilePath) == INVALID_FILE_ATTRIBUTES)
+        return GetSharedProfilePath();
+    return ProfilePath;
 }
 
 FString const& MPProfile::GetProfilePath() const noexcept
@@ -202,7 +223,7 @@ FString const& MPProfile::GetPlayerName()
     bPlayerNameLoaded = true;
 
     ::game::vector<BYTE> ProfileBuffer{};
-    if (!::ReadFileFull(static_cast<std::wstring_view>(GetProfilePathStatic()), ProfileBuffer))
+    if (!::ReadFileFull(static_cast<std::wstring_view>(GetLoadProfilePathStatic()), ProfileBuffer))
         return CachedPlayerName();
 
     MemoryInputStream ProfileStream{ std::move(ProfileBuffer) };
@@ -216,6 +237,12 @@ FString const& MPProfile::GetPlayerName()
             CachedPlayerName() = Setting.CaseString;
     }
     return CachedPlayerName();
+}
+
+void MPProfile::SetPlayerName(FString const& Name)
+{
+    CachedPlayerName() = Name;
+    bPlayerNameLoaded = true;
 }
 
 MPProfile::MPProfile(USFXEngine* const Engine)

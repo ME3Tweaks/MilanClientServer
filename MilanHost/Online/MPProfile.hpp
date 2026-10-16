@@ -190,9 +190,14 @@ public:
     void Deserialize(IInputStream& Stream);
     void Serialize(IOutputStream& Stream) const;
 
+    // Where this game instance saves: MP_Profile, or MP_Profile-<ordinal> for extra instances.
     static FString GetProfilePathStatic();
+    // Where this game instance loads from: its own file, or MP_Profile before its first save.
+    static FString GetLoadProfilePathStatic();
     FString const& GetProfilePath() const noexcept;
 
     // Reads MP_Profile directly if SFXSaveManagerMP.Initialize has not loaded it yet.
     static FString const& GetPlayerName();
+    // The name the next Serialize writes.
+    static void SetPlayerName(FString const& Name);
 };
