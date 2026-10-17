@@ -13,28 +13,36 @@ namespace
 {
     bool SaveLocalProfile()
     {
+        ::RelativeTimer ProfileTimer{};
+
         auto* const Engine = (*GEngine)->Cast<USFXEngine>();
-        if (Engine == nullptr || Engine->MPSaveManager == nullptr ||
+        if (Engine == nullptr ||
+            Engine->MPSaveManager == nullptr ||
             Engine->MPSaveManager->OnlineSave == nullptr ||
             Engine->AccomplishmentManager == nullptr ||
             Engine->AccomplishmentManager->AccomplishmentStorage == nullptr)
         {
-            MILAN_WARNW(ELOG_MultiProfile, L"profile save failed while storage is uninitialized");
+            MILAN_WARNW(ELOG_MultiProfile, L"local profile save failed: storage is uninitialized");
             return false;
         }
 
         MPProfile Profile{ Engine };
-        ::RelativeTimer ProfileTimer{};
         MemoryOutputStream ProfileStream{ 204800 };
+
         Profile.Serialize(ProfileStream);
-        bool const bSaved = ::TryWriteFileFullAtomic(
-            static_cast<std::wstring_view>(Profile.GetProfilePath()), ProfileStream.View());
-        // Info, not trace: release builds strip trace, leaving no record that a save happened.
+        bool const bSaved = ::TryWriteFileFullAtomic(Profile.GetProfilePath(), ProfileStream.View());
+
         if (bSaved)
-            MILAN_INFOW(ELOG_MultiProfile, L"local profile committed to %s in %.3f ms",
-                        *Profile.GetProfilePath(), ProfileTimer.GetMilliseconds());
+        {
+            MILAN_INFOW(ELOG_MultiProfile, L"local profile saved in %.3f ms (to %s)",
+                ProfileTimer.GetMilliseconds(), *Profile.GetProfilePath());
+        }
         else
-            MILAN_WARNW(ELOG_MultiProfile, L"local profile write failed: %s", *Profile.GetProfilePath());
+        {
+            MILAN_WARNW(ELOG_MultiProfile, L"local profile save failed (to %s)",
+                *Profile.GetProfilePath());
+        }
+
         return bSaved;
     }
 
@@ -273,11 +281,14 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
     // bridge returns. An unhooked bridge returns false rather than claiming a save.
     // BaseDelta compiles it into SFXGame.pcc under its own SFXGameContent_MilanBase package.
     static FunctionNamedIntercept MilanProfileSaveBridge_WriteProfile{};
-    if (MilanProfileSaveBridge_WriteProfile.Applies(
-            Stack->Node, L"SFXGameContent_MilanBase", L"MilanProfileSaveBridge", L"WriteProfile"))
+    if (MilanProfileSaveBridge_WriteProfile.Applies(Stack->Node,
+        L"SFXGameContent_MilanBase", L"MilanProfileSaveBridge", L"WriteProfile"))
     {
         if (Result != nullptr)
+        {
             *static_cast<UBOOL*>(Result) = SaveLocalProfile() ? TRUE : FALSE;
+        }
+
         return false;
     }
 
@@ -358,10 +369,8 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
     // patched packages have already committed before dispatching their callbacks.
     static FunctionStructIntercept SFXSaveManagerMP_SaveRecordsImpl{};
     static FunctionStructIntercept SFXAccomplishmentStorage_Write{};
-    bool const bSaveRecords = SFXSaveManagerMP_SaveRecordsImpl.Applies(
-        Stack->Node, L"Function SFXGame.SFXSaveManagerMP.SaveRecordsImpl");
-    bool const bWriteAccomplishments = SFXAccomplishmentStorage_Write.Applies(
-        Stack->Node, L"Function SFXGame.SFXAccomplishmentStorage.Write");
+    bool const bSaveRecords = SFXSaveManagerMP_SaveRecordsImpl.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.SaveRecordsImpl");
+    bool const bWriteAccomplishments = SFXAccomplishmentStorage_Write.Applies(Stack->Node, L"Function SFXGame.SFXAccomplishmentStorage.Write");
     if ((bSaveRecords || bWriteAccomplishments) &&
         HijackUtils::FindClass(SFXName(L"MilanProfileSaveBridge", 0)) == nullptr)
     {
