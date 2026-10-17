@@ -47,6 +47,29 @@ SPI_IMPLEMENT_ATTACH
     // ----------------------------------------
 
     gp_sdkContext = new ::LESDK::Initializer{ InterfacePtr, "MilanHost" };
+
+    //{
+    //    constexpr size_t k_patchRVA = 0x9BE185;
+    //    constexpr uint8_t k_expectedBytes[] = { 0xe8, 0xf6, 0x25, 0xf9, 0xff };
+    //    constexpr uint8_t k_patchBytes[] = { 0x90, 0x90, 0x90, 0x90, 0x90 };
+
+    //    uint8_t* pPatchAddr = static_cast<uint8_t*>(gp_sdkContext->Resolve(::LESDK::Address::FromOffset(k_patchRVA)));
+    //    if (pPatchAddr != nullptr)
+    //    {
+    //        // Verify expected bytes before patching
+    //        if (std::memcmp(pPatchAddr, k_expectedBytes, sizeof(k_expectedBytes)) == 0)
+    //        {
+    //            DWORD oldProtection = 0;
+    //            if (VirtualProtect(pPatchAddr, sizeof(k_patchBytes), PAGE_EXECUTE_READWRITE, &oldProtection))
+    //            {
+    //                std::memcpy(pPatchAddr, k_patchBytes, sizeof(k_patchBytes));
+    //                FlushInstructionCache(GetCurrentProcess(), pPatchAddr, sizeof(k_patchBytes));
+    //                VirtualProtect(pPatchAddr, sizeof(k_patchBytes), oldProtection, &oldProtection);
+    //            }
+    //        }
+    //    }
+    //}
+
     CConstants::ApplyEarlyMinimumResolutionCompatibility(*gp_sdkContext);
     LoadGate::Install(*gp_sdkContext);
 
