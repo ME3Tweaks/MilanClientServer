@@ -44,6 +44,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Containers/vector.hpp
   ${PROJ_FOLDER}/Engine/Canvas.cpp
   ${PROJ_FOLDER}/Engine/Canvas.hpp
+  ${PROJ_FOLDER}/Engine/BinkUploadPatch.cpp
+  ${PROJ_FOLDER}/Engine/BinkUploadPatch.hpp
   ${PROJ_FOLDER}/Engine/ConsoleAutoComplete.cpp
   ${PROJ_FOLDER}/Engine/ConsoleAutoComplete.hpp
   ${PROJ_FOLDER}/Engine/ExtObject.cpp
@@ -97,7 +99,7 @@ set (PROJ_LINKS
   LESDK-LE3
   ImGui nlohmann-json renderdoc-api tomlplusplus Zydis
   d3d11.lib dxgi.lib dxguid.lib
-  Ws2_32.lib Winhttp.lib Bcrypt.lib Iphlpapi.lib
+  Ws2_32.lib Winhttp.lib Bcrypt.lib Iphlpapi.lib Shell32.lib
 )
 
 add_library (${PROJ_TARGET} SHARED ${PROJ_SOURCES})
