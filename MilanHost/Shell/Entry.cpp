@@ -24,6 +24,7 @@
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
 #include "Components/CConstants.hpp"
+#include "Engine/BinkUploadPatch.hpp"
 #include "Engine/ExtObject.hpp"
 #include "Engine/LoadGate.hpp"
 #include "Misc/GuidCacheUtils.hpp"
@@ -47,6 +48,8 @@ SPI_IMPLEMENT_ATTACH
     // ----------------------------------------
 
     gp_sdkContext = new ::LESDK::Initializer{ InterfacePtr, "MilanHost" };
+    BinkUploadPatch::Result const BinkUploadResult = CmdArgs::HasFlag(L"-egpu")
+        ? BinkUploadPatch::Apply(::GetModuleHandleW(nullptr)) : BinkUploadPatch::Result{};
     CConstants::ApplyEarlyMinimumResolutionCompatibility(*gp_sdkContext);
     LoadGate::Install(*gp_sdkContext);
 
@@ -64,6 +67,22 @@ SPI_IMPLEMENT_ATTACH
     // Initialize subsystems / compontents.
     // ----------------------------------------
     gp_componentContainer->Initialize<COutput>(*gp_sdkContext);
+    switch (BinkUploadResult.State)
+    {
+    case BinkUploadPatch::Status::Disabled:
+        break;
+    case BinkUploadPatch::Status::Enabled:
+        MILAN_INFOW(ELOG_Startup, L"-egpu: enabled cached Bink uploads (four plane flags 0x80050 -> 0x80010)");
+        break;
+    case BinkUploadPatch::Status::AlreadyEnabled:
+        MILAN_WARNW(ELOG_Startup, L"-egpu: all four Bink upload sites are already patched; no writes made");
+        break;
+    default:
+        MILAN_ERRORW(ELOG_Startup, L"-egpu: Bink upload patch failed (status=%u, RVA=0x%zx, Win32 error=%lu); "
+            L"status: 3=validation refused, 4=write refused, 5=rolled back, 6=rollback incomplete",
+            static_cast<unsigned>(BinkUploadResult.State), BinkUploadResult.SiteRva, BinkUploadResult.Error);
+        break;
+    }
     gp_componentContainer->Initialize<CConstants>(*gp_sdkContext);
     gp_componentContainer->Initialize<CGlobals>(*gp_sdkContext);
     gp_componentContainer->Initialize<CCommands>(*gp_sdkContext);

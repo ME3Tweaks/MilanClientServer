@@ -1,3 +1,7 @@
+#include <Windows.h>
+#include <shellapi.h>
+#include <cwchar>
+
 #include "Shell/CmdArgs.hpp"
 
 
@@ -42,4 +46,24 @@ wchar_t const* CmdArgs::GetWithExec() noexcept
 bool CmdArgs::Contain(wchar_t const* const Needle) noexcept
 {
     return std::wcsstr(::CmdArgs::Get(), Needle) != nullptr;
+}
+
+bool CmdArgs::HasFlag(wchar_t const* const Flag) noexcept
+{
+    int Count = 0;
+    auto* const Args = ::CommandLineToArgvW(::GetCommandLineW(), &Count);
+    if (Args == nullptr)
+        return false;
+
+    bool Found = false;
+    for (int Index = 1; Index < Count; ++Index)
+    {
+        if (::_wcsicmp(Args[Index], Flag) == 0)
+        {
+            Found = true;
+            break;
+        }
+    }
+    ::LocalFree(Args);
+    return Found;
 }

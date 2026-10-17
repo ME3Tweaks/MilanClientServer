@@ -16,4 +16,7 @@ wchar_t const* GetWithExec() noexcept;
 /** Checks if command line arguments contain a string (case-sensitively). */
 bool Contain(wchar_t const* Needle) noexcept;
 
+/** Checks for a complete command line argument (case-insensitively). */
+bool HasFlag(wchar_t const* Flag) noexcept;
+
 } // namespace CmdArgs
