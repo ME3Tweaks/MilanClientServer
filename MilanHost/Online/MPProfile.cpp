@@ -272,7 +272,9 @@ void MPProfile::PrepareCharacterStorage() const
     MILAN_CHECKW(OnlineSave != nullptr, L"");
 
     if (OnlineSave->ServerCharacterStrings.Count() < MP_PROFILE_CHARACTER_CAPACITY)
+    {
         OnlineSave->ServerCharacterStrings.Resize(MP_PROFILE_CHARACTER_CAPACITY);
+    }
 }
 
 void MPProfile::Deserialize(IInputStream& Stream)
@@ -428,8 +430,16 @@ void MPProfile::Serialize(IOutputStream& Stream) const
     {
         if (i == SGF_Base)
         {
-            ProfileSetting::Construct(i, CurrentProfileString(
-                OnlineSave->CachedOnlinePlayerStorage, i, OnlineSave->ServerBaseString)).Serialize(Stream);
+            FString BaseString = CurrentProfileString(OnlineSave->CachedOnlinePlayerStorage, i, OnlineSave->ServerBaseString);
+            BaseString = GetRealBaseString(OnlineSave, BaseString);
+
+            OnlineSave->ServerBaseString = BaseString;
+            if (OnlineSave->CachedOnlinePlayerStorage != nullptr)
+            {
+                OnlineSave->CachedOnlinePlayerStorage->SetProfileSettingValue(i, &BaseString);
+            }
+
+            ProfileSetting::Construct(i, BaseString).Serialize(Stream);
             SettingsCount++;
         }
         else if (i >= SGF_Class00 && i <= SGF_Class07)
@@ -438,10 +448,17 @@ void MPProfile::Serialize(IOutputStream& Stream) const
             if (static_cast<UINT>(ClassIndex) >= OnlineSave->ServerClassStrings.Count())
                 continue;
 
-            FString ClassString = CurrentProfileString(
-                OnlineSave->CachedOnlinePlayerStorage, i, OnlineSave->ServerClassStrings(ClassIndex));
+            FString ClassString = CurrentProfileString(OnlineSave->CachedOnlinePlayerStorage, i, OnlineSave->ServerClassStrings(ClassIndex));
+            ClassString = GetRealClassString(OnlineSave, ClassIndex, ClassString);
+
             if (ClassString.Empty())
                 continue;
+
+            OnlineSave->ServerClassStrings(ClassIndex) = ClassString;
+            if (OnlineSave->CachedOnlinePlayerStorage != nullptr) [[likely]]
+            {
+                OnlineSave->CachedOnlinePlayerStorage->SetProfileSettingValue(i, &ClassString);
+            }
 
             ProfileSetting::Construct(i, ClassString).Serialize(Stream);
             SettingsCount++;
@@ -452,24 +469,39 @@ void MPProfile::Serialize(IOutputStream& Stream) const
             if (static_cast<UINT>(CharIndex) >= OnlineSave->ServerCharacterStrings.Count())
                 continue;
 
-            FString CharString = CurrentProfileString(
-                OnlineSave->CachedOnlinePlayerStorage, i, OnlineSave->ServerCharacterStrings(CharIndex));
+            FString CharString = CurrentProfileString(OnlineSave->CachedOnlinePlayerStorage, i, OnlineSave->ServerCharacterStrings(CharIndex));
+            CharString = GetRealCharacterString(OnlineSave, CharIndex, CharString);
+
             if (CharString.Empty())
                 continue;
+
+            OnlineSave->ServerCharacterStrings(CharIndex) = CharString;
+            if (OnlineSave->CachedOnlinePlayerStorage != nullptr) [[likely]]
+            {
+                OnlineSave->CachedOnlinePlayerStorage->SetProfileSettingValue(i, &CharString);
+            }
 
             ProfileSetting::Construct(i, CharString).Serialize(Stream);
             SettingsCount++;
         }
         else if (i == SGF_FaceCodes)
         {
-            ProfileSetting::Construct(i, CurrentProfileString(
-                OnlineSave->CachedOnlinePlayerStorage, i, OnlineSave->ServerFaceCodesString)).Serialize(Stream);
+            FString FaceString = CurrentProfileString(OnlineSave->CachedOnlinePlayerStorage, i, OnlineSave->ServerFaceCodesString);
+            FaceString = GetRealFacesString(OnlineSave, FaceString);
+
+            OnlineSave->ServerFaceCodesString = FaceString;
+            if (OnlineSave->CachedOnlinePlayerStorage != nullptr)
+            {
+                OnlineSave->CachedOnlinePlayerStorage->SetProfileSettingValue(i, &FaceString);
+            }
+
+            ProfileSetting::Construct(i, FaceString).Serialize(Stream);
             SettingsCount++;
         }
         else if (i == SGF_NewReinforcements)
         {
-            ProfileSetting::Construct(i, CurrentProfileString(
-                OnlineSave->CachedOnlinePlayerStorage, i, OnlineSave->ServerNewReinforcementsString)).Serialize(Stream);
+            FString const ReinforcementString = CurrentProfileString(OnlineSave->CachedOnlinePlayerStorage, i, OnlineSave->ServerNewReinforcementsString);
+            ProfileSetting::Construct(i, ReinforcementString).Serialize(Stream);
             SettingsCount++;
         }
         else if (i == ASF_Completion)
@@ -539,12 +571,15 @@ void MPProfile::Serialize(IOutputStream& Stream) const
         if (static_cast<UINT>(CharIndex) >= OnlineSave->ServerCharacterStrings.Count())
             break;
 
-        auto const& CharString = OnlineSave->ServerCharacterStrings(CharIndex);
+        FString CharString = OnlineSave->ServerCharacterStrings(CharIndex);
+        CharString = GetRealCharacterString(OnlineSave, CharIndex, CharString);
+
         if (CharString.Empty())
             continue;
 
-        int const SettingId = MP_PROFILE_EXTENDED_CHARACTER_FIRST_ID +
-                              CharIndex - MP_PROFILE_LEGACY_CHARACTER_COUNT;
+        OnlineSave->ServerCharacterStrings(CharIndex) = CharString;
+
+        int const SettingId = MP_PROFILE_EXTENDED_CHARACTER_FIRST_ID + CharIndex - MP_PROFILE_LEGACY_CHARACTER_COUNT;
         ProfileSetting::Construct(SettingId, CharString).Serialize(Stream);
         SettingsCount++;
     }
@@ -552,15 +587,13 @@ void MPProfile::Serialize(IOutputStream& Stream) const
     // Store only timestamp blocks that contain a completed accomplishment.
     for (int Field = 0; Field < MP_PROFILE_EXTENDED_COMPLETION_FIELD_COUNT; ++Field)
     {
-        int const FirstIndex = MP_PROFILE_LEGACY_COMPLETION_TIME_COUNT +
-                               Field * MP_PROFILE_COMPLETION_TIMES_PER_FIELD;
-        FString const Values = ExtendedCompletionTimeString(
-            AccomplishmentManager->AccomplishmentCompletionTimes, FirstIndex);
+        int const FirstIndex = MP_PROFILE_LEGACY_COMPLETION_TIME_COUNT + Field * MP_PROFILE_COMPLETION_TIMES_PER_FIELD;
+        FString const Values = ExtendedCompletionTimeString(AccomplishmentManager->AccomplishmentCompletionTimes, FirstIndex);
+
         if (Values.Empty())
             continue;
 
-        ProfileSetting::Construct(MP_PROFILE_EXTENDED_COMPLETION_FIRST_ID + Field,
-                                  Values).Serialize(Stream);
+        ProfileSetting::Construct(MP_PROFILE_EXTENDED_COMPLETION_FIRST_ID + Field, Values).Serialize(Stream);
         SettingsCount++;
     }
 
@@ -574,4 +607,75 @@ void MPProfile::Serialize(IOutputStream& Stream) const
 
     Stream.Seek(SeekOrigin::Begin, CountOffset);
     Stream.WriteNumeric<BIG, INT32>(SettingsCount);
+}
+
+FString MPProfile::GetRealBaseString(USFXOnlineSaveGameMP* const OnlineSave, FString const& Fallback) const
+{
+    if (OnlineSave == nullptr || OnlineSave->CachedOnlinePlayerStorage == nullptr) { return Fallback; }
+
+    USFXSaveManagerMP* Manager = SaveManager;
+    FString const RealString = OnlineSave->GetBase2(&Manager);
+
+    return !RealString.Empty() ? RealString : Fallback;
+}
+
+FString MPProfile::GetRealClassString(USFXOnlineSaveGameMP* const OnlineSave, int const nClassIndex, FString const& Fallback) const
+{
+    if (OnlineSave == nullptr || OnlineSave->CachedOnlinePlayerStorage == nullptr) { return Fallback; }
+    if (nClassIndex < 0 || nClassIndex >= static_cast<int>(SaveManager->Classes.Count())) { return Fallback; }
+
+    USFXMPClassRecord* Record = SaveManager->Classes(nClassIndex);
+
+    if (Record != nullptr)
+    {
+        FString const RealString = OnlineSave->GetClass2(&Record);
+
+        if (!RealString.Empty())
+        {
+            //if (Fallback != RealString)
+            //{
+            //    MILAN_WARNW(ELOG_MultiProfile, L"GetRealClassString - changed for nClassIndex = %d", nClassIndex);
+            //}
+
+            return RealString;
+        }
+    }
+
+    return Fallback;
+}
+
+FString MPProfile::GetRealCharacterString(USFXOnlineSaveGameMP* const OnlineSave, int const nCharIndex, FString const& Fallback) const
+{
+    if (OnlineSave == nullptr || OnlineSave->CachedOnlinePlayerStorage == nullptr) { return Fallback; }
+    if (nCharIndex < 0 || nCharIndex >= static_cast<int>(SaveManager->Characters.Count())) { return Fallback; }
+
+    USFXMPCharacterRecord* Record = SaveManager->Characters(nCharIndex);
+
+    if (Record != nullptr)
+    {
+        USFXSaveManagerMP* Manager = SaveManager;
+        FString const RealString = OnlineSave->GetCharacter2(nCharIndex, &Record, &Manager);
+
+        if (!RealString.Empty())
+        {
+            //if (Fallback != RealString)
+            //{
+            //    MILAN_WARNW(ELOG_MultiProfile, L"GetRealCharacterString - changed for nCharIndex = %d", nCharIndex);
+            //}
+
+            return RealString;
+        }
+    }
+
+    return Fallback;
+}
+
+FString MPProfile::GetRealFacesString(USFXOnlineSaveGameMP* const OnlineSave, FString const& Fallback) const
+{
+    if (OnlineSave == nullptr || OnlineSave->CachedOnlinePlayerStorage == nullptr) { return Fallback; }
+
+    USFXSaveManagerMP* Manager = SaveManager;
+    FString const RealString = OnlineSave->GetFaceCodes(&Manager);
+
+    return !RealString.Empty() ? RealString : Fallback;
 }

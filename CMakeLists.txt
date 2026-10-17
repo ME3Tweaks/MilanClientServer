@@ -39,7 +39,7 @@ include (MilanTargetUtils)
 # ! Output paths.
 # ========================================
 
-if (CMAKE_GENERATOR MATCHES "Visual Studio 17 2022")
+if (CMAKE_GENERATOR MATCHES "Visual Studio 18 2026")
   message ("-- Detected supported generator: ${CMAKE_GENERATOR}")
   set (MILAN_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/Build/${MILAN_CMAKE_PRESET}/$<CONFIG>)
 else ()

@@ -190,6 +190,11 @@ public:
     void Deserialize(IInputStream& Stream);
     void Serialize(IOutputStream& Stream) const;
 
+    FString GetRealBaseString(USFXOnlineSaveGameMP* const OnlineSave, FString const& Fallback) const;
+    FString GetRealClassString(USFXOnlineSaveGameMP* const OnlineSave, int const nClassIndex, FString const& Fallback) const;
+    FString GetRealCharacterString(USFXOnlineSaveGameMP* const OnlineSave, int const nCharIndex, FString const& Fallback) const;
+    FString GetRealFacesString(USFXOnlineSaveGameMP* const OnlineSave, FString const& Fallback) const;
+
     // Where this game instance saves: MP_Profile, or MP_Profile-<ordinal> for extra instances.
     static FString GetProfilePathStatic();
     // Where this game instance loads from: its own file, or MP_Profile before its first save.
