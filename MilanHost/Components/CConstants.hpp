@@ -42,6 +42,13 @@ private:
     void PatchMPDLCFolderNameFilter(::LESDK::Initializer& Context);
 
     /// <summary>
+    /// Makes the boot-time UGameEngine::LoadMap (the one that loads EntryMenu) mount DLC, so DLC
+    /// packages can override EntryMenu. Stock only mounts when leaving a menu level.
+    /// </summary>
+    /// <param name="Context"></param>
+    void PatchMountDLCBeforeEntryMenu(::LESDK::Initializer& Context);
+
+    /// <summary>
     /// NOPs out the NetMode/GPendingLevel gates (and the resulting GDisallowNetworkTravel write)
     /// that stock UE3 uses to disable the 'set'/'setnopec' (UGameEngine::Exec) and
     /// 'show'/'showset'/'showclear' (UGameViewportClient::Exec) console commands in multiplayer.

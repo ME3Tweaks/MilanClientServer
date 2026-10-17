@@ -13,6 +13,10 @@
 #define REL_MOUNT_CMP_INSTRUCTION_START ::LESDK::Address::FromOffset(0xafe043) // +1 = MIN, +6 = MAX (CMP is 2D + [INT])
 #define REL_MP_STRING_FILTER ::LESDK::Address::FromOffset(0x136141)
 
+// UGameEngine::LoadMap - DLC mount gate on the boot path (GWorld == NULL). R13D = bMountDLC, set
+// by 'CMOVZ R13D,EDI' (EDI == 1) only when the URL map is not a menu level (EntryMenu).
+#define REL_LOADMAP_BOOT_MOUNT_GATE 0xb93570
+
 // UGameEngine::Exec - 'set'/'setnopec' multiplayer gate (see Ghidra/notes/set-command-multiplayer-gate.md)
 #define REL_SET_GATE_PENDINGLEVEL_JNZ ::LESDK::Address::FromOffset(0x54408c) // JNZ on this->GPendingLevel != NULL
 #define REL_SET_GATE_NETMODE_JNZ ::LESDK::Address::FromOffset(0x5440a0) // JNZ on GetNetMode(GWorld) != NM_Standalone
@@ -355,11 +359,31 @@ void CConstants::PatchMPDLCFolderNameFilter(::LESDK::Initializer& Init)
     }
 }
 
+// Stock LoadMap mounts DLC (GContentManager: finish discovery, then MountContentForMode) only when
+// leaving a menu level, or at boot when the first map is not a menu level. Booting into EntryMenu
+// therefore loads it from basegame before any DLC is mounted. Forcing bMountDLC on the boot path
+// runs the game's own mount at its usual spot in LoadMap: after the pre-map work, right before the
+// EntryMenu package is loaded. The normal mount when leaving EntryMenu still runs afterwards.
+void CConstants::PatchMountDLCBeforeEntryMenu(::LESDK::Initializer& Init)
+{
+    constexpr BYTE Expected[] = { 0x44, 0x0f, 0x44, 0xef }; // CMOVZ R13D,EDI
+    constexpr BYTE Patch[] = { 0x44, 0x8b, 0xef, 0x90 };    // MOV R13D,EDI; NOP
+    if (PatchExpectedBytes(Init, REL_LOADMAP_BOOT_MOUNT_GATE, Expected, Patch, sizeof(Patch)))
+    {
+        MILAN_DEBUGW(ELOG_Startup, L"Patched boot LoadMap to mount DLC before EntryMenu");
+    }
+    else
+    {
+        MILAN_DEBUGW(ELOG_Startup, L"Failed to patch boot LoadMap DLC mount gate (bytes did not match)");
+    }
+}
+
 bool CConstants::Initialize(::LESDK::Initializer& Context)
 {
     PatchDocumentsDirectory(Context);
     PatchMountLoading(Context);
     PatchMPDLCFolderNameFilter(Context);
+    PatchMountDLCBeforeEntryMenu(Context);
     PatchMultiplayerCommandGates(Context);
     MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
