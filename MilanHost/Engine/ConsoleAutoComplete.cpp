@@ -34,6 +34,11 @@
 #include "Engine/Intercept.hpp"
 
 
+#ifndef ENABLE_AUTOCOMPLETE_LOGGING
+#define ENABLE_AUTOCOMPLETE_LOGGING 0
+#endif
+
+
 namespace ConsoleAutoComplete
 {
     DECLARE_HIJACK(UConsole, BuildRuntimeAutoCompleteList);
@@ -95,12 +100,16 @@ namespace ConsoleAutoComplete
         }
     }
 
-    /** Logs via WARN (survives RELEASE, unlike INFO/TRACE) and flushes immediately, so the trail
-     *  survives even if the very next line hangs or crashes. Temporary - for diagnosing the map-load hang. */
     static void LogAndFlush(wchar_t const* const Message)
     {
+        MILAN_UNUSED(Message);
+
+    #if defined(ENABLE_AUTOCOMPLETE_LOGGING) && ENABLE_AUTOCOMPLETE_LOGGING
+
         MILAN_WARNW(ELOG_EngineHooks, L"[ConsoleAutoComplete] %s", Message);
         if (gp_mainLogger != nullptr) gp_mainLogger->Flush();
+
+    #endif
     }
 
     static void RebuildAutoCompleteList(UConsole* const Console, bool const bForce)
@@ -212,7 +221,7 @@ namespace ConsoleAutoComplete
 
         Console->bIsRuntimeAutoCompleteUpToDate = 1;
 
-        MILAN_WARNW(ELOG_EngineHooks, L"[ConsoleAutoComplete] rebuilt: %d manual, %d exec, %d map, %d total",
+        MILAN_TRACEW(ELOG_EngineHooks, L"[ConsoleAutoComplete] rebuilt: %d manual, %d exec, %d map, %d total",
             Console->ManualAutoCompleteList.Count(), ExecCount, Console->MapPathsForAutoComplete.Count(), Console->AutoCompleteList.Count());
         if (gp_mainLogger != nullptr) gp_mainLogger->Flush();
     }
