@@ -190,10 +190,16 @@ public:
     void Deserialize(IInputStream& Stream);
     void Serialize(IOutputStream& Stream) const;
 
-    FString GetRealBaseString(USFXOnlineSaveGameMP* const OnlineSave, FString const& Fallback) const;
-    FString GetRealClassString(USFXOnlineSaveGameMP* const OnlineSave, int const nClassIndex, FString const& Fallback) const;
-    FString GetRealCharacterString(USFXOnlineSaveGameMP* const OnlineSave, int const nCharIndex, FString const& Fallback) const;
-    FString GetRealFacesString(USFXOnlineSaveGameMP* const OnlineSave, FString const& Fallback) const;
+    FString GetRealBaseString(USFXOnlineSaveGameMP* OnlineSave, FString const& Fallback) const;
+    FString GetRealClassString(USFXOnlineSaveGameMP* OnlineSave, int nClassIndex, FString const& Fallback) const;
+    FString GetRealCharacterString(USFXOnlineSaveGameMP* OnlineSave, int nCharIndex, FString const& Fallback) const;
+    FString GetRealFacesString(USFXOnlineSaveGameMP* OnlineSave, FString const& Fallback) const;
+    FString GetRealReinforcementsString(USFXOnlineSaveGameMP* OnlineSave, FString const& Fallback) const;
+
+    FString GetRealCompletionString(USFXAccomplishmentStorage* AccomplishmentStorage, FString const& Fallback) const;
+    FString GetRealProgressString(USFXAccomplishmentStorage* AccomplishmentStorage, FString const& Fallback) const;
+    FString GetRealRewardLevelsString(USFXAccomplishmentStorage* AccomplishmentStorage, FString const& Fallback) const;
+    FString GetRealCompletionTimesString(USFXAccomplishmentStorage* AccomplishmentStorage, int nIndex, FString const& Fallback) const;
 
     // Where this game instance saves: MP_Profile, or MP_Profile-<ordinal> for extra instances.
     static FString GetProfilePathStatic();

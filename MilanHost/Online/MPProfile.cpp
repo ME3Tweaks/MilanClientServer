@@ -500,29 +500,64 @@ void MPProfile::Serialize(IOutputStream& Stream) const
         }
         else if (i == SGF_NewReinforcements)
         {
-            FString const ReinforcementString = CurrentProfileString(OnlineSave->CachedOnlinePlayerStorage, i, OnlineSave->ServerNewReinforcementsString);
+            FString ReinforcementString = CurrentProfileString(OnlineSave->CachedOnlinePlayerStorage, i, OnlineSave->ServerNewReinforcementsString);
+            ReinforcementString = GetRealReinforcementsString(OnlineSave, ReinforcementString);
+
+            OnlineSave->ServerNewReinforcementsString = ReinforcementString;
+            if (OnlineSave->CachedOnlinePlayerStorage != nullptr)
+            {
+                OnlineSave->CachedOnlinePlayerStorage->SetProfileSettingValue(i, &ReinforcementString);
+            }
+
             ProfileSetting::Construct(i, ReinforcementString).Serialize(Stream);
             SettingsCount++;
         }
         else if (i == ASF_Completion)
         {
-            ProfileSetting::Construct(i, CurrentProfileString(
+            FString CompletionString = CurrentProfileString(
                 AccomplishmentStorage->CachedOnlinePlayerStorage, i,
-                AccomplishmentStorage->ServerCompletionString)).Serialize(Stream);
+                AccomplishmentStorage->ServerCompletionString);
+            CompletionString = GetRealCompletionString(AccomplishmentStorage, CompletionString);
+
+            AccomplishmentStorage->ServerCompletionString = CompletionString;
+            if (AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr)
+            {
+                AccomplishmentStorage->CachedOnlinePlayerStorage->SetProfileSettingValue(i, &CompletionString);
+            }
+
+            ProfileSetting::Construct(i, CompletionString).Serialize(Stream);
             SettingsCount++;
         }
         else if (i == ASF_Progress)
         {
-            ProfileSetting::Construct(i, CurrentProfileString(
+            FString ProgressString = CurrentProfileString(
                 AccomplishmentStorage->CachedOnlinePlayerStorage, i,
-                AccomplishmentStorage->ServerProgressString)).Serialize(Stream);
+                AccomplishmentStorage->ServerProgressString);
+            ProgressString = GetRealProgressString(AccomplishmentStorage, ProgressString);
+
+            AccomplishmentStorage->ServerProgressString = ProgressString;
+            if (AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr)
+            {
+                AccomplishmentStorage->CachedOnlinePlayerStorage->SetProfileSettingValue(i, &ProgressString);
+            }
+
+            ProfileSetting::Construct(i, ProgressString).Serialize(Stream);
             SettingsCount++;
         }
         else if (i == CSF_RewardCompletion)
         {
-            ProfileSetting::Construct(i, CurrentProfileString(
+            FString RewardLevelString = CurrentProfileString(
                 AccomplishmentStorage->CachedOnlinePlayerStorage, i,
-                AccomplishmentStorage->ServerRewardLevelString)).Serialize(Stream);
+                AccomplishmentStorage->ServerRewardLevelString);
+            RewardLevelString = GetRealRewardLevelsString(AccomplishmentStorage, RewardLevelString);
+
+            AccomplishmentStorage->ServerRewardLevelString = RewardLevelString;
+            if (AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr)
+            {
+                AccomplishmentStorage->CachedOnlinePlayerStorage->SetProfileSettingValue(i, &RewardLevelString);
+            }
+
+            ProfileSetting::Construct(i, RewardLevelString).Serialize(Stream);
             SettingsCount++;
         }
         else if (i == CSF_CurrentReward)
@@ -533,28 +568,62 @@ void MPProfile::Serialize(IOutputStream& Stream) const
             int Reward = 0, RewardLevel = 0;
             AccomplishmentStorage->GetCurrentReward(&Reward, &RewardLevel);
 
+            // Uncomment this if banners breaks?.. - d00t
+
+            //if (AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr)
+            //{
+            //    AccomplishmentStorage->SetCurrentReward(Reward);
+            //}
+
             ProfileSetting::Construct(i, Reward).Serialize(Stream);
             SettingsCount++;
         }
         else if (i == CSF_CompletionTimes)
         {
-            ProfileSetting::Construct(i, CurrentProfileString(
+            FString CompletionTimesString = CurrentProfileString(
                 AccomplishmentStorage->CachedOnlinePlayerStorage, i,
-                AccomplishmentStorage->ServerCompletionTimesString)).Serialize(Stream);
+                AccomplishmentStorage->ServerCompletionTimesString);
+            CompletionTimesString = GetRealCompletionTimesString(AccomplishmentStorage, 0, CompletionTimesString);
+
+            AccomplishmentStorage->ServerCompletionTimesString = CompletionTimesString;
+            if (AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr)
+            {
+                AccomplishmentStorage->CachedOnlinePlayerStorage->SetProfileSettingValue(i, &CompletionTimesString);
+            }
+
+            ProfileSetting::Construct(i, CompletionTimesString).Serialize(Stream);
             SettingsCount++;
         }
         else if (i == CSF_CompletionTimes2)
         {
-            ProfileSetting::Construct(i, CurrentProfileString(
+            FString CompletionTimesString = CurrentProfileString(
                 AccomplishmentStorage->CachedOnlinePlayerStorage, i,
-                AccomplishmentStorage->ServerCompletionTimes2String)).Serialize(Stream);
+                AccomplishmentStorage->ServerCompletionTimes2String);
+            CompletionTimesString = GetRealCompletionTimesString(AccomplishmentStorage, 1, CompletionTimesString);
+
+            AccomplishmentStorage->ServerCompletionTimes2String = CompletionTimesString;
+            if (AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr)
+            {
+                AccomplishmentStorage->CachedOnlinePlayerStorage->SetProfileSettingValue(i, &CompletionTimesString);
+            }
+
+            ProfileSetting::Construct(i, CompletionTimesString).Serialize(Stream);
             SettingsCount++;
         }
         else if (i == CSF_CompletionTimes3)
         {
-            ProfileSetting::Construct(i, CurrentProfileString(
+            FString CompletionTimesString = CurrentProfileString(
                 AccomplishmentStorage->CachedOnlinePlayerStorage, i,
-                AccomplishmentStorage->ServerCompletionTimes3String)).Serialize(Stream);
+                AccomplishmentStorage->ServerCompletionTimes3String);
+            CompletionTimesString = GetRealCompletionTimesString(AccomplishmentStorage, 2, CompletionTimesString);
+
+            AccomplishmentStorage->ServerCompletionTimes3String = CompletionTimesString;
+            if (AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr)
+            {
+                AccomplishmentStorage->CachedOnlinePlayerStorage->SetProfileSettingValue(i, &CompletionTimesString);
+            }
+
+            ProfileSetting::Construct(i, CompletionTimesString).Serialize(Stream);
             SettingsCount++;
         }
         else
@@ -611,12 +680,18 @@ void MPProfile::Serialize(IOutputStream& Stream) const
 
 FString MPProfile::GetRealBaseString(USFXOnlineSaveGameMP* const OnlineSave, FString const& Fallback) const
 {
-    if (OnlineSave == nullptr || OnlineSave->CachedOnlinePlayerStorage == nullptr) { return Fallback; }
+    if (OnlineSave != nullptr && OnlineSave->CachedOnlinePlayerStorage != nullptr)
+    {
+        USFXSaveManagerMP* Manager = SaveManager;
+        FString const RealString = OnlineSave->GetBase2(&Manager);
 
-    USFXSaveManagerMP* Manager = SaveManager;
-    FString const RealString = OnlineSave->GetBase2(&Manager);
+        if (!RealString.Empty())
+        {
+            return RealString;
+        }
+    }
 
-    return !RealString.Empty() ? RealString : Fallback;
+    return Fallback;
 }
 
 FString MPProfile::GetRealClassString(USFXOnlineSaveGameMP* const OnlineSave, int const nClassIndex, FString const& Fallback) const
@@ -672,10 +747,93 @@ FString MPProfile::GetRealCharacterString(USFXOnlineSaveGameMP* const OnlineSave
 
 FString MPProfile::GetRealFacesString(USFXOnlineSaveGameMP* const OnlineSave, FString const& Fallback) const
 {
-    if (OnlineSave == nullptr || OnlineSave->CachedOnlinePlayerStorage == nullptr) { return Fallback; }
+    if (OnlineSave != nullptr && OnlineSave->CachedOnlinePlayerStorage != nullptr)
+    {
+        USFXSaveManagerMP* Manager = SaveManager;
+        FString const RealString = OnlineSave->GetFaceCodes(&Manager);
 
-    USFXSaveManagerMP* Manager = SaveManager;
-    FString const RealString = OnlineSave->GetFaceCodes(&Manager);
+        if (!RealString.Empty())
+        {
+            return RealString;
+        }
+    }
 
-    return !RealString.Empty() ? RealString : Fallback;
+    return Fallback;
+}
+
+FString MPProfile::GetRealReinforcementsString(USFXOnlineSaveGameMP* const OnlineSave, FString const& Fallback) const
+{
+    if (OnlineSave != nullptr && OnlineSave->CachedOnlinePlayerStorage != nullptr)
+    {
+        USFXSaveManagerMP* Manager = SaveManager;
+        FString const RealString = OnlineSave->GetNewReinforcements(&Manager);
+
+        if (!RealString.Empty())
+        {
+            return RealString;
+        }
+    }
+
+    return Fallback;
+}
+
+FString MPProfile::GetRealCompletionString(USFXAccomplishmentStorage* const AccomplishmentStorage, FString const& Fallback) const
+{
+    if (AccomplishmentStorage != nullptr && AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr)
+    {
+        FString const RealString = AccomplishmentStorage->GetCompletion(&AccomplishmentManager->AccomplishmentIsComplete);
+
+        if (!RealString.Empty())
+        {
+            return RealString;
+        }
+    }
+
+    return Fallback;
+}
+
+FString MPProfile::GetRealProgressString(USFXAccomplishmentStorage* const AccomplishmentStorage, FString const& Fallback) const
+{
+    if (AccomplishmentStorage != nullptr && AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr)
+    {
+        FString const RealString = AccomplishmentStorage->GetProgress();
+
+        if (!RealString.Empty())
+        {
+            return RealString;
+        }
+    }
+
+    return Fallback;
+}
+
+FString MPProfile::GetRealRewardLevelsString(USFXAccomplishmentStorage* const AccomplishmentStorage, FString const& Fallback) const
+{
+    if (AccomplishmentStorage != nullptr && AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr)
+    {
+        FString const RealString = AccomplishmentStorage->GetRewardLevels();
+
+        if (!RealString.Empty())
+        {
+            return RealString;
+        }
+    }
+
+    return Fallback;
+}
+
+FString MPProfile::GetRealCompletionTimesString(USFXAccomplishmentStorage* const AccomplishmentStorage, int const nIndex, FString const& Fallback) const
+{
+    if (AccomplishmentStorage != nullptr && AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr)
+    {
+        TArray<FString> CompletionStrings{};
+        AccomplishmentStorage->GetCompletionTimes(&CompletionStrings, &AccomplishmentManager->AccomplishmentCompletionTimes);
+
+        if (nIndex >= 0 && nIndex < static_cast<int>(CompletionStrings.Count()) && !CompletionStrings(nIndex).Empty())
+        {
+            return CompletionStrings(nIndex);
+        }
+    }
+
+    return Fallback;
 }
