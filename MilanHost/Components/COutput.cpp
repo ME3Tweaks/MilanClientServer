@@ -123,19 +123,22 @@ void COutput::Terminate(::LESDK::Initializer& Context)
     }
 
 #ifndef _FINAL_RELEASE
-    // The logger and its async worker must be fully destroyed before the
-    // handle is closed and the broker lease is released.
-    if (ConsoleHandle != nullptr && ConsoleHandle != INVALID_HANDLE_VALUE)
+    if (!CmdArgs::Contain(L"-nomilanconsole"))
     {
-        ::CloseHandle(ConsoleHandle);
-        ConsoleHandle = INVALID_HANDLE_VALUE;
+        // The logger and its async worker must be fully destroyed before the
+        // handle is closed and the broker lease is released.
+        if (ConsoleHandle != nullptr && ConsoleHandle != INVALID_HANDLE_VALUE)
+        {
+            ::CloseHandle(ConsoleHandle);
+            ConsoleHandle = INVALID_HANDLE_VALUE;
+        }
+        if (ProxyInstance != nullptr && ConsoleLease != 0)
+        {
+            ProxyInstance->ReleaseConsoleLease(ConsoleLease);
+            ConsoleLease = 0;
+        }
+        ProxyInstance = nullptr;
     }
-	if (ProxyInstance != nullptr && ConsoleLease != 0)
-	{
-		ProxyInstance->ReleaseConsoleLease(ConsoleLease);
-		ConsoleLease = 0;
-	}
-	ProxyInstance = nullptr;
 #endif
 }
 
@@ -207,49 +210,51 @@ void COutput::InitConsole(::LESDK::Initializer& Context)
         return;
     }
 
-    unsigned long ProxyVersion = 0;
-    ConsoleHandle = INVALID_HANDLE_VALUE;
-    if (ProxyInstance->GetVersion(&ProxyVersion) != SPIReturn::Success || ProxyVersion < SPI_VERSION_V4 ||
-        !ProxyInstance->AcquireConsoleLease(L"MilanHost", &ConsoleLease) || ConsoleLease == 0 ||
-        !ProxyInstance->OpenConsoleOutput(ConsoleLease, &ConsoleHandle) ||
-        ConsoleHandle == nullptr || ConsoleHandle == INVALID_HANDLE_VALUE)
+    if (!CmdArgs::Contain(L"-nomilanconsole"))
     {
-        // OpenConsoleOutput returns a caller-owned handle on success. Be
-        // defensive if a broker reports failure after assigning one anyway.
-        if (ConsoleHandle != nullptr && ConsoleHandle != INVALID_HANDLE_VALUE)
-            ::CloseHandle(ConsoleHandle);
-        if (ConsoleLease != 0)
-            ProxyInstance->ReleaseConsoleLease(ConsoleLease);
-        ConsoleLease = 0;
+        unsigned long ProxyVersion = 0;
         ConsoleHandle = INVALID_HANDLE_VALUE;
-        bUseVirtualTerminal = false;
-        ::OutputDebugStringA("MilanHost: failed to acquire SPI v4 console output; continuing with file logging.\n");
-        return;
-    }
-
-    ::SetConsoleCtrlHandler(::MilanConsoleHandler, TRUE);
-
-    DWORD           dwOriginalMode = 0u;
-
-    if (::GetConsoleMode(ConsoleHandle, &dwOriginalMode) == 0) [[unlikely]]
-    {
-        bUseVirtualTerminal = FALSE;
-        auto const ErrorCode = std::to_string(::GetLastError());
-        auto const ErrorMessage = std::string("can't get console output handle: ") + ErrorCode;
-        ::OutputDebugStringA(ErrorMessage.c_str());
-    }
-    else if (0 == ::SetConsoleMode(ConsoleHandle, dwOriginalMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
-    {
-        bUseVirtualTerminal = FALSE;
-        auto const ErrorCode = std::to_string(::GetLastError());
-        auto const ErrorMessage = std::string("can't enable virtual terminal: ") + ErrorCode;
-        ::OutputDebugStringA(ErrorMessage.c_str());
-    }
-
-    HWND hwnd = GetConsoleWindow();
-    if (hwnd != NULL) {
-        ApplyIconToWindow(hwnd);
+        if (ProxyInstance->GetVersion(&ProxyVersion) != SPIReturn::Success || ProxyVersion < SPI_VERSION_V4 ||
+            !ProxyInstance->AcquireConsoleLease(L"MilanHost", &ConsoleLease) || ConsoleLease == 0 ||
+            !ProxyInstance->OpenConsoleOutput(ConsoleLease, &ConsoleHandle) ||
+            ConsoleHandle == nullptr || ConsoleHandle == INVALID_HANDLE_VALUE)
+        {
+            // OpenConsoleOutput returns a caller-owned handle on success. Be
+            // defensive if a broker reports failure after assigning one anyway.
+            if (ConsoleHandle != nullptr && ConsoleHandle != INVALID_HANDLE_VALUE)
+                ::CloseHandle(ConsoleHandle);
+            if (ConsoleLease != 0)
+                ProxyInstance->ReleaseConsoleLease(ConsoleLease);
+            ConsoleLease = 0;
+            ConsoleHandle = INVALID_HANDLE_VALUE;
+            bUseVirtualTerminal = false;
+            ::OutputDebugStringA("MilanHost: failed to acquire SPI v4 console output; continuing with file logging.\n");
+            return;
         }
+
+        ::SetConsoleCtrlHandler(::MilanConsoleHandler, TRUE);
+
+        DWORD dwOriginalMode = 0u;
+
+        if (::GetConsoleMode(ConsoleHandle, &dwOriginalMode) == 0) [[unlikely]]
+        {
+            bUseVirtualTerminal = FALSE;
+            auto const ErrorCode = std::to_string(::GetLastError());
+            auto const ErrorMessage = std::string("can't get console output handle: ") + ErrorCode;
+            ::OutputDebugStringA(ErrorMessage.c_str());
+        }
+        else if (0 == ::SetConsoleMode(ConsoleHandle, dwOriginalMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+        {
+            bUseVirtualTerminal = FALSE;
+            auto const ErrorCode = std::to_string(::GetLastError());
+            auto const ErrorMessage = std::string("can't enable virtual terminal: ") + ErrorCode;
+            ::OutputDebugStringA(ErrorMessage.c_str());
+        }
+
+        HWND const hwnd = GetConsoleWindow();
+        if (hwnd != NULL) ApplyIconToWindow(hwnd);
+    }
+
 #endif
 }
 
