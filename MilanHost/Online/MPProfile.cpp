@@ -275,6 +275,12 @@ void MPProfile::PrepareCharacterStorage() const
     {
         OnlineSave->ServerCharacterStrings.Resize(MP_PROFILE_CHARACTER_CAPACITY);
     }
+
+    static constexpr uint32_t MP_PROFILE_CLASS_CAPACITY = SGF_Class07 - SGF_Class00 + 1;
+    if (OnlineSave->ServerClassStrings.Count() < MP_PROFILE_CLASS_CAPACITY)
+    {
+        OnlineSave->ServerClassStrings.Resize(MP_PROFILE_CLASS_CAPACITY);
+    }
 }
 
 void MPProfile::Deserialize(IInputStream& Stream)

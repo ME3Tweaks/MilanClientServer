@@ -387,16 +387,14 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
         MILAN_TRACEW(ELOG_MultiProfile, L"intercepted SFXGame.SFXSaveManagerMP.Initialize:");
 
         MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
-        // Fresh profiles need all local kit slots before their first save.
         Profile.PrepareCharacterStorage();
 
-        auto profilePath = MPProfile::GetLoadProfilePathStatic();
-
+        FString const ProfilePath = MPProfile::GetLoadProfilePathStatic();
         ::game::vector<BYTE> ProfileBuffer{};
 
-        if (!::ReadFileFull(static_cast<std::wstring_view>(profilePath), ProfileBuffer))
+        if (!::ReadFileFull(ProfilePath, ProfileBuffer))
         {
-            MILAN_WARNW(ELOG_MultiProfile, L"online profile file '%s' is empty or missing, skipping deserialization", profilePath.Chars());
+            MILAN_WARNW(ELOG_MultiProfile, L"profile '%s' is empty or missing, skipping deserialization", *ProfilePath);
             return;
         }
 
@@ -404,7 +402,8 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
 
         MemoryInputStream ProfileStream{ std::move(ProfileBuffer) };
         Profile.Deserialize(ProfileStream);
-        MILAN_INFOW(ELOG_MultiProfile, L"profile loaded from %s in %.3f ms", profilePath.Chars(), ProfileTimer.GetMilliseconds());
+
+        MILAN_INFOW(ELOG_MultiProfile, L"profile loaded from %s in %.3f ms", *ProfilePath, ProfileTimer.GetMilliseconds());
     }
 }
 
