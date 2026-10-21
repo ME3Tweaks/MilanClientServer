@@ -340,6 +340,7 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
         SFXOnlineHijacks::InstallComponentBlazeGame();
         SFXOnlineHijacks::InstallComponentBlazeLogin();
         SFXOnlineHijacks::InstallComponentBlazeHub();
+        SFXOnlineHijacks::InstallComponentUnrealPlayer();
         s_sfxOnlineInitialized = true;
 
         MILAN_INFOW(ELOG_EngineHooks, L"Installed SFXOnlineFoundation hijacks in %3.2f ms", HijackTimer.GetMilliseconds());
