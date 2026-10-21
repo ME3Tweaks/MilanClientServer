@@ -73,6 +73,7 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Online/MatchmakingNet.cpp
   ${PROJ_FOLDER}/Online/MatchmakingNet.hpp
   ${PROJ_FOLDER}/Online/ModVersion.hpp
+  ${PROJ_FOLDER}/Online/LocalPlayerIds.hpp
   ${PROJ_FOLDER}/Online/MPProfile.cpp
   ${PROJ_FOLDER}/Online/MPProfile.hpp
   ${PROJ_FOLDER}/Online/Rendezvous.cpp
@@ -80,6 +81,7 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeGame.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeHub.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeLogin.cpp
+  ${PROJ_FOLDER}/Online/SFXOnlineComponentUnrealPlayer.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineHijacks.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineHijacks.hpp
   ${PROJ_FOLDER}/Public/LmpLobby.h
