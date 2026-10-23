@@ -17,22 +17,22 @@ namespace LinkerPatcher
 {
     // FConfigCacheIni::CreateConfigFile(GConfig, RawFileBytes, DisplayName, Flags, RegisterFastLookup).
     // RawFileBytes is the whole compiled coalesced file exactly as read from disk; the engine decodes it.
-    using t_CreateConfigFile = void*(void* Config, void* RawFileBytes, wchar_t const* DisplayName, unsigned long long Flags, int bRegister);
+    using t_CreateConfigFile = void* (void* Config, void* RawFileBytes, wchar_t const* DisplayName, unsigned long long Flags, int bRegister);
 
     // FConfigCacheIni::GetArray(GConfig, Section, Key, OutArray, Filename). Each layer looks the three
     // names up by case-insensitive *hash* (Filename -> Section -> Key); any miss silently yields nothing.
     using t_GetArray = void(void* Config, wchar_t const* Section, wchar_t const* Key, TArray<FString>* OutArray, wchar_t const* Filename);
-
-    // UObject::StaticFindObject(Class, Package, Name, bExactClass). Pure in-memory lookup that accepts
-    // a null class as a wildcard. (StaticLoadObject cannot: ULinkerLoad::Create dereferences the class.)
-    using t_StaticFindObject = UObject*(UClass* Class, UObject* Package, wchar_t const* Name, int bExactClass);
 
     static void** gp_config = nullptr;
     // GObjBeginLoadCount: the BeginLoad / EndLoad nesting depth. Zero once the outermost EndLoad is done.
     static int const* gp_objBeginLoadCount = nullptr;
     static t_CreateConfigFile* CreateConfigFile = nullptr;
     static t_GetArray* GetArray = nullptr;
-    static t_StaticFindObject* StaticFindObject = nullptr;
+    // UObject::StaticFindObject itself, for lookups made before its hook is live. Use FindObjectRaw.
+    static t_UObject_StaticFindObject* gp_staticFindObject = nullptr;
+
+    // StaticFindObject's InObjectPackage meaning "OrigInName is a full path, search everywhere".
+    static UObject* const k_anyPackage = reinterpret_cast<UObject*>(-1ll);
 
     // Bookkeeping name of our layer inside GConfig, like a DLC mount's folder name.
     static constexpr wchar_t const* k_configDisplayName = L"LinkerPatches";
@@ -562,6 +562,125 @@ namespace LinkerPatcher
         MILAN_INFOW(ELOG_LinkerPatcher, L"loaded patch package %s", PackageName.c_str());
     }
 
+    /**
+     * UObject::StaticFindObject won't find our patch object so we must hook it too
+     */
+    static UObject* FindObjectRaw(UClass* const ObjectClass, UObject* const InObjectPackage, wchar_t const* const Name, UBOOL const bExactClass)
+    {
+        t_UObject_StaticFindObject* const Find = UObject_StaticFindObject_orig != nullptr ? UObject_StaticFindObject_orig : gp_staticFindObject;
+        return Find != nullptr ? (*Find)(ObjectClass, InObjectPackage, Name, bExactClass) : nullptr;
+    }
+
+    /** Where a redirect's patch object lives: the original's full memory path under the patch package. */
+    static std::wstring PatchObjectPath(FRedirectTarget const& Target)
+    {
+        return Target.PatchPackage + L"." + Target.OriginalObject;
+    }
+
+    /** An object's path from its outer chain, instanced names joined with '.'. False on a cyclic chain. */
+    static bool BuildObjectPath(UObject const* const Object, std::wstring& OutPath)
+    {
+        std::vector<std::wstring> Segments{};
+        for (UObject const* Current = Object; Current != nullptr; Current = Current->Outer)
+        {
+            if (Segments.size() >= static_cast<size_t>(k_maxOuterDepth))
+                return false;
+            Segments.push_back(ToStd(Current->GetName()));
+        }
+
+        OutPath.clear();
+        for (auto Segment = Segments.rbegin(); Segment != Segments.rend(); ++Segment)
+        {
+            if (!OutPath.empty())
+                OutPath += L'.';
+            OutPath += *Segment;
+        }
+        return true;
+    }
+
+    // Reused per thread by the by-name pre-filter. Separate from t_leafScratch: a lookup can run
+    // from inside CreateExport
+    static thread_local std::wstring t_nameScratch{};
+
+    /**
+     * The redirect a by-name lookup of InName (relative to InOuter, or a full path when InOuter is
+     * null or ANY_PACKAGE) resolves to, or nullptr. OutKey is the matched key. StaticFindObject runs
+     * constantly, so the common case is rejected on the leaf alone, like CreateExport does.
+     *
+     * Engine paths of non-forced exports keep the file's localization suffix ("BioD_Foo_LOC_INT.X")
+     * while keys have it stripped, as LEC's MemoryFullPath does, so the first segment is also tried
+     * stripped.
+     */
+    static FRedirectTarget const* FindRedirectByName(UObject* const InOuter, wchar_t const* const InName, std::wstring& OutKey)
+    {
+        if (InName == nullptr || *InName == L'\0' || t_patchLoadDepth > 0
+            || !gb_redirectsReady.load(std::memory_order_acquire) || g_redirects.empty())
+        {
+            return nullptr;
+        }
+
+        wchar_t const* Leaf = InName;
+        for (wchar_t const* Cursor = InName; *Cursor != L'\0'; ++Cursor)
+        {
+            if (*Cursor == L'.')
+                Leaf = Cursor + 1;
+        }
+        t_nameScratch.assign(Leaf);
+        std::transform(t_nameScratch.begin(), t_nameScratch.end(), t_nameScratch.begin(),
+            [](wchar_t const C) { return static_cast<wchar_t>(std::towlower(C)); });
+        if (!g_leafNames.contains(t_nameScratch))
+            return nullptr;
+
+        std::wstring Path = InName;
+        if (InOuter != nullptr && InOuter != k_anyPackage)
+        {
+            std::wstring OuterPath{};
+            if (!BuildObjectPath(InOuter, OuterPath))
+                return nullptr;
+            Path = OuterPath + L"." + Path;
+        }
+
+        OutKey = ToLower(Path);
+        if (auto const Found = g_redirects.find(OutKey); Found != g_redirects.end())
+            return &Found->second;
+
+        size_t const FirstDot = Path.find(L'.');
+        if (FirstDot == std::wstring::npos)
+            return nullptr;
+        std::wstring const Stripped = StripUnrealLocalization(Path.substr(0, FirstDot));
+        if (Stripped.size() == FirstDot)
+            return nullptr;
+
+        OutKey = ToLower(Stripped + Path.substr(FirstDot));
+        if (auto const Found = g_redirects.find(OutKey); Found != g_redirects.end())
+            return &Found->second;
+        return nullptr;
+    }
+
+    /**
+     * Whether Patched can stand in for what a by-name lookup asked for. With an Original found, the
+     * classes must match exactly, as in CreateExport; otherwise it must satisfy the requested class.
+     */
+    static bool IsUsableAs(UObject* const Patched, UClass* const ObjectClass, bool const bExactClass, UObject* const Original)
+    {
+        if (Original != nullptr)
+            return Patched->Class == Original->Class;
+        if (ObjectClass == nullptr)
+            return true;
+        return bExactClass ? Patched->Class == ObjectClass : Patched->IsA(ObjectClass);
+    }
+
+    // By-name lookups repeat (every OpenMovie, every movie's image URLs); each outcome is logged once
+    // per key. Keyed "<kind>|<key>".
+    static std::mutex g_byNameLogMutex{};
+    static std::unordered_set<std::wstring> g_byNameLogged{};
+
+    static bool ShouldLogByName(wchar_t const* const Kind, std::wstring const& Key)
+    {
+        std::lock_guard<std::mutex> const Guard{ g_byNameLogMutex };
+        return g_byNameLogged.insert(std::wstring(Kind) + L"|" + Key).second;
+    }
+
 
     void Initialize(::LESDK::Initializer& Context)
     {
@@ -569,13 +688,13 @@ namespace LinkerPatcher
         gp_objBeginLoadCount = Context.ResolveTyped<int>(GLOBAL_GOBJBEGINLOADCOUNT_RVA);
         CreateConfigFile = Context.ResolveTyped<t_CreateConfigFile>(GLOBAL_FCONFIGCACHEINI_CREATECONFIGFILE_RVA);
         GetArray = Context.ResolveTyped<t_GetArray>(GLOBAL_FCONFIGCACHEINI_GETARRAY_RVA);
-        StaticFindObject = Context.ResolveTyped<t_StaticFindObject>(GLOBAL_UOBJECT_STATICFINDOBJECT_RVA);
+        gp_staticFindObject = Context.ResolveTyped<t_UObject_StaticFindObject>(GLOBAL_UOBJECT_STATICFINDOBJECT_RVA);
 
         LOG_SDK_GLOBAL(gp_config, *gp_config);
         LOG_SDK_GLOBAL(gp_objBeginLoadCount, gp_objBeginLoadCount);
         LOG_SDK_GLOBAL(CreateConfigFile, CreateConfigFile);
         LOG_SDK_GLOBAL(GetArray, GetArray);
-        LOG_SDK_GLOBAL(StaticFindObject, StaticFindObject);
+        LOG_SDK_GLOBAL(gp_staticFindObject, gp_staticFindObject);
     }
 
     void EnsureConfigLoaded()
@@ -624,7 +743,7 @@ namespace LinkerPatcher
         // No EnsureConfigLoaded() here: an export can't exist before a package load, so
         // LoadPackage_hook has always run it first. Keeps this path lock-free and non-reentrant.
         if (!gb_redirectsReady.load(std::memory_order_acquire) || g_redirects.empty()
-            || StaticFindObject == nullptr || t_patchLoadDepth > 0)
+            || gp_staticFindObject == nullptr || t_patchLoadDepth > 0)
         {
             return (*ULinkerLoad_CreateExport_orig)(Context, Index);
         }
@@ -687,8 +806,8 @@ namespace LinkerPatcher
         // as a group of the patch package rather than over the real objects. Found by name with a
         // null (wildcard) class, then checked: a patch object of another class would be handed to
         // code that reads it as the original's class.
-        std::wstring const FindPath = Target.PatchPackage + L"." + Target.OriginalObject;
-        UObject* const Patched = (*StaticFindObject)(nullptr, nullptr, FindPath.c_str(), 0);
+        std::wstring const FindPath = PatchObjectPath(Target);
+        UObject* const Patched = FindObjectRaw(nullptr, nullptr, FindPath.c_str(), 0);
         if (Patched == nullptr)
         {
             MILAN_WARNW(ELOG_LinkerPatcher, L"redirect target %s for %s not found after loading its package, keeping the original",
@@ -829,5 +948,91 @@ namespace LinkerPatcher
     {
         (*UObject_EndLoad_orig)();
         DetachDiscardedOriginals();
+    }
+
+    UObject* StaticFindObject(UClass* const ObjectClass, UObject* const InObjectPackage, wchar_t const* const OrigInName, UBOOL const bExactClass)
+    {
+        UObject* const Result = (*UObject_StaticFindObject_orig)(ObjectClass, InObjectPackage, OrigInName, bExactClass);
+
+        std::wstring Key{};
+        FRedirectTarget const* const Target = FindRedirectByName(InObjectPackage, OrigInName, Key);
+        if (Target == nullptr)
+            return Result;
+
+        // A find never loads so we must redirect it to look for our patch version instead
+        std::wstring const FindPath = PatchObjectPath(*Target);
+        UObject* const Patched = FindObjectRaw(nullptr, nullptr, FindPath.c_str(), 0);
+        if (Patched == nullptr || Patched == Result || (Patched->ObjectFlags & k_objectFlagNeedLoad) != 0)
+        {
+            return Result;
+        }
+
+        if (!IsUsableAs(Patched, ObjectClass, bExactClass != 0, Result))
+        {
+            if (ShouldLogByName(L"find-class", Key))
+            {
+                MILAN_WARNW(ELOG_LinkerPatcher, L"by-name find of %s: redirect target %s is the wrong class, keeping the original",
+                    OrigInName, FindPath.c_str());
+            }
+            return Result;
+        }
+
+        // Ensure rooted
+        Patched->ObjectFlags |= k_objectFlagRootSet;
+        if (ShouldLogByName(L"find", Key))
+        {
+            MILAN_INFOW(ELOG_LinkerPatcher, L"redirected by-name find %s -> %s", Key.c_str(), FindPath.c_str());
+        }
+        return Patched;
+    }
+
+    UObject* StaticLoadObject(UClass* const ObjectClass, UObject* const InOuter, wchar_t const* const InName, wchar_t const* const Filename,
+        INT const LoadFlags, UPackageMap* const Sandbox, UBOOL const bAllowObjectReconciliation)
+    {
+        // LOAD_Verify only asks whether the object exists
+        std::wstring Key{};
+        FRedirectTarget const* const Target = (LoadFlags & LOAD_Verify) == 0 ? FindRedirectByName(InOuter, InName, Key) : nullptr;
+
+        // The original first, as in CreateExport: once it's loaded, its class and whatever else the
+        // patch package imports are resident, so loading the patch package can't drag the original's
+        // package in half-way and miss.
+        UObject* const Result = (*UObject_StaticLoadObject_orig)(ObjectClass, InOuter, InName, Filename, LoadFlags, Sandbox, bAllowObjectReconciliation);
+        if (Target == nullptr)
+        {
+            return Result;
+        }
+
+        EnsurePatchPackageLoaded(Target->PatchPackage);
+
+        std::wstring const FindPath = PatchObjectPath(*Target);
+        UObject* const Patched = FindObjectRaw(nullptr, nullptr, FindPath.c_str(), 0);
+        if (Patched == nullptr)
+        {
+            if (ShouldLogByName(L"load-missing", Key))
+            {
+                MILAN_WARNW(ELOG_LinkerPatcher, L"by-name load of %s: redirect target %s not found after loading its package, keeping the original",
+                    InName, FindPath.c_str());
+            }
+            return Result;
+        }
+        if (Patched == Result)
+        {
+            return Result;
+        }
+
+        if (!IsUsableAs(Patched, ObjectClass, false, Result))
+        {
+            if (ShouldLogByName(L"load-class", Key))
+            {
+                MILAN_WARNW(ELOG_LinkerPatcher, L"by-name load of %s: redirect target %s is the wrong class, keeping the original",
+                    InName, FindPath.c_str());
+            }
+            return Result;
+        }
+
+        Patched->ObjectFlags |= k_objectFlagRootSet;
+        if (ShouldLogByName(L"load", Key))
+            MILAN_INFOW(ELOG_LinkerPatcher, L"redirected by-name load %s -> %s", Key.c_str(), FindPath.c_str());
+        return Patched;
     }
 }

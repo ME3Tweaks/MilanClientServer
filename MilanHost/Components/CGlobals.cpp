@@ -122,6 +122,9 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(ULinkerLoad, FinalizeCreation, GLOBAL_ULINKERLOAD_FINALIZECREATION_RVA);
     INSTALL_HOOK_TWO(ULinkerLoad, CreateExport, GLOBAL_ULINKERLOAD_CREATEEXPORT_RVA);
     INSTALL_HOOK_TWO(UObject, EndLoad, GLOBAL_UOBJECT_ENDLOAD_RVA);
+    // By-name resolution (e.g. BioUI MovieLibrary GFxResource strings); see LinkerPatcher.hpp.
+    INSTALL_HOOK_TWO(UObject, StaticFindObject, GLOBAL_UOBJECT_STATICFINDOBJECT_RVA);
+    INSTALL_HOOK_TWO(UObject, StaticLoadObject, GLOBAL_UOBJECT_STATICLOADOBJECT_RVA);
 
     INSTALL_HOOK_TWO(UObject, CallFunction, BUILTIN_CALLFUNCTION_PHOOK);
     INSTALL_HOOK_TWO(UObject, ProcessDelegate, GLOBAL_UOBJECT_PROCESSDELEGATE_PHOOK);

@@ -219,6 +219,19 @@ void UObject_EndLoad_hook()
     LinkerPatcher::EndLoad();
 }
 
+t_UObject_StaticFindObject* UObject_StaticFindObject_orig = nullptr;
+UObject* UObject_StaticFindObject_hook(UClass* const ObjectClass, UObject* const InObjectPackage, WCHAR const* const OrigInName, UBOOL const bExactClass)
+{
+    return LinkerPatcher::StaticFindObject(ObjectClass, InObjectPackage, OrigInName, bExactClass);
+}
+
+t_UObject_StaticLoadObject* UObject_StaticLoadObject_orig = nullptr;
+UObject* UObject_StaticLoadObject_hook(UClass* const ObjectClass, UObject* const InOuter, WCHAR const* const InName, WCHAR const* const Filename,
+    INT const LoadFlags, UPackageMap* const Sandbox, UBOOL const bAllowObjectReconciliation)
+{
+    return LinkerPatcher::StaticLoadObject(ObjectClass, InOuter, InName, Filename, LoadFlags, Sandbox, bAllowObjectReconciliation);
+}
+
 
 // ! UObject methods.
 // ========================================

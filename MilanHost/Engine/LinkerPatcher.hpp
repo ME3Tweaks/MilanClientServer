@@ -68,6 +68,24 @@
  *              That folder is not a DLC and is not in PCConsoleTOC.bin, so the config is registered
  *              into GConfig directly and the packages are resolved by FindPackageFile.
  *
+ *              By-name lookups: redirecting export slots only covers objects reached through a
+ *              linker's tables. Plenty of code instead resolves a path string at runtime, and finds
+ *              the original, which still exists at the real path (the patch object lives under the
+ *              patch package). The case that prompted this: SFXGUIInteraction.OpenMovie takes a
+ *              Tag, looks its MovieLibrary entry up in [SFXGame.SFXGUIInteraction] (BioUI), and
+ *              loads GFxResource="GUI_SF_MainMenu.MainMenu" by name (OpenMovie @ RVA 0xBC73B0 ->
+ *              UGFxMovie slot 118 -> StaticLoadObject(GFxMovieInfo, NULL, path)); GFx resolves
+ *              img:// texture URLs inside a movie the same way (RVA 0x925EA0). So the menu was
+ *              patched while EntryMenu's own references opened it, and the original came back once
+ *              OpenMovie(MainMenu) did (returning from the multiplayer menu).
+ *
+ *              StaticLoadObject and StaticFindObject are therefore hooked too. A lookup whose full
+ *              path is a redirect key returns the patch object instead: StaticLoadObject loads the
+ *              patch package on demand (after the original, for the same reason CreateExport does),
+ *              StaticFindObject only answers with it once that package is loaded, as it must never
+ *              load. The same class check applies. Paths from an explicit outer are built from the
+ *              outer chain; a localization suffix on the first segment is stripped as for keys.
+ *
  *              Lifetime: a patch object is added to the root set when it's first redirected to,
  *              so it and everything it references (its outers, the patch package and linker
  *              included) live for the rest of the process.
@@ -85,7 +103,7 @@
  *              clear the slot that now holds the patch object). It can't be done sooner: EndLoad
  *              preloads every new export through Obj->Linker without a null check.
  *
- *              All five entry points are driven from hooks in Engine/Hooks.cpp. They rely on
+ *              All seven entry points are driven from hooks in Engine/Hooks.cpp. They rely on
  *              LoadGate to have every hook live before the first package load.
  */
 
@@ -128,4 +146,15 @@ namespace LinkerPatcher
      * originals that loading has finished with (see "Discarded originals" above).
      */
     void EndLoad();
+
+    /**
+     * StaticFindObject lets us redirect lookups to ours
+     */
+    UObject* StaticFindObject(UClass* ObjectClass, UObject* InObjectPackage, wchar_t const* OrigInName, UBOOL bExactClass);
+
+    /**
+     * StaticLoadObject lets us redirect loads to ours
+     */
+    UObject* StaticLoadObject(UClass* ObjectClass, UObject* InOuter, wchar_t const* InName, wchar_t const* Filename,
+        INT LoadFlags, UPackageMap* Sandbox, UBOOL bAllowObjectReconciliation);
 }

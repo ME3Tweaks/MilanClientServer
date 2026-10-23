@@ -91,7 +91,8 @@
 #define GLOBAL_ULINKERLOAD_CREATEEXPORT_RVA           ::LESDK::Address::FromOffset(0xFBDD0)
 #define GLOBAL_ULINKERLOAD_FINALIZECREATION_RVA       ::LESDK::Address::FromOffset(0xFF520)
 #define GLOBAL_UOBJECT_STATICFINDOBJECT_RVA           ::LESDK::Address::FromOffset(0x134510)
-#define GLOBAL_UOBJECT_ENDLOAD_RVA                    ::LESDK::Address::FromOffset(0x123BF0)
+#define GLOBAL_UOBJECT_STATICLOADOBJECT_RVA           ::LESDK::Address::FromOffset(0x134DD0)
+#define GLOBAL_UOBJECT_ENDLOAD_RVA                   ::LESDK::Address::FromOffset(0x123BF0)
 #define GLOBAL_GOBJBEGINLOADCOUNT_RVA                 ::LESDK::Address::FromOffset(0x1807D80)
 #define GLOBAL_FCONFIGCACHEINI_CREATECONFIGFILE_RVA   ::LESDK::Address::FromOffset(0x91700)
 #define GLOBAL_FCONFIGCACHEINI_GETARRAY_RVA           ::LESDK::Address::FromOffset(0x94F60)
@@ -303,6 +304,23 @@ using t_UObject_EndLoad = void();
 extern t_UObject_EndLoad* UObject_EndLoad_orig;
 
 void UObject_EndLoad_hook();
+
+// UObject::StaticFindObject (static). InObjectPackage == ANY_PACKAGE ((UObject*)-1) or null means
+// OrigInName is a full path. Pure in-memory lookup; a null class is a wildcard. (Ghidra shows a fifth
+// argument; the body never reads it.)
+using t_UObject_StaticFindObject = UObject*(UClass* ObjectClass, UObject* InObjectPackage, WCHAR const* OrigInName, UBOOL bExactClass);
+extern t_UObject_StaticFindObject* UObject_StaticFindObject_orig;
+
+UObject* UObject_StaticFindObject_hook(UClass* ObjectClass, UObject* InObjectPackage, WCHAR const* OrigInName, UBOOL bExactClass);
+
+// UObject::StaticLoadObject (static). Finds the object in memory first, else loads it from its package.
+// ObjectClass must not be null: ULinkerLoad::Create dereferences it.
+using t_UObject_StaticLoadObject = UObject*(UClass* ObjectClass, UObject* InOuter, WCHAR const* InName, WCHAR const* Filename,
+    INT LoadFlags, UPackageMap* Sandbox, UBOOL bAllowObjectReconciliation);
+extern t_UObject_StaticLoadObject* UObject_StaticLoadObject_orig;
+
+UObject* UObject_StaticLoadObject_hook(UClass* ObjectClass, UObject* InOuter, WCHAR const* InName, WCHAR const* Filename,
+    INT LoadFlags, UPackageMap* Sandbox, UBOOL bAllowObjectReconciliation);
 
 using t_UObject_CallFunction = tCallFunction;
 extern t_UObject_CallFunction* UObject_CallFunction_orig;
