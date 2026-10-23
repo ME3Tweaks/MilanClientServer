@@ -93,7 +93,6 @@ public sealed class DiscoveryTests : StoreTestBase
         [
             new("203.0.113.10", 40001, CandidateKind.PublicObserved),
             new("203.0.113.10", 7777, CandidateKind.PublicReported),
-            new("192.168.1.20", 7777, CandidateKind.Lan),
         ];
         Assert.Equal(expected, Redeem(lobby).Value.HostCandidates);
     }
@@ -180,7 +179,6 @@ public sealed class DiscoveryTests : StoreTestBase
         EndpointCandidate[] expected =
         [
             new("198.51.100.20", 50002, CandidateKind.PublicObserved),
-            new("10.0.0.7", 62000, CandidateKind.Lan),
         ];
         Assert.Equal(expected, introduction.JoinerCandidates);
     }

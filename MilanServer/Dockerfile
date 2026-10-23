@@ -1,9 +1,11 @@
 # MilanServer container image. Build from the MilanServer directory:
-#   docker build -t milanserver .
+#   docker build --pull -t milanserver .
 # For an arm64 server, add --platform linux/arm64; the SDK still runs natively.
 # Run the unit tests inside the SDK image instead:
 #   docker build --target test .
 
+# Use the serviced 10.0 tag and --pull: newly announced patch tags may not be
+# published in MCR yet. Record the tested image digest for production rollouts.
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG TARGETARCH
 WORKDIR /src

@@ -2,8 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace MilanServer;
 
-// Wire contracts for the v1 HTTP control API. They are provisional until the
-// MilanHost side of the protocol exists; bump ProtocolVersion on breaking changes.
+// Wire contracts for the /v1 HTTP control API. /v1/info advertises the control
+// protocol revision; bump ProtocolVersion on breaking client compatibility changes.
 //
 // Map, enemy, and difficulty IDs are opaque: the game may add new ones without a
 // server update. Only the search "Any" sentinels below carry meaning here.
@@ -47,7 +47,7 @@ public enum CandidateKind
     // Source address and port of the peer's authenticated UDP binding request. This is
     // the game socket's NAT mapping only if the peer sent it from that socket.
     PublicObserved,
-    // Peer-reported private address (RFC 1918, link-local, or 100.64/10) with its game port.
+    // Peer-reported private address (RFC 1918 or 100.64/10) with its game port.
     Lan,
     // Address the host's control request came from, with the host-reported game port.
     // Unverified: only reachable when the host has a manual or router-mapped forward.
@@ -73,6 +73,9 @@ public enum MigrationState
 // Full host-reported lobby state. Every report replaces the previous one; a higher
 // Revision wins, so reordered requests cannot roll state back. EnemyModeId is the
 // selected option and stays 0 for Random Faction after the game resolves a faction.
+// IsPrivate keeps the lobby out of searches. MemberInvites lets its members, not only the host,
+// get the invite code. The game's privacy modes map to the two: Public is listed and members
+// invite, Friends is unlisted and members invite, Private is unlisted and only the host invites.
 public sealed record LobbySnapshot(
     long Revision,
     bool IsPrivate,
@@ -87,7 +90,10 @@ public sealed record LobbySnapshot(
     int GamePort,
     IReadOnlyList<string>? LanAddresses = null,
     int? ResolvedMapId = null,
-    int? ResolvedEnemyId = null);
+    int? ResolvedEnemyId = null,
+    bool MemberInvites = false,
+    // Authoritative admitted reservation IDs. Only the listen host may grant/revoke membership.
+    IReadOnlyList<string>? MemberIds = null);
 
 public sealed record CreateLobbyRequest(string GameVersion, LobbySnapshot State);
 
@@ -178,7 +184,7 @@ public sealed record Introduction(
 // Every live reservation for the lobby, not just changed ones.
 public sealed record IntroductionList(long Version, IReadOnlyList<Introduction> Introductions);
 
-// A joiner becomes a member of the lobby once admitted, under its reservation ID and join
+// A host-confirmed joiner becomes a member, under its reservation ID and join
 // key, and stays one until it leaves. Members only talk to the server when they lose the
 // host. CanHost says whether this member could take over (it has the lobby's state).
 public sealed record HostLostReport(bool CanHost = true);
@@ -210,7 +216,56 @@ public sealed record ServerInfo(
     int SearchSeconds,
     int MaxPlayersCeiling,
     int LongPollSeconds,
-    int UdpPort);
+    int UdpPort,
+    // How often a game in no lobby and no search reports presence; 0 means do not.
+    int PresenceSeconds = 0);
+
+// GET /v1/stats: counts only, nothing that identifies a lobby or a player.
+//  - Players are those in registered lobbies, as their hosts report them. A 1-player lobby is
+//    never registered, and a player in the menus is not in a lobby.
+//  - Idle and Online need presence reports (Milan:Stats:Presence): Idle is the games in no
+//    lobby and no search, and Online is Players + Searching + Idle.
+//  - Details comes with Milan:Stats:Public=Full or the statistics token.
+public sealed record ServerStats(
+    DateTimeOffset GeneratedAt,
+    int Players,
+    int Searching,
+    int PublicLobbies,
+    // Public, joinable, and with a free slot: what a search can match.
+    int OpenLobbies,
+    int? Idle = null,
+    int? Online = null,
+    StatsDetails? Details = null);
+
+public sealed record StatsDetails(
+    DateTimeOffset StartedAt,
+    long UptimeSeconds,
+    int Lobbies,
+    int FriendsLobbies,
+    int PrivateLobbies,
+    int LobbiesWaiting,
+    int LobbiesInProgress,
+    int PlayerCapacity,
+    int PendingJoins,
+    int HostMigrations,
+    // Highest counts since the server started, sampled every few seconds.
+    int PeakPlayers,
+    int PeakLobbies,
+    StatsTotals Totals,
+    // Lobbies per game version, the most common first; at most 20 versions.
+    IReadOnlyDictionary<string, int> GameVersions);
+
+// Since the server started.
+public sealed record StatsTotals(
+    long LobbiesCreated,
+    long LobbiesExpired,
+    long SearchesStarted,
+    long SearchesMatched,
+    long InvitesRedeemed,
+    long JoinsCompleted,
+    long HostMigrationsStarted,
+    long HostMigrationsCompleted,
+    long HostMigrationsFailed);
 
 public sealed record ServerError(string Code, string Message);
 
@@ -234,6 +289,7 @@ public sealed record ServerError(string Code, string Message);
 [JsonSerializable(typeof(JoinerCandidatesRequest))]
 [JsonSerializable(typeof(ReservationStatus))]
 [JsonSerializable(typeof(ServerInfo))]
+[JsonSerializable(typeof(ServerStats))]
 [JsonSerializable(typeof(HostLostReport))]
 [JsonSerializable(typeof(MigrationStatus))]
 [JsonSerializable(typeof(ServerError))]

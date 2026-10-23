@@ -6,9 +6,26 @@
 # so endpoint discovery and per-address rate limits are wrong. See README.md.
 services:
   milanserver:
-    build: .
+    build:
+      context: .
+      pull: true
     image: milanserver:dev
     restart: unless-stopped
+    mem_limit: 384m
+    # One CPU works on small VPSs. Set MILAN_CPU_LIMIT only up to the host's capacity.
+    cpus: "${MILAN_CPU_LIMIT:-1.0}"
+    pids_limit: 256
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "5080:5080/tcp"
       # Must stay the same number on both sides: clients use the port from /v1/info.
@@ -19,4 +36,5 @@ services:
       # Any setting from MilanServer/Options.cs can be overridden as Milan__<Name>.
       # Milan__LobbyLeaseSeconds: "60"
       # Milan__TrustedProxies__0: "10.0.0.5"   # only behind a TLS reverse proxy
+      # Milan__AccessKey: "a-strong-party-password" # requires HTTPS, even on a LAN
       Logging__LogLevel__Default: "Information"

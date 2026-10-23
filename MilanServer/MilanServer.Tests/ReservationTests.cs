@@ -47,10 +47,10 @@ public sealed class ReservationTests : StoreTestBase
         // A stale report does not release the slot; a current one includes the joiner.
         Assert.True(Report(lobby, State(0, players: 2)).Stale);
         Assert.Equal(Failures.LobbyFull, Redeem(lobby, IPAddress.Parse("192.0.2.1")).Failure);
-        Report(lobby, State(2, players: 3));
+        Report(lobby, State(2, players: 3) with { MemberIds = [joined.ReservationId] });
         Assert.Equal(Failures.LobbyFull, Redeem(lobby, IPAddress.Parse("192.0.2.1")).Failure);
 
-        Report(lobby, State(3, players: 2));
+        Report(lobby, State(3, players: 2) with { MemberIds = [] });
         Assert.True(Redeem(lobby, IPAddress.Parse("192.0.2.1")).IsSuccess);
     }
 
@@ -149,7 +149,6 @@ public sealed class ReservationTests : StoreTestBase
         EndpointCandidate[] expected =
         [
             new("203.0.113.10", 7777, CandidateKind.PublicReported),
-            new("192.168.1.20", 7777, CandidateKind.Lan),
         ];
         Assert.Equal(expected, remote.HostCandidates);
 
@@ -157,6 +156,7 @@ public sealed class ReservationTests : StoreTestBase
         JoinReservation housemate = Redeem(lobby, HostIp).Value;
         JoinReservation secondHousemate = Redeem(lobby, HostIp).Value;
         Assert.True(housemate.SamePublicAddress);
+        Assert.Contains(housemate.HostCandidates, c => c is { Address: "192.168.1.20", Kind: CandidateKind.Lan });
         Assert.NotEqual(housemate.ReservationId, secondHousemate.ReservationId);
         Assert.NotEqual(housemate.JoinKey, secondHousemate.JoinKey);
     }
@@ -168,7 +168,7 @@ public sealed class ReservationTests : StoreTestBase
 
         JoinReservation reservation = Redeem(lobby).Value;
 
-        EndpointCandidate[] expected = [new("10.0.0.5", 7777, CandidateKind.Lan)];
+        EndpointCandidate[] expected = [];
         Assert.Equal(expected, reservation.HostCandidates);
     }
 

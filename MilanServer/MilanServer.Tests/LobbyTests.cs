@@ -125,7 +125,7 @@ public sealed class LobbyTests : StoreTestBase
     public void CreateLobby_AcceptsCeilingAndUnknownFutureSettingIds()
     {
         Host(State(map: 4000, enemy: 90, difficulty: 55, maxPlayers: Options.MaxPlayersCeiling,
-            lan: ["10.1.2.3", "172.20.0.4", "169.254.3.3", "100.100.1.1"]));
+            lan: ["10.1.2.3", "172.20.0.4", "192.168.1.3", "100.100.1.1"]));
     }
 
     [Theory]

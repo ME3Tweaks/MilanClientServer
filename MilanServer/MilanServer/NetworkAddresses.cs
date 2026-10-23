@@ -51,7 +51,6 @@ internal static class NetworkAddresses
         bool isLan = b[0] == 10
             || (b[0] == 172 && (b[1] & 0xF0) == 16)
             || (b[0] == 192 && b[1] == 168)
-            || (b[0] == 169 && b[1] == 254)
             || (b[0] == 100 && (b[1] & 0xC0) == 64); // 100.64/10: CGNAT shared space and overlay VPNs.
         if (!isLan)
             return false;
@@ -59,4 +58,7 @@ internal static class NetworkAddresses
         address = parsed;
         return true;
     }
+
+    public static bool IsLanAddress(IPAddress? address) =>
+        address is not null && TryParseLanAddress(address.ToString(), out _);
 }

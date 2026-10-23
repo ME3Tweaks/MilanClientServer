@@ -5,10 +5,11 @@ tracks lobbies in memory, runs quick-match searches, redeems invite codes, reser
 capacity for joiners, observes each peer's public UDP endpoint, and introduces
 joiners to hosts. It never carries UE3 game traffic.
 
-Status: the lobby state machine, v1 HTTP control API, UDP endpoint discovery, host
+Status: the lobby state machine, HTTP control protocol 2 (on `/v1` routes), UDP endpoint discovery, host
 introductions, peer probes, and MilanHost's console and Quick Match paths are implemented.
-Server tests and the MilanHost build pass; two LMP instances successfully joined through
-the Quick Match menu on one PC. A local join does not establish an Internet NAT path. See
+Server tests and the MilanHost build pass. The earlier protocol had a two-instance
+Quick Match test on one PC; the protocol-2 admission path needs a new in-game test.
+A local join does not establish an Internet NAT path. See
 [Docs/Matchmaking-NAT-Handoff.md](../Docs/Matchmaking-NAT-Handoff.md) for the plan.
 
 ## Build and test
@@ -34,8 +35,10 @@ with the same number.
 Host, search, and join keys are bearer secrets. On the Internet, serve the API over
 TLS, either through Kestrel certificate configuration or behind a reverse proxy.
 When a proxy terminates TLS, list its address in `Milan:TrustedProxies` so the
-client's real address is used for rate limiting and endpoint candidates. HTTP is
-fine for LAN-only or offline use.
+client's real address is used for rate limiting and endpoint candidates. Passwordless
+HTTP is supported for simple LAN/group setups and operators who choose it. A configured
+server password requires HTTPS on every `/v1` request, even on a LAN. MilanHost refuses
+to transmit a server password to an HTTP URL. HTTP `/healthz` remains available.
 
 ## Configuration
 
@@ -43,6 +46,115 @@ Settings live in the `Milan` section of `appsettings.json`. Environment variable
 such as `Milan__LobbyLeaseSeconds=90` and arguments such as `--Milan:SearchSeconds=90`
 override it. See `MilanServer/Options.cs` for every setting and its default. Invalid
 combinations fail at startup.
+
+### Private servers
+
+Set `Milan__AccessKey` (printable ASCII without spaces, at most 256 characters) to make the
+server private. Every `/v1` request except `/v1/stats` must then send the key as the
+`X-Milan-Access-Key` header, or it gets `401 access_key_invalid`. Players enter it as the
+server password next to the custom server address in the game's Multiplayer Settings
+(MP Options), and MilanHost sends it only to that server. The key travels like the bearer
+keys. Plain HTTP requests to a password-protected API get `426 https_required` before
+password authentication. Use direct Kestrel TLS or a trusted TLS reverse proxy. `/v1/stats`
+does not need the server password, but still requires HTTPS when a server password is set.
+On a passwordless server, presenting a statistics token also requires HTTPS; anonymous
+public statistics remain available over HTTP.
+
+For Caddy on the Linux host with `deploy.sh`, proxy to `127.0.0.1:5080` and set
+`ASPNETCORE_URLS=http://127.0.0.1:5080` in the server environment file. Keep public
+TCP 5080 closed and UDP 5081 direct. Loopback proxies are trusted by default; for
+another proxy, configure only its actual address in `Milan__TrustedProxies__0`.
+Never clear proxy trust restrictions or trust arbitrary forwarding headers.
+
+### Mod compatibility and admission
+
+Hosting, searching, and invite redemption submit `gameVersion`, an opaque 1-64 character
+identity for the installed **Project Milan mod**. Searches compare it exactly; invite
+joins with a different value return `409 version_mismatch`. It is independent of the
+MilanHost ASI release. On each launch, MilanHost reads the second physical line of
+`BioGame/DLC/DLC_MOD_ProjectMilan/_metacmm.txt` relative to the running game's root.
+Only the DLC folder identity is fixed; the installed version is read from disk.
+This is the temporary source until AutoTOC supplies the runtime registry.
+An optional explicit override is:
+
+```toml
+[milan.game]
+version = "project-milan-your-release"
+```
+
+Use the actual installed mod identity, with the same exact value only for compatible
+releases. A nonempty `[milan.game] version` overrides metadata; leaving it empty enables
+metadata detection. `-mmversion=<identity>` overrides both, `mm.version` shows it, and
+`mm.version <identity>` changes it during a run. `mm.version off` makes it unknown.
+An unknown/invalid identity disables registration, searches, and invite joins while
+local hosting remains available. Invalid explicit overrides do not fall back to metadata.
+A future game-thread detector can call
+`CMatchmaking::SetModVersion`; changing identity retires the previous matchmaking session.
+
+The listen host confirms members through `memberIds` in its state snapshot. MilanHost
+verifies a reservation-specific admission proof in an accepted game connection's URL
+before adding its ID, and removes departed/kicked members from the roster. A joiner's
+`joined` notice alone grants no invite or migration privileges and does not survive
+reservation expiry. Tooling may omit `memberIds` to retain the roster; an explicit `[]`
+revokes all members. Upgrade the server and clients together: `/v1/info` now reports
+`protocolVersion: 2`, which older ASIs refuse instead of using insecure admission.
+
+### Availability limits
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `Milan__TotalRequestsPerSecond` | 1000 | Total arrival budget across all source addresses |
+| `Milan__RequestBurst` | 2000 | Total token-bucket burst allowance |
+| `Milan__MaxConcurrentRequests` | 2048 | Total active HTTP requests, without a queue |
+| `Milan__MaxConcurrentRequestsPerAddress` | 64 | Active requests per IPv4 or IPv6 /64 |
+| `Milan__MaxConcurrentConnections` | 4096 | Backend Kestrel connection ceiling |
+| `Milan__MaxConcurrentLongPolls` | 1024 | Long-poll ceiling, leaving capacity for control requests |
+| `Milan__MaxConcurrentLongPollsPerAddress` | 32 | Long polls per IPv4 or IPv6 /64 |
+| `Milan__DiscoveryPacketsPerSecond` | 5000 | Total UDP processing budget for structured requests, including rejected tags/tickets |
+| `Milan__DiscoveryPacketsPerSecondPerAddress` | 100 | UDP work per address group |
+
+Existing request/create/redeem rate limits still apply. At most one long poll waits per
+host, reservation, or member credential; duplicates return `429 poll_busy`. Active HTTP
+budget rejection returns `429 request_limit`. Completion and cancellation release permits.
+Tune these bounds with measured population, memory, and heartbeat latency on your host.
+
+LAN candidates use RFC1918 or CGNAT space; link-local addresses are rejected. The server
+shares LAN candidates only with peers sharing a public address or using private control/
+observed addresses. MilanHost further restricts private targets to local subnets or explicit
+on-link VPN routes and rejects gateways, broadcasts, and remote loopback. Same-PC loopback
+testing remains supported when the matchmaker itself resolves to loopback.
+
+### Statistics
+
+`GET /v1/stats` returns counts only, never anything that identifies a lobby or a player.
+It is off until one of these is set:
+
+| Setting | Effect |
+|---|---|
+| `Milan__Stats__Public` | What anyone can read: `None` (default, answers 404), `Summary`, or `Full` |
+| `Milan__Stats__Token` | A secret of 16 characters or more. Sent as `Authorization: Bearer <token>`, it always gets `Full` |
+| `Milan__Stats__CacheSeconds` | How long a snapshot is served for (default 5) |
+| `Milan__Stats__Presence` | `true` turns presence reports on (default `false`) |
+| `Milan__Stats__PresenceSeconds` | How often an idle game reports (default 300) |
+
+- **Summary:** `players`, `searching`, `publicLobbies`, `openLobbies`, and with presence
+  `idle` and `online`.
+- **Full** adds `details`: lobbies by privacy and phase, capacity, joins and host
+  migrations under way, peaks, totals since the server started, and lobbies per game
+  version.
+- `players` are those in registered lobbies, as their hosts report them. A 1-player lobby
+  is never registered, and a player in the menus is in no lobby, so without presence the
+  server cannot see them.
+- **Presence** fills that gap: a game in no lobby and no search sends one small request
+  every `PresenceSeconds`, under a random ID it makes up each run. `/v1/info` advertises
+  the interval, and games send nothing unless it does. A game reads `/v1/info` when it
+  first hosts, joins or searches, so one that has only sat in the menus is not counted.
+  `idle` counts the reporting games and
+  `online` is `players + searching + idle`. A game that closes stays counted for up to
+  two intervals.
+- The token must not ship in a game client or a web page. A website should fetch with the
+  token from its own server, or read the public summary.
+- Counts reset when the server restarts. Keep a history by polling the endpoint.
 
 ## Publish
 
@@ -64,16 +176,24 @@ automatically.
 From this directory, on Linux or inside WSL:
 
 ```
-docker build -t milanserver .
-docker run -d --name milanserver --network host milanserver
+docker build --pull -t milanserver .
+docker compose up -d --build
 ```
 
-`docker compose up -d --build` does the same with published ports instead
-(`compose.yaml`). `docker build --target test .` runs the unit tests in the SDK image.
+Compose refreshes base images and runs with published ports (`compose.yaml`).
+`docker build --pull --target test .` runs the unit tests in the SDK image.
 The image listens on TCP 5080 (`ASPNETCORE_HTTP_PORTS`) and UDP 5081 (`Milan__UdpPort`),
 runs as the non-root `app` user, and takes any `Milan__<Setting>` environment variable.
 It holds the trimmed server on a chiseled Ubuntu base (about 65 MB) with no shell, so
 `docker exec` cannot open one; use `docker logs`.
+The supported Compose/deploy recipes use a 384 MiB memory cap, 256-PID
+limit, read-only root filesystem, dropped capabilities, `no-new-privileges`, a 16 MiB
+`/tmp`, and bounded logs (10 MiB x 3). The deploy script caps CPU usage at the smaller
+of two CPUs or the remote Docker host's CPU count. Compose defaults to one CPU;
+`MILAN_CPU_LIMIT=2 docker compose up -d --build` raises that cap on hosts with at least
+two CPUs. Adjust resource caps to measured requirements.
+The serviced .NET 10 tags follow published updates; record tested image digests and
+rebuild after runtime updates because this executable is self-contained.
 
 The server has to see each player's real address and UDP port, or endpoint discovery
 and per-address rate limits are wrong. How that works depends on where Docker runs:
@@ -109,7 +229,9 @@ running server:
   `/var/milan/milanserver.tar.gz`, about 19 MB. It asks for sudo once if the folder
   cannot be created as the login user.
 - It replaces the `milanserver` container, which runs with host networking, restarts
-  unless stopped, and has a 384 MB memory limit (`MEMORY_LIMIT` in the script). It then
+  unless stopped, and has a 384 MB memory limit (`MEMORY_LIMIT` in the script). It
+  detects the remote Docker host's CPU count before replacing the container and uses
+  at most two CPUs (`MAX_CPUS` in the script), so a one-CPU VPS uses `--cpus 1`. It then
   checks `/healthz`. Lobbies are lost on a redeploy; hosts register again on their own.
 - Settings go in `/var/milan/milanserver.env` on the server, one `Milan__<Setting>=value`
   per line, and apply on the next deploy.
@@ -119,12 +241,15 @@ To do it by hand, name the tag when saving: `docker save milanserver` saves ever
 the repository, including `milanserver:test` from `--target test`, which carries the
 whole .NET SDK.
 
-With host networking, the server's own firewall applies: open TCP 5080 and UDP 5081 there
-(for example `ufw allow 5080/tcp` and `ufw allow 5081/udp`) and in the provider's
-firewall. Published ports (`-p`) bypass ufw. Games connect with
-`-mmserver=http://<server IPv4 address>:5080`.
+With host networking, the server's own firewall applies. A passwordless LAN server can
+expose TCP 5080 and UDP 5081 and use `-mmserver=http://<server IPv4 address>:5080`.
+Behind Caddy, expose HTTPS 443 and direct UDP 5081, bind backend 5080 to loopback, and use
+`-mmserver=https://<server hostname>`. Published ports need Docker-aware firewall rules;
+do not publish a TLS proxy's backend publicly. Direct Kestrel TLS is also supported:
+mount certificates read-only and configure an HTTPS endpoint (a non-root container can
+listen on 8443, published as 443) without a public plaintext fallback for passwords.
 
-## API v1
+## HTTP protocol 2 (`/v1` routes)
 
 JSON is camelCase with string enums. Errors return `{ "code": "...", "message": "..." }`.
 A wrong key and a missing object return the same 404.
@@ -132,6 +257,9 @@ A wrong key and a missing object return the same 404.
 | Method | Route | Credential | Purpose |
 | --- | --- | --- | --- |
 | GET | `/v1/info` | none | Protocol version and timings |
+| GET | `/v1/stats` | none or stats token | Player and lobby counts; see Statistics |
+| PUT | `/v1/presence/{id}` | none | A game in no lobby and no search reports that it is running; `id` is its own random ID |
+| DELETE | `/v1/presence/{id}` | none | Withdraw a presence report |
 | POST | `/v1/lobbies` | none | Create a lobby; returns `lobbyId`, `hostKey`, `inviteCode` |
 | PUT | `/v1/lobbies/{id}/state` | host key | Full-state report. Used for prompt setting changes and the heartbeat |
 | DELETE | `/v1/lobbies/{id}` | host key | Close the lobby, or hand it to a member if any remain |
@@ -143,10 +271,11 @@ A wrong key and a missing object return the same 404.
 | POST | `/v1/lobbies/{id}/introductions/poll?after=N` | host key | Long-poll: every live reservation with joiner candidates and traversal key |
 | PUT | `/v1/reservations/{id}/candidates` | join key | Joiner's game port and LAN addresses, once its socket exists |
 | POST | `/v1/reservations/{id}/poll?after=N` | join key | Long-poll: current host candidates |
-| POST | `/v1/reservations/{id}/joined` | join key | Joiner was admitted; slot is released on the host's next current report |
+| POST | `/v1/reservations/{id}/joined` | join key | Provisional join notice; only the host's roster grants membership/releases the slot |
 | DELETE | `/v1/reservations/{id}` | join key | Give up a reservation |
 | POST | `/v1/members/{id}/host-lost` | join key | A member lost its host; body `{ "canHost": true }` |
 | POST | `/v1/members/{id}/poll?after=N` | join key | Long-poll: the member's migration status |
+| GET | `/v1/members/{id}/invite` | join key | The lobby's invite code, for a member to invite with; `403 invites_host_only` unless the host's state has `memberInvites` |
 | DELETE | `/v1/members/{id}` | join key | A member left the lobby |
 
 Credentials use `Authorization: Bearer <key>`.

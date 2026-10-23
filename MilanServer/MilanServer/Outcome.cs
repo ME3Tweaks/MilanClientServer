@@ -47,6 +47,25 @@ public static class Failures
     public static readonly Failure HostReplaced =
         new(409, "host_replaced", "This lobby has a new host after the previous one stopped answering.");
 
+    public static readonly Failure AccessKeyInvalid =
+        new(401, "access_key_invalid", "This server needs an access key, and the request's is missing or wrong.");
+    public static readonly Failure HttpsRequired =
+        new(426, "https_required", "Server passwords and statistics tokens require HTTPS. Use an https:// server URL.");
+    public static readonly Failure RequestLimit =
+        new(429, "request_limit", "Too many concurrent requests. Retry after an active request finishes.");
+    public static readonly Failure PollBusy =
+        new(429, "poll_busy", "A poll is already waiting for this credential.");
+
+    public static readonly Failure StatsUnavailable =
+        new(404, "stats_unavailable", "Statistics are not public on this server.");
+    public static readonly Failure StatsTokenInvalid =
+        new(401, "stats_token_invalid", "The statistics token is wrong.");
+    public static readonly Failure PresenceDisabled =
+        new(404, "presence_disabled", "This server does not take presence reports.");
+
+    public static readonly Failure InvitesHostOnly =
+        new(403, "invites_host_only", "Only the host can invite players to this lobby.");
+
     public static readonly Failure LobbyFull = new(409, "lobby_full", "The lobby has no free slots.");
     public static readonly Failure LobbyNotJoinable = new(409, "lobby_not_joinable", "The lobby is not accepting joins.");
     public static readonly Failure VersionMismatch =

@@ -15,6 +15,8 @@ internal static class Secrets
     public const int InviteCodeLength = 10;
 
     public static string NewId() => Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16));
+    public static bool IsId(string? id) => id is { Length: 22 }
+        && id.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
 
     public static string NewKey() => Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));
 

@@ -5,13 +5,17 @@ namespace MilanServer.Tests;
 public sealed class MigrationTests : StoreTestBase
 {
     static readonly IPAddress ThirdJoinerIp = IPAddress.Parse("192.0.2.1");
+    readonly Dictionary<string, List<string>> _confirmed = new(StringComparer.Ordinal);
 
     // Redeems, joins, and lets the host count the joiner, as a real join does.
     JoinReservation Join(CreateLobbyResponse lobby, IPAddress from, long revision, int players)
     {
         JoinReservation reservation = Redeem(lobby, from).Value;
         Assert.Null(Store.MarkReservationJoined(reservation.ReservationId, reservation.JoinKey));
-        Report(lobby, State(revision, players: players));
+        if (!_confirmed.TryGetValue(lobby.LobbyId, out List<string>? roster))
+            _confirmed[lobby.LobbyId] = roster = [];
+        roster.Add(reservation.ReservationId);
+        Report(lobby, State(revision, players: players) with { MemberIds = roster.ToArray() });
         return reservation;
     }
 
@@ -41,13 +45,42 @@ public sealed class MigrationTests : StoreTestBase
     }
 
     [Fact]
-    public void JoinedMember_CanReportBeforeTheHostCountsIt()
+    public void Member_GetsTheInviteCode_WhenMembersMayInvite()
+    {
+        CreateLobbyResponse lobby = Host();
+        JoinReservation member = Join(lobby, JoinerIp, 2, 2);
+        Report(lobby, State(3, players: 2) with { MemberInvites = true });
+
+        Assert.Equal(lobby.InviteCode, Store.GetMemberInvite(member.ReservationId, member.JoinKey).Value.InviteCode);
+
+        // Read each time, so a rotated code is never stale.
+        string rotated = Store.RotateInviteCode(lobby.LobbyId, lobby.HostKey).Value.InviteCode;
+        Assert.Equal(rotated, Store.GetMemberInvite(member.ReservationId, member.JoinKey).Value.InviteCode);
+    }
+
+    [Fact]
+    public void Member_IsRefusedTheInviteCode_WhenOnlyTheHostInvites()
+    {
+        CreateLobbyResponse lobby = Host(State(isPrivate: true));
+        JoinReservation member = Join(lobby, JoinerIp, 2, 2);
+
+        Assert.Equal(Failures.InvitesHostOnly, Store.GetMemberInvite(member.ReservationId, member.JoinKey).Failure);
+        Assert.Equal(Failures.MemberNotFound, Store.GetMemberInvite(member.ReservationId, "wrong").Failure);
+        Assert.Equal(Failures.MemberNotFound, Store.GetMemberInvite("nobody", member.JoinKey).Failure);
+
+        // The host switches to a mode where members invite.
+        Report(lobby, State(3, isPrivate: true, players: 2) with { MemberInvites = true });
+        Assert.Null(Store.GetMemberInvite(member.ReservationId, member.JoinKey).Failure);
+    }
+
+    [Fact]
+    public void SelfReportedJoin_CannotReportBeforeHostConfirmation()
     {
         CreateLobbyResponse lobby = Host();
         JoinReservation reservation = Redeem(lobby).Value;
         Assert.Null(Store.MarkReservationJoined(reservation.ReservationId, reservation.JoinKey));
 
-        Assert.Equal(MigrationState.Checking, ReportLost(reservation).State);
+        Assert.Equal(Failures.MemberNotFound, Store.ReportHostLost(reservation.ReservationId, reservation.JoinKey, new HostLostReport()).Failure);
     }
 
     [Fact]
@@ -99,7 +132,7 @@ public sealed class MigrationTests : StoreTestBase
 
         Outcome<ReservationStatus> status = await Store.PollReservationAsync(toNewHost.ReservationId, toNewHost.JoinKey, -1,
             CancellationToken.None);
-        Assert.Contains(status.Value.HostCandidates, c => c is { Address: "192.168.1.40", Port: 7778, Kind: CandidateKind.Lan });
+        Assert.DoesNotContain(status.Value.HostCandidates, c => c.Kind == CandidateKind.Lan);
         Assert.Contains(status.Value.HostCandidates, c => c is { Address: "198.51.100.20", Port: 7778, Kind: CandidateKind.PublicReported });
     }
 
