@@ -216,6 +216,26 @@ and per-address rate limits are wrong. How that works depends on where Docker ru
 - **Docker Desktop:** published ports go through a proxy, so every player appears as
   the gateway. Do not use it for NAT or LAN tests.
 
+### Building images for distribution
+
+From WSL or Linux, `build-images.sh` runs the unit tests, then builds the image for both
+`linux/amd64` and `linux/arm64`. No emulation is needed: the SDK stage runs natively and
+cross-publishes for each architecture.
+
+```
+./build-images.sh --version 1.2.0
+./build-images.sh --version 1.2.0 --push ghcr.io/<owner>/milanserver --latest
+```
+
+- Without `--push`, it writes `dist/milanserver-<version>-linux-<arch>.tar.gz` for each
+  architecture and a `.sha256` file. Each tarball loads as `milanserver:<version>`:
+  `gunzip -c milanserver-1.2.0-linux-arm64.tar.gz | docker load`.
+- With `--push`, it pushes one multi-architecture image (log in to the registry first);
+  each server pulls its own architecture. `--latest` also tags it `latest`.
+- Without `--version`, the version is the current commit, with `-dirty` if the image's
+  sources have uncommitted changes. Images carry the standard OCI version, revision,
+  creation-time and source labels. `--skip-tests` skips the tests.
+
 ### Deploying the image to a server
 
 From WSL or Linux, `deploy.sh` builds the image, copies it over SSH, and replaces the

@@ -5,6 +5,7 @@
 **/*.user
 **/Properties/launchSettings.json
 publish/
+dist/
 Dockerfile
 compose.yaml
 .dockerignore

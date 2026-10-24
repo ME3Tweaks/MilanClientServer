@@ -10,5 +10,6 @@
 Cargo.lock
 /MilanHost/Version/MilanHost.aps
 /MilanServer/milanserver.tar.gz
+/MilanServer/dist/
 /.lecccli
 /scratchpad
