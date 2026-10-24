@@ -3,7 +3,7 @@
 #include "Base/IOUtils.hpp"
 #include "Base/Logger.hpp"
 #include "Components/CCommands.hpp"
-#ifdef _MLN_DEBUG
+#ifndef _FINAL_RELEASE
 #include "Components/CDesync.hpp"
 #endif
 #include "Components/CGlobals.hpp"
@@ -159,7 +159,7 @@ void UGameEngine_Tick_hook(UGameEngine* const Context, float const Delta)
     NETPROF(CaptureFrameStart(Delta));
     (*UGameEngine_Tick_orig)(Context, Delta);
     COMPONENT(CMatchmaking).On_GameEngineTick(Delta);
-#ifdef _MLN_DEBUG
+#ifndef _FINAL_RELEASE
     COMPONENT(CDesync).On_GameEngineTick(Delta);
 #endif
 }
@@ -362,7 +362,7 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     //if (IsFunctionWithinDerivedClass(Function, L"SFXOnlineComponentImageManager"))
     //    MILAN_TRACEW(ELOG_DevelUtils, L"%S: %s", __func__, *Function->GetFullName());
 
-#ifdef _MLN_DEBUG
+#ifndef _FINAL_RELEASE
     // Desync snapshot requests ride on ClientMessage / ServerMutate and must not reach script.
     if (COMPONENT(CDesync).On_UObject_ProcessEvent(Context, Function, Parms)) return;
 #endif
@@ -674,6 +674,37 @@ UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read
         }
         return Ret;
     }
+}
+
+
+// A joiner resolves each package the host announces from UWorld::Tick, once per tick until this
+// returns nonzero. For a package it lacks, the engine starts an async load and returns 0; on the
+// next tick it finds the package object that load created and compares GUIDs at once, before the
+// load has read the GUID from the file. The zero GUID fails the comparison and the joiner drops
+// with "Package '...' version mismatch". Large on-demand packages (Milan's GUI image packages)
+// stay in that state for several ticks, so wait while the package is still loading.
+t_Net_VerifyPackageInfo* Net_VerifyPackageInfo_orig = nullptr;
+void* Net_VerifyPackageInfo_hook(void* const Context, FPackageInfo* const Info)
+{
+    constexpr unsigned long long k_rfAsyncLoading = 0x0000040000000000ull;
+
+    if (Info != nullptr && UObject_StaticFindObject_orig != nullptr)
+    {
+        FString const Name = Info->PackageName.ToString();
+        UObject* const Existing = (*UObject_StaticFindObject_orig)(UPackage::StaticClass(), nullptr, *Name, FALSE);
+        if (Existing != nullptr && Existing->Outer == nullptr && (Existing->ObjectFlags & k_rfAsyncLoading) != 0)
+        {
+            static SFXName s_lastWaited{};
+            if (!(s_lastWaited == Info->PackageName))
+            {
+                s_lastWaited = Info->PackageName;
+                MILAN_DEBUGW(ELOG_NetHooks, L"package %s the host uses is still loading; checking it again next tick", *Name);
+            }
+            return nullptr;
+        }
+    }
+
+    return (*Net_VerifyPackageInfo_orig)(Context, Info);
 }
 
 

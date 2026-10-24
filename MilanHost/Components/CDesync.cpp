@@ -1,5 +1,5 @@
-// Desync snapshots only exist in DEBUG builds; see CDesync.hpp.
-#ifdef _MLN_DEBUG
+// Desync snapshots exist in DEBUG and RELEASE builds, not FINAL; see CDesync.hpp.
+#ifndef _FINAL_RELEASE
 
 #include <algorithm>
 #include <cmath>
@@ -865,7 +865,12 @@ bool CDesync::On_UObject_ProcessEvent(UObject* const Context, UFunction* const F
         }
         else if (Request == L"snap")
         {
-            mp_hostSnapOrigin = "client";
+            // Only a host that is recording takes snapshots for a client, so a client in
+            // someone else's lobby cannot make that host write files.
+            if (m_interval > 0.0f || m_file.is_open())
+                mp_hostSnapOrigin = "client";
+            else
+                MILAN_INFOW(ELOG_Desync, L"desync: ignored a snapshot request from player %d; run desync.start to record", PlayerIdOf(Controller));
         }
         return true;
     }
@@ -873,4 +878,4 @@ bool CDesync::On_UObject_ProcessEvent(UObject* const Context, UFunction* const F
     return false;
 }
 
-#endif // _MLN_DEBUG
+#endif // !_FINAL_RELEASE

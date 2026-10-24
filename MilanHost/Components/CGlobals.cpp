@@ -3,6 +3,7 @@
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
 #include "Engine/InputPromptFix.hpp"
+#include "Engine/DLCConfigReload.hpp"
 #include "Engine/LinkerPatcher.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfDecls.hpp"
@@ -118,6 +119,7 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
     // Never uninstalled, so shutdown profile saves stay blocked too.
     AchievementGuard::Initialize(Context);
     LinkerPatcher::Initialize(Context);
+    DLCConfigReload::Initialize(Context);
     INSTALL_HOOK_TWO(FPackageFileCache, FindPackageFile, GLOBAL_FPACKAGEFILECACHE_FINDPACKAGEFILE_RVA);
     INSTALL_HOOK_TWO(ULinkerLoad, FinalizeCreation, GLOBAL_ULINKERLOAD_FINALIZECREATION_RVA);
     INSTALL_HOOK_TWO(ULinkerLoad, CreateExport, GLOBAL_ULINKERLOAD_CREATEEXPORT_RVA);
@@ -177,6 +179,9 @@ void CGlobals::InitNetworkHooks(::LESDK::Initializer& Context)
     // Matchmaking sends and receives its datagrams on the UE3 game socket in every build.
     INSTALL_HOOK_TWO(FSocketWin, SendTo, GLOBAL_FSOCKETWIN_SENDTO_OFFSET);
     INSTALL_HOOK_TWO(FSocketWin, RecvFrom, GLOBAL_FSOCKETWIN_RECVFROM_OFFSET);
+
+    // Joiners wait for packages the host uses to finish async loading
+    INSTALL_HOOK_TWO(Net, VerifyPackageInfo, GLOBAL_NET_VERIFYPACKAGEINFO_RVA);
 }
 
 void CGlobals::InitNetworkInjections()

@@ -10,7 +10,7 @@
 #include "Base/Base.hpp"
 #include "Base/Logger.hpp"
 #include "Components/CCommands.hpp"
-#ifdef _MLN_DEBUG
+#ifndef _FINAL_RELEASE
 #include "Components/CDesync.hpp"
 #endif
 #include "Components/CGlobals.hpp"
@@ -98,7 +98,7 @@ SPI_IMPLEMENT_ATTACH
     gp_componentContainer->Initialize<CRenderdoc>(*gp_sdkContext);
 #endif
 
-#ifdef _MLN_DEBUG
+#ifndef _FINAL_RELEASE
     gp_componentContainer->Initialize<CDesync>(*gp_sdkContext);
 #endif
 
@@ -155,7 +155,7 @@ void SingleDetachImpl()
     // Terminate subsystems in reverse.
     // ----------------------------------------
 
-#ifdef _MLN_DEBUG
+#ifndef _FINAL_RELEASE
     gp_componentContainer->Terminate<CDesync>(*gp_sdkContext);
 #endif
 

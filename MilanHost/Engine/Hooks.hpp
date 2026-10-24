@@ -402,6 +402,15 @@ extern t_FSocketWin_RecvFrom* FSocketWin_RecvFrom_orig;
 
 UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read, SOCKADDR_IN* Source);
 
+// LE3 11.3.2, RVA 0x8CB640 (no symbol): a client resolving a package the host uses. It finds or
+// loads the package and fails the connection with "Package '...' version mismatch" when its GUID
+// differs from the host's. Returns nonzero once the package is resolved.
+#define GLOBAL_NET_VERIFYPACKAGEINFO_RVA  ::LESDK::Address::FromOffset(0x8CB640)
+using t_Net_VerifyPackageInfo = void*(void* Context, FPackageInfo* Info);
+extern t_Net_VerifyPackageInfo* Net_VerifyPackageInfo_orig;
+
+void* Net_VerifyPackageInfo_hook(void* Context, FPackageInfo* Info);
+
 
 // ! <Methods relevant to network debug.>
 // ========================================
