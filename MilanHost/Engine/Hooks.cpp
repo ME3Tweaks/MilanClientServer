@@ -481,8 +481,14 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
 
     // Additional information in the title bar for debugging.
 
-    static bool s_updateWindow = true;
-    if (s_updateWindow)
+    static int s_updateWindow = 0;
+
+    if (s_updateWindow == 0 && CmdArgs::Contain(L"-setfunnytitle"))
+    {
+        s_updateWindow = 1;
+    }
+
+    if (s_updateWindow > 0)
     {
         for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
         {
@@ -497,7 +503,25 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
             *Name = FString::Printf(L"Project Milan (INST = %d, PID = %d)", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
             DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
 
-            s_updateWindow = false;
+            s_updateWindow = -1;
+        }
+    }
+    else if(s_updateWindow == 0)
+    {
+        for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
+        {
+            auto const Viewport = (*Iter)->Viewport;
+            if (Viewport == nullptr) break;
+
+            auto const Window = reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
+            auto const Name = reinterpret_cast<FString*>(reinterpret_cast<unsigned char*>(Viewport) + 0xD4);
+
+            MILAN_TRACEW(ELOG_Startup, L"Updating title for %s, viewport at %p", *(*Iter)->StaticName(), Viewport);
+
+            *Name = FString::Printf(L"Legendary Edition Multiplayer");
+            DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
+
+            s_updateWindow = -1;
         }
     }
 #endif

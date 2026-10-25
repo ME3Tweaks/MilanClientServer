@@ -28,14 +28,15 @@ namespace
 
         MPProfile Profile{ Engine };
         MemoryOutputStream ProfileStream{ 204800 };
-
         Profile.Serialize(ProfileStream);
+
+        ::RelativeTimer DiskTimer{};
         bool const bSaved = ::TryWriteFileFullAtomic(Profile.GetProfilePath(), ProfileStream.View());
 
         if (bSaved)
         {
-            MILAN_INFOW(ELOG_MultiProfile, L"local profile saved in %.3f ms (to %s)",
-                ProfileTimer.GetMilliseconds(), *Profile.GetProfilePath());
+            MILAN_INFOW(ELOG_MultiProfile, L"local profile saved in %.3f ms (disk %.3f ms) (to %s)",
+                ProfileTimer.GetMilliseconds(), DiskTimer.GetMilliseconds(), *Profile.GetProfilePath());
         }
         else
         {
