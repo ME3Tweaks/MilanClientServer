@@ -367,6 +367,16 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     if (COMPONENT(CDesync).On_UObject_ProcessEvent(Context, Function, Parms)) return;
 #endif
 
+    // Log why the engine is about to drop a game connection (PMT_ConnectionFailure or PMT_SocketFailure).
+    static SFXName const k_setProgressMessage{ L"SetProgressMessage", 0 };
+    if (Function->Name == k_setProgressMessage && Context->IsA(UGameViewportClient::StaticClass()))
+    {
+        auto const* const Params = static_cast<UGameViewportClient_eventSetProgressMessage_Parms const*>(Parms);
+        if (Params->MessageType >= 4)
+            MILAN_WARNW(ELOG_EngineHooks, L"connection failure: \"%s\" / \"%s\"", Params->Title.Length() > 0 ? Params->Title.Chars() : L"",
+                Params->Message.Length() > 0 ? Params->Message.Chars() : L"");
+    }
+
     COMPONENT(CProfilers).On_UObject_ProcessEvent(Context, Function, Parms, Result);
     COMPONENT(CRenderdoc).On_UObject_ProcessEvent(Context, Function, Parms, Result);
 
@@ -676,35 +686,64 @@ UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read
     }
 }
 
-
-// A joiner resolves each package the host announces from UWorld::Tick, once per tick until this
-// returns nonzero. For a package it lacks, the engine starts an async load and returns 0; on the
-// next tick it finds the package object that load created and compares GUIDs at once, before the
-// load has read the GUID from the file. The zero GUID fails the comparison and the joiner drops
-// with "Package '...' version mismatch". Large on-demand packages (Milan's GUI image packages)
-// stay in that state for several ticks, so wait while the package is still loading.
+// Fix for join GUID issues
+// Make the game wait for packages to load before actually checking the GUID
 t_Net_VerifyPackageInfo* Net_VerifyPackageInfo_orig = nullptr;
 void* Net_VerifyPackageInfo_hook(void* const Context, FPackageInfo* const Info)
 {
     constexpr unsigned long long k_rfAsyncLoading = 0x0000040000000000ull;
+    using t_IsAsyncLoading = bool();
+    static auto* const IsAsyncLoading = reinterpret_cast<t_IsAsyncLoading*>(
+        reinterpret_cast<std::uintptr_t>(::LESDK::GetMainModuleBase()) + 0xC1060); // UObject::IsAsyncLoading
 
-    if (Info != nullptr && UObject_StaticFindObject_orig != nullptr)
+    if (Info != nullptr)
     {
-        FString const Name = Info->PackageName.ToString();
-        UObject* const Existing = (*UObject_StaticFindObject_orig)(UPackage::StaticClass(), nullptr, *Name, FALSE);
-        if (Existing != nullptr && Existing->Outer == nullptr && (Existing->ObjectFlags & k_rfAsyncLoading) != 0)
+        // Walk the object list: StaticFindObject skips packages that are still async loading.
+        constexpr unsigned long long k_rfUnreachable = 0x0000000200000000ull;
+        UPackage* Existing = nullptr;
+        for (TypedObjectIterator<UPackage, false, false> Iter{}; Iter; ++Iter)
         {
-            static SFXName s_lastWaited{};
-            if (!(s_lastWaited == Info->PackageName))
+            UPackage* const Package = *Iter;
+            if (Package->Outer == nullptr && (Package->ObjectFlags & k_rfUnreachable) == 0 && Package->Name == Info->PackageName)
             {
-                s_lastWaited = Info->PackageName;
-                MILAN_DEBUGW(ELOG_NetHooks, L"package %s the host uses is still loading; checking it again next tick", *Name);
+                Existing = Package;
+                break;
             }
-            return nullptr;
+        }
+
+        FString const Name = Info->PackageName.ToString();
+        // A package with a zero GUID (UPackage +0x6C) hasn't been read from its file yet.
+        FGuid const* const Guid = Existing != nullptr ? reinterpret_cast<FGuid const*>(reinterpret_cast<std::uint8_t const*>(Existing) + 0x6C) : nullptr;
+        if (Guid != nullptr && Guid->A == 0 && Guid->B == 0 && Guid->C == 0 && Guid->D == 0)
+        {
+            if ((Existing->ObjectFlags & k_rfAsyncLoading) != 0 || IsAsyncLoading())
+            {
+                static SFXName s_lastWaited{};
+                if (!(s_lastWaited == Info->PackageName))
+                {
+                    s_lastWaited = Info->PackageName;
+                    MILAN_DEBUGW(ELOG_NetHooks, L"package %s the host uses is still loading; checking it again next tick", *Name);
+                }
+                return nullptr;
+            }
+
+            // Nothing is loading it, so load it now.
+            MILAN_INFOW(ELOG_NetHooks, L"package %s the host uses was never loaded here; loading it now", *Name);
+            (*LoadPackage_orig)(nullptr, *Name, 0);
         }
     }
 
-    return (*Net_VerifyPackageInfo_orig)(Context, Info);
+    void* const Result = (*Net_VerifyPackageInfo_orig)(Context, Info);
+
+    // The engine disconnects on a mismatch; say which GUIDs differed.
+    UPackage* const Local = Info != nullptr ? Info->Parent : nullptr;
+    FGuid const* const LocalGuid = Local != nullptr ? reinterpret_cast<FGuid const*>(reinterpret_cast<std::uint8_t const*>(Local) + 0x6C) : nullptr;
+    if (LocalGuid != nullptr && !(*LocalGuid == Info->Guid))
+    {
+        MILAN_WARNW(ELOG_NetHooks, L"package %s: host guid %s, local guid %s, local flags 0x%llX", *Info->PackageName.ToString(),
+            *Info->Guid.ToString(), *LocalGuid->ToString(), static_cast<unsigned long long>(Local->ObjectFlags));
+    }
+    return Result;
 }
 
 
