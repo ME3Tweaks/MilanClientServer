@@ -1,3 +1,4 @@
+#ifndef _FINAL_RELEASE
 #include "Components/CCommands.hpp"
 #include "Components/CProfilers.hpp"
 #include "Engine/ExtObject.hpp"
@@ -447,3 +448,5 @@ void CProfilers::DrawActorChannel(MilanCanvasDrawer& Drawer, UActorChannel* cons
 
     Drawer.PopIndent();
 }
+
+#endif // !_FINAL_RELEASE

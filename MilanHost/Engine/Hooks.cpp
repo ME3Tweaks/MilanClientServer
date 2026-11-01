@@ -12,7 +12,9 @@
 #endif
 #include "Components/CMatchmaking.hpp"
 #include "Components/COutput.hpp"
+#ifndef _FINAL_RELEASE
 #include "Components/CProfilers.hpp"
+#endif
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
 #include "Engine/ConsoleAutoComplete.hpp"
@@ -21,6 +23,7 @@
 #include "Engine/Intercept.hpp"
 #include "Engine/LinkerPatcher.hpp"
 #include "Engine/LoadGate.hpp"
+#include "Engine/ConsolePipe.hpp"
 #include "Engine/MenuScenes.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfStream.hpp"
@@ -201,6 +204,7 @@ void UGameEngine_Tick_hook(UGameEngine* const Context, float const Delta)
     COMPONENT(CMatchmaking).On_GameEngineTick(Delta);
 #ifndef _FINAL_RELEASE
     COMPONENT(CDesync).On_GameEngineTick(Delta);
+    ConsolePipe::Pump();
 #endif
 }
 
@@ -417,8 +421,10 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
                 Params->Message.Length() > 0 ? Params->Message.Chars() : L"");
     }
 
+#ifndef _FINAL_RELEASE
     COMPONENT(CProfilers).On_UObject_ProcessEvent(Context, Function, Parms, Result);
     COMPONENT(CRenderdoc).On_UObject_ProcessEvent(Context, Function, Parms, Result);
+#endif
 
     (*UObject_ProcessEvent_orig)(Context, Function, Parms, Result);
 
@@ -478,13 +484,12 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
         COMPONENT(CState).On_UObject_ProcessInternal_Post(Context, Stack, Result);
     }
 
-#ifndef _FINAL_RELEASE
-
     // -skiptomp is handled in UGameEngine_LoadMap_hook.
 
-    // Additional information in the title bar for debugging.
-
     static int s_updateWindow = 0;
+
+#ifndef _FINAL_RELEASE
+    // Additional information in the title bar for debugging.
 
     if (s_updateWindow == 0 && CmdArgs::Contain(L"-setfunnytitle"))
     {
@@ -509,7 +514,9 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
             s_updateWindow = -1;
         }
     }
-    else if(s_updateWindow == 0)
+    else
+#endif
+    if (s_updateWindow == 0)
     {
         for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
         {
@@ -527,7 +534,6 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
             s_updateWindow = -1;
         }
     }
-#endif
 }
 
 t_UObject_SkipFunction* UObject_SkipFunction = nullptr;

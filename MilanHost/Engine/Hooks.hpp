@@ -457,11 +457,6 @@ extern t_UNetConnection_ClientSupportsLevel* UNetConnection_ClientSupportsLevel_
 
 int UNetConnection_ClientSupportsLevel_hook(UNetConnection* Context, UObject* Object);
 
-using t_UNetConnection_Close = void(UNetConnection* Context);
-extern t_UNetConnection_Close* UNetConnection_Close_orig;
-
-void UNetConnection_Close_hook(UNetConnection* Context);
-
 using t_UNetConnection_CreateChannel = UChannel* (UNetConnection* Context, EChannelType Type, INT bLocal, INT Index);
 extern t_UNetConnection_CreateChannel* UNetConnection_CreateChannel_orig;
 

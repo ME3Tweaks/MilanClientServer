@@ -119,7 +119,9 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
     // Never uninstalled, so shutdown profile saves stay blocked too.
     AchievementGuard::Initialize(Context);
     LinkerPatcher::Initialize(Context);
+#ifndef _FINAL_RELEASE
     DLCConfigReload::Initialize(Context);
+#endif
     INSTALL_HOOK_TWO(FPackageFileCache, FindPackageFile, GLOBAL_FPACKAGEFILECACHE_FINDPACKAGEFILE_RVA);
     INSTALL_HOOK_TWO(ULinkerLoad, FinalizeCreation, GLOBAL_ULINKERLOAD_FINALIZECREATION_RVA);
     INSTALL_HOOK_TWO(ULinkerLoad, CreateExport, GLOBAL_ULINKERLOAD_CREATEEXPORT_RVA);

@@ -4,6 +4,7 @@
 
 class CCommands;
 
+#ifndef _FINAL_RELEASE
 namespace DLCConfigReload
 {
     /** Sets up DLC config reload */
@@ -15,3 +16,4 @@ namespace DLCConfigReload
     /** Reloads a DLC's config */
     bool Reload(wchar_t const* DLCName);
 }
+#endif // !_FINAL_RELEASE

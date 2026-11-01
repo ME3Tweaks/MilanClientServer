@@ -8,6 +8,7 @@
 #include "Engine/DLCConfigReload.hpp"
 #include "Engine/Hooks.hpp"
 
+#ifndef _FINAL_RELEASE
 
 // RVAs
 #define GLOBAL_GCONTENTMANAGER_RVA                      ::LESDK::Address::FromOffset(0x17D5630)
@@ -297,3 +298,5 @@ namespace DLCConfigReload
             });
     }
 }
+
+#endif // !_FINAL_RELEASE
