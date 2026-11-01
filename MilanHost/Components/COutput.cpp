@@ -263,13 +263,16 @@ void COutput::InitMainLogger()
     bUseAsyncLogger = !CmdArgs::Contain(L"-synclogger");
 
     MilanLogger* MainLogger = bUseAsyncLogger ? new AsyncMilanLogger{} : new MilanLogger{};
-    std::string LogFileName = "MilanHost.log";
+    std::string LogFileName = "Logs\\MilanHost.log";
+
+    // Other ASI mods log to Binaries\Win64\Logs too.
+    ::CreateDirectoryA("Logs", nullptr);
 
     int const OrdinalInstance = ::GetGameInstanceOrdinal();
     if (OrdinalInstance > 0)
     {
         // This allows us to use different log files when running multiple local clients.
-        LogFileName = std::string{ "MilanHost-" } + std::to_string(OrdinalInstance) + ".log";
+        LogFileName = std::string{ "Logs\\MilanHost-" } + std::to_string(OrdinalInstance) + ".log";
     }
 
 #ifndef _FINAL_RELEASE
