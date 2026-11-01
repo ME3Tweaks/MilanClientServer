@@ -107,6 +107,10 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
 
     FIND_VAR_TWO(UUIString, StringSize, GLOBAL_UUISTRING_STRINGSIZE_PHOOK);
     FIND_VAR_TWO(UCanvas, WrappedPrint, GLOBAL_UCANVAS_WRAPPEDPRINT_PHOOK);
+    FIND_VAR_TWO(UWorld, FlushLevelStreaming, GLOBAL_UWORLD_FLUSHLEVELSTREAMING);
+
+    GStreamingManager = Context.ResolveTyped<void*>(GLOBAL_GSTREAMINGMANAGER_RIP);
+    LOG_SDK_GLOBAL(GStreamingManager, GStreamingManager != nullptr ? *GStreamingManager : nullptr);
 
     INSTALL_HOOK_TWO(UFunction, Bind, GLOBAL_UFUNCTION_BIND_PHOOK);
 
@@ -164,7 +168,6 @@ void CGlobals::InitNetworkHooks(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(UActorChannel, SetChannelActor, GLOBAL_UACTORCHANNEL_SETCHANNELACTOR_PHOOK);
     INSTALL_HOOK_TWO(UGuidCache, LookupPackageGuid, GLOBAL_UGUIDCACHE_LOOKUPPACKAGEGUID_PHOOK);
     INSTALL_HOOK_TWO(UNetConnection, ClientSupportsLevel, GLOBAL_UNETCONNECTION_CLIENTSUPPORTSLEVEL_PATTERN);
-    INSTALL_HOOK_TWO(UNetConnection, Close, GLOBAL_UNETCONNECTION_CLOSE_PATTERN);
     INSTALL_HOOK_TWO(UNetConnection, CreateChannel, GLOBAL_UNETCONNECTION_CREATECHANNEL_PHOOK);
     INSTALL_HOOK_TWO(UPackageMap, SupportsObject, GLOBAL_UPACKAGEMAP_SUPPORTSOBJECT_PATTERN);
     INSTALL_HOOK_TWO(UPackageMap, SerializeObject, GLOBAL_UPACKAGEMAP_SERIALIZEOBJECT_PATTERN);
@@ -177,6 +180,9 @@ void CGlobals::InitNetworkHooks(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(FSocketWin, Recv, GLOBAL_FSOCKETWIN_RECV_OFFSET);
 
 #endif // !_FINAL_RELEASE
+
+    // Matchmaking vote kicks close connections through this hook in every build.
+    INSTALL_HOOK_TWO(UNetConnection, Close, GLOBAL_UNETCONNECTION_CLOSE_PATTERN);
 
     // Matchmaking sends and receives its datagrams on the UE3 game socket in every build.
     INSTALL_HOOK_TWO(FSocketWin, SendTo, GLOBAL_FSOCKETWIN_SENDTO_OFFSET);
