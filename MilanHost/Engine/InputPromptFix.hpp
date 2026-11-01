@@ -4,8 +4,8 @@
 
 namespace InputPromptFix
 {
-    // Installs a device-aware selection hook for Shared_* UI binding lookups.
-    // Gameplay bindings and non-UI callers of the native collector are untouched.
+    // Installs Shared_* prompt selection and PC binding menu/profile hooks.
+    // PC edits preserve controller mappings and migrate renamed profile aliases.
     void Initialize(::LESDK::Initializer& Context);
     void Uninstall(::LESDK::Initializer& Context);
 }
