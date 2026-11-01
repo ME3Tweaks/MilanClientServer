@@ -20,13 +20,18 @@
 #include "Components/CMatchmaking.hpp"
 #include "Components/CNetworkProfiler.hpp"
 #include "Components/COutput.hpp"
+#ifndef _FINAL_RELEASE
 #include "Components/CProfilers.hpp"
+#endif
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
 #include "Components/CConstants.hpp"
 #include "Engine/BinkUploadPatch.hpp"
+#include "Engine/DLCConfigReload.hpp"
 #include "Engine/ExtObject.hpp"
 #include "Engine/LoadGate.hpp"
+#include "Engine/ConsolePipe.hpp"
+#include "Engine/MenuScenes.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "Shell/ClientConfig.hpp"
 #include "Shell/CmdArgs.hpp"
@@ -86,7 +91,9 @@ SPI_IMPLEMENT_ATTACH
     gp_componentContainer->Initialize<CConstants>(*gp_sdkContext);
     gp_componentContainer->Initialize<CGlobals>(*gp_sdkContext);
     gp_componentContainer->Initialize<CCommands>(*gp_sdkContext);
+#ifndef _FINAL_RELEASE
     gp_componentContainer->Initialize<CProfilers>(*gp_sdkContext);
+#endif
 #ifdef WITH_IMGUI
     gp_componentContainer->Initialize<CImgui>(*gp_sdkContext);
 #endif
@@ -111,8 +118,14 @@ SPI_IMPLEMENT_ATTACH
     // ----------------------------------------
 
     ReportConfigError();
-    SetupImguiInterfaces();
     RegisterNonshipCommands();
+#ifndef _FINAL_RELEASE
+    DLCConfigReload::RegisterCommands(COMPONENT(CCommands));
+#endif
+    MenuScenes::RegisterCommands(COMPONENT(CCommands));
+#ifndef _FINAL_RELEASE
+    ConsolePipe::Start();
+#endif
     RegisterVectoredExceptions();
     SpawnLocalClients();
 
@@ -169,7 +182,9 @@ void SingleDetachImpl()
 #ifdef WITH_IMGUI
     gp_componentContainer->Terminate<CImgui>(*gp_sdkContext);
 #endif
+#ifndef _FINAL_RELEASE
     gp_componentContainer->Terminate<CProfilers>(*gp_sdkContext);
+#endif
     gp_componentContainer->Terminate<CCommands>(*gp_sdkContext);
     gp_componentContainer->Terminate<CGlobals>(*gp_sdkContext);
     gp_componentContainer->Terminate<COutput>(*gp_sdkContext);
@@ -203,12 +218,6 @@ void ReportConfigError()
         MILAN_ERRORW(ELOG_Startup, L"failed to read config: %S", gp_clientConfigError->c_str());
 }
 
-void SetupImguiInterfaces()
-{
-#ifdef WITH_IMGUI
-    COMPONENT(CImgui).RegisterInterface(std::make_unique<DemoInterface>());
-#endif
-}
 
 void RegisterNonshipCommands()
 {
@@ -565,11 +574,11 @@ void RegisterVectoredExceptions()
 
             if (bDispatchHandler)
             {
-                COMPONENT(CProfilers).On_VectoredException(Address, Code, Exceptions);
                 COMPONENT(COutput).On_VectoredException(Address, Code, Exceptions);
-                COMPONENT(CRenderdoc).On_VectoredException(Address, Code, Exceptions);
 
             #ifndef _FINAL_RELEASE
+                COMPONENT(CProfilers).On_VectoredException(Address, Code, Exceptions);
+                COMPONENT(CRenderdoc).On_VectoredException(Address, Code, Exceptions);
                 COMPONENT(CNetworkProfiler).On_VectoredException(Address, Code, Exceptions);
             #endif // !_FINAL_RELEASE
             }
