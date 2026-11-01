@@ -280,6 +280,18 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
     }
 
     [Fact]
+    public async Task SearchFromAnotherVersion_NamesTheExpectedVersion()
+    {
+        using WebApplicationFactory<Program> expecting = _factory.WithWebHostBuilder(builder => builder
+            .UseSetting("Milan:ExpectedGameVersion", "milan-2.0.0"));
+        HttpClient client = expecting.CreateClient();
+        HttpResponseMessage created = await client.PostAsJsonAsync("/v1/searches", new SearchRequest(Version), Ct);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        using System.Text.Json.JsonDocument body = System.Text.Json.JsonDocument.Parse(await created.Content.ReadAsStringAsync(Ct));
+        Assert.Equal("milan-2.0.0", body.RootElement.GetProperty("expectedGameVersion").GetString());
+    }
+
+    [Fact]
     public async Task UdpBinding_ReachesJoinersAndWakesHostPoll()
     {
         HttpClient client = _factory.CreateClient();

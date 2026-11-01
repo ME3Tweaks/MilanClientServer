@@ -66,7 +66,12 @@ public sealed class MilanServerOptions
     public int DiscoveryPacketsPerSecond { get; set; } = 5000;
     public int DiscoveryPacketsPerSecondPerAddress { get; set; } = 100;
 
-    // Reverse proxies whose X-Forwarded-For header is trusted. Loopback is always trusted.
+    // The game version most players on this server run. A quick match search from any other
+    // version still runs, but the game is told that few players will match it. Empty: no notice.
+    public string ExpectedGameVersion { get; set; } = "";
+
+    // Reverse proxies whose X-Forwarded-For and X-Forwarded-Proto headers are trusted, as single
+    // addresses or CIDR ranges such as 172.16.0.0/12. Loopback is always trusted.
     public string[] TrustedProxies { get; set; } = [];
 
     // A private server: when set, every /v1 request except /v1/stats must send it as the
@@ -175,11 +180,13 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
         // The game only sends keys it can put in an HTTP header unchanged.
         if (options.AccessKey.Length > 256 || options.AccessKey.Any(c => c is <= ' ' or >= '\x7F'))
             errors.Add("AccessKey must be printable ASCII without spaces, at most 256 characters.");
+        if (options.ExpectedGameVersion.Length > 0 && MatchmakingStore.ValidateGameVersion(options.ExpectedGameVersion) is not null)
+            errors.Add("ExpectedGameVersion must be empty or a game version: printable ASCII without spaces, at most 64 characters.");
 
         foreach (string proxy in options.TrustedProxies)
         {
-            if (!System.Net.IPAddress.TryParse(proxy, out _))
-                errors.Add($"TrustedProxies entry '{proxy}' is not an IP address.");
+            if (!ProxyTrust.IsValidEntry(proxy))
+                errors.Add($"TrustedProxies entry '{proxy}' is not an IP address or CIDR range.");
         }
 
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);

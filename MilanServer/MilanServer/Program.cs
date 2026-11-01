@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -42,7 +41,7 @@ builder.Services.AddOptions<ForwardedHeadersOptions>()
     {
         forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
         foreach (string proxy in milan.Value.TrustedProxies)
-            forwarded.KnownProxies.Add(IPAddress.Parse(proxy));
+            ProxyTrust.Add(forwarded, proxy);
     });
 
 builder.Services.AddRateLimiter(_ => { });
@@ -79,6 +78,7 @@ builder.Services.AddOptions<RateLimiterOptions>()
 
 WebApplication app = builder.Build();
 
+app.UseUntrustedProxyWarning();
 app.UseForwardedHeaders();
 app.Use(async (http, next) =>
 {
@@ -114,8 +114,9 @@ app.UseMilanAccessKey();
 app.MapMilanApi();
 
 MilanServerOptions settings = app.Services.GetRequiredService<IOptions<MilanServerOptions>>().Value;
-app.Logger.LogInformation("Milan control protocol {Protocol}; server password {PasswordMode}; active request limits {Total}/{Address} per address; UDP work limits {UdpTotal}/{UdpAddress} per second.",
-    Api.ProtocolVersion, settings.AccessKey.Length > 0 ? "requires HTTPS" : "disabled (HTTP permitted)",
+app.Logger.LogInformation("Milan control protocol {Protocol}; expected game version {ExpectedGameVersion}; server password {PasswordMode}; active request limits {Total}/{Address} per address; UDP work limits {UdpTotal}/{UdpAddress} per second.",
+    Api.ProtocolVersion, settings.ExpectedGameVersion.Length > 0 ? settings.ExpectedGameVersion : "any",
+    settings.AccessKey.Length > 0 ? "requires HTTPS" : "disabled (HTTP permitted)",
     settings.MaxConcurrentRequests, settings.MaxConcurrentRequestsPerAddress,
     settings.DiscoveryPacketsPerSecond, settings.DiscoveryPacketsPerSecondPerAddress);
 

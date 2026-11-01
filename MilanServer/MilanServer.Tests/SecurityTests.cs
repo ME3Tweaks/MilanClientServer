@@ -1,10 +1,12 @@
 using System.Buffers.Binary;
 using System.Buffers.Text;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace MilanServer.Tests;
@@ -235,13 +237,49 @@ public sealed class TransportSecurityTests : IClassFixture<MilanFactory>
     }
 
     [Theory]
-    [InlineData("127.0.0.1", 200)]
-    [InlineData("203.0.113.40", 426)]
-    public async Task OnlyTrustedProxies_CanAssertHttps(string source, int expected)
+    [InlineData("127.0.0.1", null, 200)]
+    [InlineData("203.0.113.40", null, 426)]
+    [InlineData("172.18.0.1", "172.18.0.1", 200)]
+    [InlineData("::ffff:172.18.0.1", "172.16.0.0/12", 200)]
+    [InlineData("172.18.0.1", "172.17.0.0/16", 426)]
+    public async Task OnlyTrustedProxies_CanAssertHttps(string source, string? trusted, int expected)
     {
-        using WebApplicationFactory<Program> keyed = _factory.WithWebHostBuilder(b => b.UseSetting("Milan:AccessKey", "party-password"));
+        using WebApplicationFactory<Program> keyed = _factory.WithWebHostBuilder(b =>
+        {
+            b.UseSetting("Milan:AccessKey", "party-password");
+            if (trusted is not null)
+                b.UseSetting("Milan:TrustedProxies:0", trusted);
+        });
         _ = keyed.CreateClient();
-        var response = await keyed.Server.SendAsync(context =>
+        var response = await SendForwarded(keyed, source);
+        Assert.Equal(expected, response.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UntrustedForwarder_IsLoggedOnceWithTheSettingThatTrustsIt()
+    {
+        CapturedWarnings logs = new();
+        using WebApplicationFactory<Program> logged = _factory.WithWebHostBuilder(b => b
+            .UseSetting("Milan:TrustedProxies:0", "10.0.0.0/8").ConfigureLogging(l => l.AddProvider(logs)));
+        _ = logged.CreateClient();
+        foreach (string source in new[] { "127.0.0.1", "10.1.2.3", "::ffff:172.18.0.1", "172.18.0.1" })
+            await SendForwarded(logged, source);
+        string warning = Assert.Single(logs.Messages, m => m.Contains("TrustedProxies"));
+        Assert.Contains("Milan__TrustedProxies__0=172.18.0.1 ", warning);
+    }
+
+    [Theory]
+    [InlineData("172.18.0.1", true)]
+    [InlineData("172.16.0.0/12", true)]
+    [InlineData("2001:db8::/32", true)]
+    [InlineData("caddy", false)]
+    [InlineData("10.0.0.0/33", false)]
+    public void TrustedProxies_AcceptAddressesAndRanges(string entry, bool valid) =>
+        Assert.Equal(valid, new MilanServerOptionsValidator().Validate(null, new MilanServerOptions { TrustedProxies = [entry] }).Succeeded);
+
+    // A plain HTTP request as a TLS proxy forwards it, arriving from source.
+    static Task<Microsoft.AspNetCore.Http.HttpContext> SendForwarded(WebApplicationFactory<Program> app, string source) =>
+        app.Server.SendAsync(context =>
         {
             context.Connection.RemoteIpAddress = IPAddress.Parse(source);
             context.Request.Scheme = "http";
@@ -251,7 +289,19 @@ public sealed class TransportSecurityTests : IClassFixture<MilanFactory>
             context.Request.Headers["X-Forwarded-Proto"] = "https";
             context.Request.Headers["X-Forwarded-For"] = "198.51.100.5";
         }, TestContext.Current.CancellationToken);
-        Assert.Equal(expected, response.Response.StatusCode);
+
+    sealed class CapturedWarnings : ILoggerProvider, ILogger
+    {
+        public ConcurrentQueue<string> Messages { get; } = new();
+        public ILogger CreateLogger(string categoryName) => this;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Warning;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (IsEnabled(logLevel))
+                Messages.Enqueue(formatter(state, exception));
+        }
+        public void Dispose() { }
     }
 
     [Fact]

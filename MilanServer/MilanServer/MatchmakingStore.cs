@@ -105,9 +105,9 @@ public sealed class MatchmakingStore
             lobby.UdpTicketId = ticketId;
         }
 
-        _logger.LogInformation("Created lobby {LobbyId} ({Privacy}, {Phase}, {Joinable}, {Players}/{MaxPlayers}).",
+        _logger.LogInformation("Created lobby {LobbyId} ({Privacy}, {Phase}, {Joinable}, {Players}/{MaxPlayers}), game version {GameVersion}.",
             lobby.Id, state.IsPrivate ? "private" : "public", state.Phase, state.Joinable ? "joinable" : "not joinable",
-            state.PlayerCount, state.MaxPlayers);
+            state.PlayerCount, state.MaxPlayers, request.GameVersion);
 
         return new CreateLobbyResponse(lobby.Id, hostKey, Secrets.FormatInviteCode(lobby.InviteCode),
             state.Revision, lobby.ExpiresAt, _options.HeartbeatSeconds, udpTicket);
@@ -268,9 +268,12 @@ public sealed class MatchmakingStore
                 : now;
             _searches.Add(search.Id, search);
             _searchesStarted++;
+            string? expectedVersion = _options.ExpectedGameVersion.Length > 0 && _options.ExpectedGameVersion != request.GameVersion
+                ? _options.ExpectedGameVersion : null;
             _logger.LogInformation(
-                "Search {SearchId} started: map {MapId}, enemy {EnemyModeId}, difficulty {DifficultyId}, widen {Widen}; matches in progress {InProgress}.",
-                search.Id, request.MapId, request.EnemyModeId, request.DifficultyId, request.Widen,
+                "Search {SearchId} started: game version {GameVersion}{VersionNote}, map {MapId}, enemy {EnemyModeId}, difficulty {DifficultyId}, widen {Widen}; matches in progress {InProgress}.",
+                search.Id, request.GameVersion, expectedVersion is null ? "" : $" (server expects {expectedVersion})",
+                request.MapId, request.EnemyModeId, request.DifficultyId, request.Widen,
                 search.InProgressFrom == now ? "allowed now (no open lobby)" : $"allowed after {_options.InProgressAfterSeconds} s (lobbies open)");
 
             Outcome<SearchStatus> status = EvaluateSearchLocked(search, now);
@@ -279,7 +282,7 @@ public sealed class MatchmakingStore
                 _searches.Remove(search.Id);
                 return failure;
             }
-            return new CreateSearchResponse(search.Id, searchKey, status.Value);
+            return new CreateSearchResponse(search.Id, searchKey, status.Value, expectedVersion);
         }
     }
 
@@ -1450,7 +1453,7 @@ public sealed class MatchmakingStore
         return code;
     }
 
-    static Failure? ValidateGameVersion(string? version)
+    internal static Failure? ValidateGameVersion(string? version)
     {
         if (string.IsNullOrEmpty(version) || version.Length > MaxGameVersionLength || version.Any(c => c is < '!' or > '~'))
             return Failures.Invalid($"GameVersion must be 1-{MaxGameVersionLength} printable ASCII characters without spaces.");

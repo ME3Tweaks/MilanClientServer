@@ -242,4 +242,18 @@ public sealed class SearchTests : StoreTestBase
 
         Assert.Equal(Failures.AddressLimit, Store.CreateSearch(new SearchRequest(Version), JoinerIp).Failure);
     }
+
+    [Theory]
+    [InlineData("", null)]
+    [InlineData(Version, null)]
+    [InlineData("milan-2.0.0", "milan-2.0.0")]
+    public void ExpectedGameVersion_IsNamedOnlyToOtherVersions_AndTheSearchStillRuns(string expected, string? named)
+    {
+        Options.ExpectedGameVersion = expected;
+        CreateSearchResponse search = StartSearch();
+        Assert.Equal(named, search.ExpectedGameVersion);
+        Assert.Equal(SearchState.Searching, search.Status.State);
+        Assert.True(new MilanServerOptionsValidator().Validate(null, Options).Succeeded);
+        Assert.True(new MilanServerOptionsValidator().Validate(null, new MilanServerOptions { ExpectedGameVersion = "milan 2.0" }).Failed);
+    }
 }

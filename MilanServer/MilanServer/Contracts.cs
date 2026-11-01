@@ -124,7 +124,10 @@ public sealed record SearchRequest(
     bool Widen = true,
     IReadOnlyList<string>? ExcludeLobbyIds = null);
 
-public sealed record CreateSearchResponse(string SearchId, string SearchKey, SearchStatus Status);
+// ExpectedGameVersion is Milan:ExpectedGameVersion when the search's version differs from it,
+// so the game can tell the player that few others will match. The search runs either way.
+public sealed record CreateSearchResponse(string SearchId, string SearchKey, SearchStatus Status,
+    string? ExpectedGameVersion = null);
 
 public sealed record SearchStatus(
     SearchState State,

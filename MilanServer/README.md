@@ -34,8 +34,9 @@ with the same number.
 
 Host, search, and join keys are bearer secrets. On the Internet, serve the API over
 TLS, either through Kestrel certificate configuration or behind a reverse proxy.
-When a proxy terminates TLS, list its address in `Milan:TrustedProxies` so the
-client's real address is used for rate limiting and endpoint candidates. Passwordless
+When a proxy terminates TLS, list its address (or a CIDR range) in `Milan:TrustedProxies`
+so the server applies its `X-Forwarded-Proto` and `X-Forwarded-For` headers: requests count
+as HTTPS, and the client's real address is used for rate limiting and endpoint candidates. Passwordless
 HTTP is supported for simple LAN/group setups and operators who choose it. A configured
 server password requires HTTPS on every `/v1` request, even on a LAN. MilanHost refuses
 to transmit a server password to an HTTP URL. HTTP `/healthz` remains available.
@@ -64,13 +65,23 @@ For Caddy on the Linux host with `deploy.sh`, proxy to `127.0.0.1:5080` and set
 `ASPNETCORE_URLS=http://127.0.0.1:5080` in the server environment file. Keep public
 TCP 5080 closed and UDP 5081 direct. Loopback proxies are trusted by default; for
 another proxy, configure only its actual address in `Milan__TrustedProxies__0`.
+Any proxy that sends the standard `X-Forwarded-Proto` header works (Caddy, nginx, Traefik,
+HAProxy). With published container ports, the proxy connects from the Docker network's
+gateway (for example `172.17.0.1`), not loopback. If the gateway address can change, trust a
+range such as `Milan__TrustedProxies__0=172.16.0.0/12`, but only while TCP 5080 is reachable
+from nowhere but the proxy. The server logs a warning naming each untrusted address that sends
+forwarding headers, with the setting that would trust it; a password-protected server behind
+an untrusted proxy answers `426 https_required`.
 Never clear proxy trust restrictions or trust arbitrary forwarding headers.
 
 ### Mod compatibility and admission
 
 Hosting, searching, and invite redemption submit `gameVersion`, an opaque 1-64 character
 identity for the installed **Project Milan mod**. Searches compare it exactly; invite
-joins with a different value return `409 version_mismatch`. It is independent of the
+joins with a different value return `409 version_mismatch`. The server logs it for every
+lobby and search. Set `Milan__ExpectedGameVersion` to the version most of the server's
+players run: a search from any other version still runs, but its response carries
+`expectedGameVersion` so the game can warn that few players will match. It is independent of the
 MilanHost ASI release. On each launch, MilanHost reads the second physical line of
 `BioGame/DLC/DLC_MOD_ProjectMilan/_metacmm.txt` relative to the running game's root.
 Only the DLC folder identity is fixed; the installed version is read from disk.
