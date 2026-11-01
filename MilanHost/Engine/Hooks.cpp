@@ -21,6 +21,7 @@
 #include "Engine/Intercept.hpp"
 #include "Engine/LinkerPatcher.hpp"
 #include "Engine/LoadGate.hpp"
+#include "Engine/MenuScenes.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfStream.hpp"
 #include "Online/SFXOnlineHijacks.hpp"
@@ -115,6 +116,8 @@ void BioRequestExit_hook(UBOOL const bForce, INT const ExitCode, INT const Unuse
 
 t_UUIString_StringSize* UUIString_StringSize = nullptr;
 t_UCanvas_WrappedPrint* UCanvas_WrappedPrint = nullptr;
+t_UWorld_FlushLevelStreaming* UWorld_FlushLevelStreaming = nullptr;
+void** GStreamingManager = nullptr;
 
 
 // ! UFunction methods.
@@ -140,11 +143,48 @@ UBOOL UGameEngine_Exec_hook(UGameEngine* const Context, WCHAR const* const Comma
 t_UGameEngine_LoadMap* UGameEngine_LoadMap_orig = nullptr;
 UBOOL UGameEngine_LoadMap_hook(UGameEngine* const Context, FURL* const Url, UPendingLevel* const Level, FString* const Error)
 {
+    bool bTravelToLobby = false;
+    // -skiptomp: Just go to lobby
+    static bool s_skipToLobby = CmdArgs::Contain(L"-skiptomp");
+    if (s_skipToLobby && ::_wcsicmp(*Url->Map, L"EntryMenu") == 0)
+    {
+        s_skipToLobby = false;
+        bTravelToLobby = true;
+    }
+
+    // EntryMenu is shown as one of the live menu scenes.
+    if (!bTravelToLobby)
+    {
+        MenuScenes::RedirectEntryMenu(Url);
+    }
+
     MILAN_TRACEW(ELOG_EngineHooks, L"UGameEngine::LoadMap: Url = %s...", *Url->Map);
     NETPROF(CaptureLevelStart(Url));
 
     auto const Result = (*UGameEngine_LoadMap_orig)(Context, Url, Level, Error);
     if (!Result) MILAN_ERRORW(ELOG_EngineHooks, L"UGameEngine::LoadMap failed: %s", *(*Error));
+
+    // Force load screen to stay up while level finishes up loading
+    if (Result && !bTravelToLobby && MenuScenes::IsMainMenuMap(*Url->Map))
+    {
+        MenuScenes::FinishLoading();
+    }
+
+    if (Result && bTravelToLobby)
+    {
+        TypedObjectIterator<APlayerController, true, false> Iter{};
+        if (Iter)
+        {
+            FString const LobbyUrl = FString::Printf(L"%s?origin=MainMenu", *Context->GetDefaultLobbyMap());
+            MILAN_INFOW(ELOG_EngineHooks, L"-skiptomp: travelling to %s", *LobbyUrl);
+            constexpr unsigned char k_travelAbsolute = 0;
+            (*Iter)->eventClientTravel(LobbyUrl, k_travelAbsolute, FALSE, FGuid{});
+        }
+        else
+        {
+            MILAN_WARNW(ELOG_EngineHooks, L"-skiptomp: no player controller to travel with");
+        }
+    }
 
     // Refreshes exec-function/map completions for the new level (e.g. DLC-added commands).
     if (Result) ConsoleAutoComplete::RebuildForCurrentLevel();
@@ -440,44 +480,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
 
 #ifndef _FINAL_RELEASE
 
-    // Utilities for speeding up multiplayer launch.
-
-    static bool s_skipMainMenuChecked = false;
-    static bool s_skipMainMenu = false;
-
-    if (!s_skipMainMenuChecked)
-    {
-        s_skipMainMenuChecked = true;
-        s_skipMainMenu = CmdArgs::Contain(L"-skiptomp");
-    }
-
-    if (s_skipMainMenu)
-    {
-        static bool s_checkMainMenuSplash = true;
-        static FunctionNamedIntercept s_checkMainMenuIntercept{};
-
-        if (s_checkMainMenuSplash && s_checkMainMenuIntercept
-            .Applies(Stack->Node, L"SFXGame", L"BioSeqAct_ShouldShowSplashSequence", L"Activated"))
-        {
-            s_checkMainMenuSplash = false;
-
-            auto* const Action = Context->CastDirect<UBioSeqAct_ShouldShowSplashSequence>();
-            Action->GetWorldInfo()->Game->ShowSplashScreen = FALSE;
-            Action->OutputLinks(0).bHasImpulse = FALSE;
-            Action->OutputLinks(1).bHasImpulse = TRUE;
-        }
-
-        static bool s_checkMainMenuLobbyFlow = true;
-        static FunctionNamedIntercept s_checkMainMenuLobbyFlowIntercept{};
-
-        if (s_checkMainMenuLobbyFlow && s_checkMainMenuLobbyFlowIntercept
-            .Applies(Stack->Node, L"SFXGameContentLiveKismet", L"BioSeqAct_ShowMainMenu", L"Activated"))
-        {
-            s_checkMainMenuLobbyFlow = false;
-            for (TypedObjectIterator<USFXGUI_MainMenu_RTT, false, false> Iter{}; Iter; ++Iter)
-                (*Iter)->eventStartMultiplayerFlow();
-        }
-    }
+    // -skiptomp is handled in UGameEngine_LoadMap_hook.
 
     // Additional information in the title bar for debugging.
 
@@ -551,6 +554,10 @@ FString* USFXEngine_GetDisconnectFallbackMap_hook(USFXEngine* const Context, FSt
 
     UWorld* const World = (GWorld != nullptr) ? *GWorld : nullptr;
     if (World == nullptr || World->Outer == nullptr || Result->StartsWith(*World->Outer->GetName(), true))
+        return Result;
+
+    // A menu scene stands in for EntryMenu, so falling back to EntryMenu from one is still the local map.
+    if (MenuScenes::IsMainMenuMap(*World->Outer->GetName()) && MenuScenes::IsMainMenuMap(**Result))
         return Result;
 
     FString LobbyMap = Context->GetDefaultLobbyMap();

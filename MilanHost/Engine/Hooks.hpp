@@ -106,6 +106,15 @@
 #define GLOBAL_UCANVAS_WRAPPEDPRINT_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 55 56 */ "57 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 90 02 00 00 48 C7 45 ?? FE FF FF FF")
 
+// UWorld::FlushLevelStreaming(Context, bOnlyFlushVisibility) (LE3 0x7ff74b46ca20): loads and shows, blocking, every
+// streaming level that should be. A second copy at 0x7ff74b151600 jumps to the same body; the jump bytes pick this one.
+#define GLOBAL_UWORLD_FLUSHLEVELSTREAMING \
+    ::LESDK::Address::FromPattern("41 F7 D8 1B D2 83 C2 02 E9 93 35 00 00")
+
+// GStreamingManager (LE3 0x7ff74c143050), as LoadMap reads it for its texture streaming block at the end of a load.
+#define GLOBAL_GSTREAMINGMANAGER_RIP \
+    ::LESDK::Address::FromInstrRelative("48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 01 44 8B CB 44 8B C3 8B D3 FF 50 40")
+
 #define GLOBAL_UFUNCTION_BIND_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 55 41 */ "56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 70 08 00 00 48 C7 44 24 50 ?? ?? ?? ??")
 
@@ -240,6 +249,12 @@ extern t_UUIString_StringSize* UUIString_StringSize;
 
 using t_UCanvas_WrappedPrint = int(UCanvas* Context, UBOOL Draw, INT* OutX, INT* OutY, UFont* Font, float ScaleX, float ScaleY, UBOOL Center, WCHAR const* Text, FFontRenderInfo const* RenderInfo);
 extern t_UCanvas_WrappedPrint* UCanvas_WrappedPrint;
+
+using t_UWorld_FlushLevelStreaming = void(UWorld* Context, void* Unused, UBOOL bOnlyFlushVisibility);
+extern t_UWorld_FlushLevelStreaming* UWorld_FlushLevelStreaming;
+
+/** The texture streaming manager (an FStreamingManagerCollection). Its vtable slot 0x40 is LoadMap's texture block. */
+extern void** GStreamingManager;
 
 
 // ! UFunction methods.
