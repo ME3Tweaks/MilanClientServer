@@ -48,6 +48,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Engine/BinkUploadPatch.hpp
   ${PROJ_FOLDER}/Engine/ConsoleAutoComplete.cpp
   ${PROJ_FOLDER}/Engine/ConsoleAutoComplete.hpp
+  ${PROJ_FOLDER}/Engine/DLCConfigReload.cpp
+  ${PROJ_FOLDER}/Engine/DLCConfigReload.hpp
   ${PROJ_FOLDER}/Engine/ExtObject.cpp
   ${PROJ_FOLDER}/Engine/ExtObject.hpp
   ${PROJ_FOLDER}/Engine/Hooks.cpp
@@ -55,12 +57,15 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Engine/InputPromptFix.cpp
   ${PROJ_FOLDER}/Engine/InputPromptFix.hpp
   ${PROJ_FOLDER}/Engine/InputPromptPolicy.hpp
+  ${PROJ_FOLDER}/Engine/PcBindingPolicy.hpp
   ${PROJ_FOLDER}/Engine/Intercept.cpp
   ${PROJ_FOLDER}/Engine/Intercept.hpp
   ${PROJ_FOLDER}/Engine/LinkerPatcher.cpp
   ${PROJ_FOLDER}/Engine/LinkerPatcher.hpp
   ${PROJ_FOLDER}/Engine/LoadGate.cpp
   ${PROJ_FOLDER}/Engine/LoadGate.hpp
+  ${PROJ_FOLDER}/Engine/MenuScenes.cpp
+  ${PROJ_FOLDER}/Engine/MenuScenes.hpp
   ${PROJ_FOLDER}/Misc/GuidCacheUtils.cpp
   ${PROJ_FOLDER}/Misc/GuidCacheUtils.hpp
   ${PROJ_FOLDER}/NetProf/NetProfDecls.hpp
