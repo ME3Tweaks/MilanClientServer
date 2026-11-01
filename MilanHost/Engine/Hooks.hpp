@@ -425,6 +425,13 @@ extern t_Net_VerifyPackageInfo* Net_VerifyPackageInfo_orig;
 void* Net_VerifyPackageInfo_hook(void* Context, FPackageInfo* Info);
 
 
+// Used by matchmaking vote kicks, so it exists in every build.
+using t_UNetConnection_Close = void(UNetConnection* Context);
+extern t_UNetConnection_Close* UNetConnection_Close_orig;
+
+void UNetConnection_Close_hook(UNetConnection* Context);
+
+
 // ! <Methods relevant to network debug.>
 // ========================================
 

@@ -133,7 +133,7 @@ namespace DLCConfigReload
             }
 
             unsigned const Flags = Field<unsigned>(Content, k_contentFlagsOffset);
-            wchar_t const* const State = (Flags & k_flagConfigMounted) != 0 ? L"config mounted"
+            [[maybe_unused]] wchar_t const* const State = (Flags & k_flagConfigMounted) != 0 ? L"config mounted"
                 : (Flags & k_flagHasConfigFile) != 0 ? L"config not mounted in this mode"
                 : L"no config file";
             MILAN_INFOW(ELOG_DLCConfig, L"  %s (priority %d, %s)", DLCName(Content).c_str(),

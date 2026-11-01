@@ -50,7 +50,7 @@ namespace AchievementGuard
         int GrantAchievementHook(std::uint64_t User, std::uint64_t Persona, int AchievementId,
             int Progress, char const* AchievementSet, unsigned Timeout, void* Callback, void* CallbackContext)
         {
-            MILAN_UNUSED_3(User, Persona, Progress);
+            MILAN_UNUSED_4(User, Persona, Progress, AchievementId);
             MILAN_UNUSED_3(AchievementSet, Timeout, Callback);
             MILAN_UNUSED(CallbackContext);
 

@@ -303,6 +303,8 @@ void CConstants::PatchDocumentsDirectory(::LESDK::Initializer& Init)
  */
 static bool PatchNop(::LESDK::Initializer& Init, ::LESDK::Address const address, SIZE_T const size, wchar_t const* const name)
 {
+    MILAN_UNUSED(name);
+
     void* const target = Init.Resolve(address);
     if (target == nullptr)
     {

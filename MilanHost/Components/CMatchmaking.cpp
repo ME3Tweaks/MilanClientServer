@@ -3219,7 +3219,7 @@ void CMatchmaking::RegisterCommands()
         }
         if (S.Hosted.Known)
         {
-            bool const InLobby = HostIsInLobby();
+            [[maybe_unused]] bool const InLobby = HostIsInLobby();
             MILAN_INFOW(ELOG_Matchmaking, L"  hosted settings: %s, map %d, enemy %d, difficulty %d, %s, %s",
                 PrivacyName(S.Hosted), S.Hosted.MapId, S.Hosted.EnemyModeId, S.Hosted.DifficultyId,
                 IsJoinable(S.Hosted, InLobby) ? L"joinable" : L"not joinable", InLobby ? L"lobby" : L"in progress");

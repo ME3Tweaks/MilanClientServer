@@ -778,6 +778,30 @@ void* Net_VerifyPackageInfo_hook(void* const Context, FPackageInfo* const Info)
 }
 
 
+t_UNetConnection_Close* UNetConnection_Close_orig = nullptr;
+void UNetConnection_Close_hook(UNetConnection* const Context)
+{
+#ifndef _FINAL_RELEASE
+    if (Context->Driver != nullptr && Context->ConnectionState != USOCK_Closed)
+    {
+        FString RemoteAddress{};
+
+        auto* const TcpipConnection = Context->Cast<UTcpipConnection>();
+        if (TcpipConnection != nullptr)
+        {
+            auto const& Address = TcpipConnection->Address;
+            RemoteAddress = FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
+        }
+
+        MILAN_TRACEW(ELOG_NetHooks, L"UNetConnection::Close, remote = %s", *RemoteAddress);
+        NETPROF(CaptureSessionEvent(Context, L"CLOSE", L""));
+    }
+#endif
+
+    (*UNetConnection_Close_orig)(Context);
+}
+
+
 // ! <Methods relevant to network debug.>
 // ========================================
 
@@ -862,27 +886,6 @@ int UNetConnection_ClientSupportsLevel_hook(UNetConnection* const Context, UObje
     }
 
     return Return;
-}
-
-t_UNetConnection_Close* UNetConnection_Close_orig = nullptr;
-void UNetConnection_Close_hook(UNetConnection* const Context)
-{
-    if (Context->Driver != nullptr && Context->ConnectionState != USOCK_Closed)
-    {
-        FString RemoteAddress{};
-
-        auto* const TcpipConnection = Context->Cast<UTcpipConnection>();
-        if (TcpipConnection != nullptr)
-        {
-            auto const& Address = TcpipConnection->Address;
-            RemoteAddress = FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
-        }
-
-        MILAN_TRACEW(ELOG_NetHooks, L"UNetConnection::Close, remote = %s", *RemoteAddress);
-        NETPROF(CaptureSessionEvent(Context, L"CLOSE", L""));
-    }
-
-    (*UNetConnection_Close_orig)(Context);
 }
 
 t_UNetConnection_CreateChannel* UNetConnection_CreateChannel_orig = nullptr;
