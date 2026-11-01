@@ -25,6 +25,7 @@
 
 #include <cstdio>
 #include <cwctype>
+#include <new>
 #include <utility>
 
 #include "Base/Logger.hpp"
@@ -55,14 +56,27 @@ namespace ConsoleAutoComplete
         return Out;
     }
 
-    /** Recursively frees the C++-side trie nodes we allocate ourselves; mirrors ~FAutoCompleteNode from the original engine. */
+    // Must allocate thorugh GMalloc or app may crash on level transition
+    static FAutoCompleteNode* NewNode()
+    {
+        void* const Memory = (*GMalloc)->Malloc(static_cast<DWORD>(sizeof(FAutoCompleteNode)), UN_DEFAULT_ALIGNMENT);
+        return ::new (Memory) FAutoCompleteNode{};
+    }
+
+    static void DeleteNode(FAutoCompleteNode* const Node)
+    {
+        Node->~FAutoCompleteNode();
+        (*GMalloc)->Free(Node);
+    }
+
+    /** Recursively frees what we allocate ourselves; mirrors ~FAutoCompleteNode from the original engine */
     static void FreeNodeChildren(FAutoCompleteNode& Node)
     {
         for (void* const Child : Node.ChildNodes)
         {
             auto* const ChildNode = static_cast<FAutoCompleteNode*>(Child);
             FreeNodeChildren(*ChildNode);
-            delete ChildNode;
+            DeleteNode(ChildNode);
         }
         Node.ChildNodes.Clear();
         Node.ChildNodes.Shrink();
@@ -90,7 +104,7 @@ namespace ConsoleAutoComplete
 
             if (Found == nullptr)
             {
-                Found = new FAutoCompleteNode{};
+                Found = NewNode();
                 Found->IndexChar = Char;
                 Found->AutoCompleteListIndices.Add(ListIndex);
                 Node->ChildNodes.Add(static_cast<void*>(Found));
