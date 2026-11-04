@@ -28,6 +28,7 @@
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfStream.hpp"
 #include "Online/SFXOnlineHijacks.hpp"
+#include "Online/TeamBetrayal.hpp"
 #include "Shell/CmdArgs.hpp"
 #include "Shell/Entry.hpp"
 #include "Version/SharedVersion.h"
@@ -421,6 +422,7 @@ void UObject_ProcessDelegate_hook(UObject* const Context, SFXName const Delegate
     (*UObject_ProcessDelegate_orig)(Context, DelegateName, Delegate, Parms, Result);
 }
 
+// ProcessEvent runs for pretty much every unrealscript call
 t_UObject_ProcessEvent* UObject_ProcessEvent_orig = nullptr;
 void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function, void* const Parms, void* const Result)
 {
@@ -455,6 +457,7 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
         MILAN_INFOW(ELOG_EngineHooks, L"Installed SFXOnlineFoundation hijacks in %3.2f ms", HijackTimer.GetMilliseconds());
     }
 
+    // Investigation of image loading code
     //if (IsFunctionWithinDerivedClass(Function, L"SFXOnlineComponentImageManager"))
     //    MILAN_TRACEW(ELOG_DevelUtils, L"%S: %s", __func__, *Function->GetFullName());
 
@@ -463,6 +466,12 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     if (COMPONENT(CDesync).On_UObject_ProcessEvent(Context, Function, Parms)) return;
 #endif
 
+    // If betrayal code returns true then we handled it and we shouldn't run the original
+    if (TeamBetrayal::OnProcessEvent(Context, Function, Parms))
+    {
+        // Handled by Team Betrayal
+        return;
+    }
     // Log why the engine is about to drop a game connection (PMT_ConnectionFailure or PMT_SocketFailure).
     static SFXName const k_setProgressMessage{ L"SetProgressMessage", 0 };
     if (Function->Name == k_setProgressMessage && Context->IsA(UGameViewportClient::StaticClass()))
@@ -528,8 +537,14 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
         bCallOriginal = false;
     }
     if (!COMPONENT(CMatchmaking).On_ScriptCall(Stack->Node))
+    {
         bCallOriginal = false;
-
+    }
+    if (!TeamBetrayal::OnScriptCall(Context, Stack))
+    {
+        // Suppress original function logic - don't want it to run
+        bCallOriginal = false;
+    }
     if (bCallOriginal)
     {
         (*UObject_ProcessInternal_orig)(Context, Stack, Result);
@@ -552,10 +567,7 @@ int USFXEngine_UpdateDynamicLoadMappingFindHash_hook(USFXEngine* const Context, 
 }
 
 // UGameEngine::Browse loads this map for ?closed and ?failed (the "disconnect" command, a lost
-// or failed connection), and the host-left prompt opens it. LE3 returns the lobby map only when
-// signed in to Blaze, which LMP never is, so leaving a lobby or match fell back to EntryMenu.
-// Away from the local map it now returns to the multiplayer menu. Exit Multiplayer opens
-// EntryMenu directly and is unaffected.
+// or failed connection)
 t_USFXEngine_GetDisconnectFallbackMap* USFXEngine_GetDisconnectFallbackMap_orig = nullptr;
 FString* USFXEngine_GetDisconnectFallbackMap_hook(USFXEngine* const Context, FString* const Result)
 {
@@ -563,11 +575,14 @@ FString* USFXEngine_GetDisconnectFallbackMap_hook(USFXEngine* const Context, FSt
 
     UWorld* const World = (GWorld != nullptr) ? *GWorld : nullptr;
     if (World == nullptr || World->Outer == nullptr || Result->StartsWith(*World->Outer->GetName(), true))
+    {
         return Result;
-
+    }
     // A menu scene stands in for EntryMenu, so falling back to EntryMenu from one is still the local map.
     if (MenuScenes::IsMainMenuMap(*World->Outer->GetName()) && MenuScenes::IsMainMenuMap(**Result))
+    {
         return Result;
+    }
 
     FString LobbyMap = Context->GetDefaultLobbyMap();
     MILAN_DEBUGW(ELOG_EngineHooks, L"disconnect fallback map: %s instead of %s", *LobbyMap, **Result);
