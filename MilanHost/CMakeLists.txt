@@ -64,6 +64,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Engine/LinkerPatcher.hpp
   ${PROJ_FOLDER}/Engine/LoadGate.cpp
   ${PROJ_FOLDER}/Engine/LoadGate.hpp
+  ${PROJ_FOLDER}/Engine/ConsolePipe.cpp
+  ${PROJ_FOLDER}/Engine/ConsolePipe.hpp
   ${PROJ_FOLDER}/Engine/MenuScenes.cpp
   ${PROJ_FOLDER}/Engine/MenuScenes.hpp
   ${PROJ_FOLDER}/Misc/GuidCacheUtils.cpp
@@ -89,6 +91,9 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Online/SFXOnlineComponentUnrealPlayer.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineHijacks.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineHijacks.hpp
+  ${PROJ_FOLDER}/Online/TeamBetrayal.cpp
+  ${PROJ_FOLDER}/Online/TeamBetrayal.hpp
+  ${PROJ_FOLDER}/Online/TeamBetrayalPolicy.hpp
   ${PROJ_FOLDER}/Public/LmpLobby.h
   ${PROJ_FOLDER}/Shell/ClientConfig.cpp
   ${PROJ_FOLDER}/Shell/ClientConfig.hpp

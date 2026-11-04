@@ -424,6 +424,18 @@ extern t_Net_VerifyPackageInfo* Net_VerifyPackageInfo_orig;
 
 void* Net_VerifyPackageInfo_hook(void* Context, FPackageInfo* Info);
 
+// Used to get status of a seek free loading object
+#define GLOBAL_SFXENGINE_SEEKFREELOADSTATUS_RVA  ::LESDK::Address::FromOffset(0xB929D0)
+using t_SFXEngine_SeekFreeLoadStatus = UObject*(void* Context, INT MappingIndex, UClass* ObjectClass, BYTE* OutStatus);
+extern t_SFXEngine_SeekFreeLoadStatus* SFXEngine_SeekFreeLoadStatus_orig;
+
+UObject* SFXEngine_SeekFreeLoadStatus_hook(void* Context, INT MappingIndex, UClass* ObjectClass, BYTE* OutStatus);
+
+// Used to tell whether an async package load is in progress
+#define GLOBAL_UOBJECT_ISASYNCLOADING_RVA  ::LESDK::Address::FromOffset(0xC1060)
+using t_UObject_IsAsyncLoading = bool();
+extern t_UObject_IsAsyncLoading* UObject_IsAsyncLoading;
+
 
 // Used by matchmaking vote kicks, so it exists in every build.
 using t_UNetConnection_Close = void(UNetConnection* Context);

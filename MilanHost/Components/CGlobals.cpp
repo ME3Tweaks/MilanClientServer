@@ -196,8 +196,13 @@ void CGlobals::InitNetworkHooks(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(FSocketWin, SendTo, GLOBAL_FSOCKETWIN_SENDTO_OFFSET);
     INSTALL_HOOK_TWO(FSocketWin, RecvFrom, GLOBAL_FSOCKETWIN_RECVFROM_OFFSET);
 
+    FIND_VAR_TWO(UObject, IsAsyncLoading, GLOBAL_UOBJECT_ISASYNCLOADING_RVA);
+
     // Joiners wait for packages the host uses to finish async loading
     INSTALL_HOOK_TWO(Net, VerifyPackageInfo, GLOBAL_NET_VERIFYPACKAGEINFO_RVA);
+
+    // Same in reverse - host will start trying to load client kits and can crash the same way
+    INSTALL_HOOK_TWO(SFXEngine, SeekFreeLoadStatus, GLOBAL_SFXENGINE_SEEKFREELOADSTATUS_RVA);
 }
 
 void CGlobals::InitNetworkInjections()

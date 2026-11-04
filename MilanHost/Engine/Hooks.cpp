@@ -477,9 +477,9 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     if (Function->Name == k_setProgressMessage && Context->IsA(UGameViewportClient::StaticClass()))
     {
         auto const* const Params = static_cast<UGameViewportClient_eventSetProgressMessage_Parms const*>(Parms);
-        if (Params->MessageType >= 4)
-            MILAN_WARNW(ELOG_EngineHooks, L"connection failure: \"%s\" / \"%s\"", Params->Title.Length() > 0 ? Params->Title.Chars() : L"",
-                Params->Message.Length() > 0 ? Params->Message.Chars() : L"");
+        if (Params->MessageType >= 4) {
+            MILAN_WARNW(ELOG_EngineHooks, L"connection failure: \"%s\" / \"%s\"", Params->Title.Length() > 0 ? Params->Title.Chars() : L"", Params->Message.Length() > 0 ? Params->Message.Chars() : L"");
+        }
     }
 
 #ifndef _FINAL_RELEASE
@@ -552,7 +552,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
 
     // -skiptomp is handled in UGameEngine_LoadMap_hook.
-    }
+}
 
 t_UObject_SkipFunction* UObject_SkipFunction = nullptr;
 
@@ -741,16 +741,22 @@ UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read
     }
 }
 
+// Flag indicating package is still async loading
+constexpr unsigned long long k_rfAsyncLoading = 0x0000040000000000ull;
+
+t_UObject_IsAsyncLoading* UObject_IsAsyncLoading = nullptr;
+
+// UObject::IsAsyncLoading: Is an async load in progress?
+static bool IsAsyncLoading()
+{
+    return UObject_IsAsyncLoading != nullptr && (*UObject_IsAsyncLoading)();
+}
+
 // Fix for join GUID issues
 // Make the game wait for packages to load before actually checking the GUID
 t_Net_VerifyPackageInfo* Net_VerifyPackageInfo_orig = nullptr;
 void* Net_VerifyPackageInfo_hook(void* const Context, FPackageInfo* const Info)
 {
-    constexpr unsigned long long k_rfAsyncLoading = 0x0000040000000000ull;
-    using t_IsAsyncLoading = bool();
-    static auto* const IsAsyncLoading = reinterpret_cast<t_IsAsyncLoading*>(
-        reinterpret_cast<std::uintptr_t>(::LESDK::GetMainModuleBase()) + 0xC1060); // UObject::IsAsyncLoading
-
     if (Info != nullptr)
     {
         // Walk the object list: StaticFindObject skips packages that are still async loading.
@@ -799,6 +805,43 @@ void* Net_VerifyPackageInfo_hook(void* const Context, FPackageInfo* const Info)
             *Info->Guid.ToString(), *LocalGuid->ToString(), static_cast<unsigned long long>(Local->ObjectFlags));
     }
     return Result;
+}
+
+// Fix for spawning half-loaded MP pawns
+// Seek free status check only checks for object it is looking for is marked loaded,
+// it doesn't care about its dependencies, so a seek free load could access dependencies
+// that aren't available yet
+t_SFXEngine_SeekFreeLoadStatus* SFXEngine_SeekFreeLoadStatus_orig = nullptr;
+UObject* SFXEngine_SeekFreeLoadStatus_hook(void* const Context, INT const MappingIndex, UClass* const ObjectClass, BYTE* const OutStatus)
+{
+    constexpr BYTE k_asyncLoadInProgress = 2; // EAsyncLoadStatus
+    constexpr BYTE k_asyncLoadComplete = 3;
+    constexpr unsigned long long k_rfNeedLoad = 0x0000020000000000ull;
+    constexpr unsigned long long k_rfNeedPostLoad = 0x0100000000000000ull;
+    constexpr unsigned long long k_rfMidLoad = k_rfAsyncLoading | k_rfNeedLoad | k_rfNeedPostLoad;
+
+    UObject* const Result = (*SFXEngine_SeekFreeLoadStatus_orig)(Context, MappingIndex, ObjectClass, OutStatus);
+    if (Result == nullptr || OutStatus == nullptr || *OutStatus != k_asyncLoadComplete)
+    {
+        return Result;
+    }
+
+    // Are we mid load? If so, we need to wait for the load to finish before returning the object.
+    bool const bMidLoad = (Result->ObjectFlags & k_rfMidLoad) != 0 || (Result->Class != nullptr && (Result->Class->ObjectFlags & k_rfMidLoad) != 0);
+    if (!bMidLoad || !IsAsyncLoading())
+    {
+        return Result;
+    }
+
+    static UObject* s_lastWaited = nullptr;
+    if (s_lastWaited != Result)
+    {
+        s_lastWaited = Result;
+        MILAN_DEBUGW(ELOG_EngineHooks, L"seek-free object %s is still async loading", *Result->GetFullName());
+    }
+
+    *OutStatus = k_asyncLoadInProgress;
+    return nullptr;
 }
 
 
