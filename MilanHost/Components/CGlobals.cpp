@@ -50,8 +50,10 @@ void CGlobals::UninstallSomeHooks(::LESDK::Initializer& Context)
     Context.UninstallHook("UWorld::Tick");
     Context.UninstallHook("UObject::ProcessInternal");
     Context.UninstallHook("UObject::ProcessEvent");
+#ifndef _FINAL_RELEASE
     Context.UninstallHook("UObject::ProcessDelegate");
     Context.UninstallHook("UObject::CallFunction");
+#endif
     Context.UninstallHook("UGameEngine::Tick");
     Context.UninstallHook("UGameEngine::Exec");
     // These call into CMatchmaking, which is terminated after this.
@@ -112,7 +114,10 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
     GStreamingManager = Context.ResolveTyped<void*>(GLOBAL_GSTREAMINGMANAGER_RIP);
     LOG_SDK_GLOBAL(GStreamingManager, GStreamingManager != nullptr ? *GStreamingManager : nullptr);
 
+#ifndef _FINAL_RELEASE
+    // Does nothing in final builds
     INSTALL_HOOK_TWO(UFunction, Bind, GLOBAL_UFUNCTION_BIND_PHOOK);
+#endif
 
     INSTALL_HOOK_TWO(UGameEngine, Exec, GLOBAL_UGAMEENGINE_EXEC_PHOOK);
     INSTALL_HOOK_TWO(UGameEngine, LoadMap, GLOBAL_UGAMEENGINE_LOADMAP_PHOOK);
@@ -134,8 +139,11 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(UObject, StaticFindObject, GLOBAL_UOBJECT_STATICFINDOBJECT_RVA);
     INSTALL_HOOK_TWO(UObject, StaticLoadObject, GLOBAL_UOBJECT_STATICLOADOBJECT_RVA);
 
+#ifndef _FINAL_RELEASE
+    // Does nothing in final builds
     INSTALL_HOOK_TWO(UObject, CallFunction, BUILTIN_CALLFUNCTION_PHOOK);
     INSTALL_HOOK_TWO(UObject, ProcessDelegate, GLOBAL_UOBJECT_PROCESSDELEGATE_PHOOK);
+#endif
     INSTALL_HOOK_TWO(UObject, ProcessEvent, BUILTIN_PROCESSEVENT_PHOOK);
     INSTALL_HOOK_TWO(UObject, ProcessInternal, BUILTIN_PROCESSINTERNAL_PHOOK);
     FIND_VAR_TWO(UObject, SkipFunction, GLOBAL_UOBJECT_SKIPFUNCTION_PHOOK);

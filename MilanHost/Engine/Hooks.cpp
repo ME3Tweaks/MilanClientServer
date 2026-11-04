@@ -190,9 +190,60 @@ UBOOL UGameEngine_LoadMap_hook(UGameEngine* const Context, FURL* const Url, UPen
     }
 
     // Refreshes exec-function/map completions for the new level (e.g. DLC-added commands).
-    if (Result) ConsoleAutoComplete::RebuildForCurrentLevel();
+    if (Result)
+    {
+        ConsoleAutoComplete::RebuildForCurrentLevel();
+    }
 
+    if (Result)
+    {
+        FunctionStructIntercept::RetryMissing();
+    }
     return Result;
+}
+
+// 11/04/2026 - Move window setting code to standalone
+// and only update once viewport is visible
+static void UpdateWindowTitle()
+{
+    static bool s_done = false;
+    if (s_done)
+    {
+        // Already done.
+        return;
+    }
+
+    for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
+    {
+        auto const Viewport = (*Iter)->Viewport;
+        if (Viewport == nullptr)
+        {
+            // No viewport
+            break;
+        }
+
+        // Should move these to SDK in V3
+        auto const Window = reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
+        auto const Name = reinterpret_cast<FString*>(reinterpret_cast<unsigned char*>(Viewport) + 0xD4);
+
+        MILAN_TRACEW(ELOG_Startup, L"Updating title for %s, viewport at %p", *(*Iter)->StaticName(), Viewport);
+
+#ifndef _FINAL_RELEASE
+        // Additional information in the title bar for debugging.
+        if (CmdArgs::Contain(L"-setfunnytitle"))
+        {
+            *Name = FString::Printf(L"Project Milan (INST = %d, PID = %d)", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
+        }
+        else
+#endif
+        {
+            // Shipping title
+            *Name = FString::Printf(L"Legendary Edition Multiplayer");
+        }
+        DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
+
+        s_done = true;
+    }
 }
 
 t_UGameEngine_Tick* UGameEngine_Tick_orig = nullptr;
@@ -201,6 +252,7 @@ void UGameEngine_Tick_hook(UGameEngine* const Context, float const Delta)
     //MILAN_TRACEW(L"(UGameEngine::Tick): Delta=%f", Delta);
     NETPROF(CaptureFrameStart(Delta));
     (*UGameEngine_Tick_orig)(Context, Delta);
+    UpdateWindowTitle();
     COMPONENT(CMatchmaking).On_GameEngineTick(Delta);
 #ifndef _FINAL_RELEASE
     COMPONENT(CDesync).On_GameEngineTick(Delta);
@@ -485,56 +537,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
 
     // -skiptomp is handled in UGameEngine_LoadMap_hook.
-
-    static int s_updateWindow = 0;
-
-#ifndef _FINAL_RELEASE
-    // Additional information in the title bar for debugging.
-
-    if (s_updateWindow == 0 && CmdArgs::Contain(L"-setfunnytitle"))
-    {
-        s_updateWindow = 1;
     }
-
-    if (s_updateWindow > 0)
-    {
-        for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
-        {
-            auto const Viewport = (*Iter)->Viewport;
-            if (Viewport == nullptr) break;
-
-            auto const Window = reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
-            auto const Name = reinterpret_cast<FString*>(reinterpret_cast<unsigned char*>(Viewport) + 0xD4);
-
-            MILAN_TRACEW(ELOG_Startup, L"Updating title for %s, viewport at %p", *(*Iter)->StaticName(), Viewport);
-
-            *Name = FString::Printf(L"Project Milan (INST = %d, PID = %d)", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
-            DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
-
-            s_updateWindow = -1;
-        }
-    }
-    else
-#endif
-    if (s_updateWindow == 0)
-    {
-        for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
-        {
-            auto const Viewport = (*Iter)->Viewport;
-            if (Viewport == nullptr) break;
-
-            auto const Window = reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
-            auto const Name = reinterpret_cast<FString*>(reinterpret_cast<unsigned char*>(Viewport) + 0xD4);
-
-            MILAN_TRACEW(ELOG_Startup, L"Updating title for %s, viewport at %p", *(*Iter)->StaticName(), Viewport);
-
-            *Name = FString::Printf(L"Legendary Edition Multiplayer");
-            DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
-
-            s_updateWindow = -1;
-        }
-    }
-}
 
 t_UObject_SkipFunction* UObject_SkipFunction = nullptr;
 
