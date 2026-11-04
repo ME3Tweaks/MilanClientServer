@@ -360,7 +360,7 @@ struct MatchmakingState
     // only knows the invite code when it joined with one.
     std::string                     LobbyId{};
     std::string                     InviteCode{};
-    int                             MemberMaxPlayers{ 0 };  // Member: the lobby's size when it reserved.
+    int                             MemberMaxPlayers{ 0 };  // Member: the lobby's size, updated from its GRI
 
     // Host.
     std::string                     HostKey{};
@@ -2240,16 +2240,16 @@ namespace
         return Movie;
     }
 
-    // A created lobby or reservation alone does not prove the service is still reachable.
-    // The next request can fail after it goes down, so the button times out after contact stops.
+    // A host reports to the matchmaker every heartbeat, so its button times out once contact stops.
+    // A member sends nothing after joining; its invite request is what checks the matchmaker.
+    // A full lobby can still invite: the code answers lobby_full until someone leaves.
     bool CanInvite(MatchmakingState const& S, Clock::time_point const Now)
     {
-        if (S.BaseUrl.empty() || S.LastServiceContact == Clock::time_point{}
-            || Now - S.LastServiceContact > std::chrono::seconds{ 60 })
+        if (S.BaseUrl.empty())
             return false;
 
         if (S.Role == EMatchmakingRole::Host && !S.InviteCode.empty() && IsListenServer())
-            return 1 + ConnectedClientCount() < HostMaxPlayers();
+            return S.LastServiceContact != Clock::time_point{} && Now - S.LastServiceContact <= std::chrono::seconds{ 60 };
 
         if (S.Role == EMatchmakingRole::Joiner && S.JoinedReported && !S.ReservationId.empty()
             && !S.MigrationPending)
@@ -2257,13 +2257,7 @@ namespace
             UWorld* const World = CurrentWorld();
             UNetConnection* const Server = World != nullptr && World->NetDriver != nullptr
                 ? World->NetDriver->ServerConnection : nullptr;
-            if (Server == nullptr || Server->ConnectionState == USOCK_Closed)
-                return false;
-            UEngine* const Engine = GEngine != nullptr ? *GEngine : nullptr;
-            AWorldInfo* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
-            if (S.MemberMaxPlayers <= 0 || WorldInfo == nullptr || WorldInfo->GRI == nullptr)
-                return false;
-            return static_cast<int>(WorldInfo->GRI->PRIArray.Count()) < S.MemberMaxPlayers;
+            return Server != nullptr && Server->ConnectionState != USOCK_Closed;
         }
 
         return false;
@@ -2445,6 +2439,23 @@ namespace
         Path.NextProbe = Now + k_probeInterval;
     }
 
+    // The lobby size the host's lobby replicates (SFXGRIMP_Lobby.NumPlayerSlots), or 0 outside the
+    // lobby or before it arrives. SFXGameMPContent is not in the SDK, so the int is read by name.
+    int LobbyPlayerSlots(AWorldInfo const* const WorldInfo)
+    {
+        static SFXName const k_lobbyGri{ L"SFXGRIMP_Lobby", 0 };
+        static SFXName const k_numPlayerSlots{ L"NumPlayerSlots", 0 };
+        AGameReplicationInfo const* const GRI = WorldInfo != nullptr ? WorldInfo->GRI : nullptr;
+        if (GRI == nullptr || !IsInstanceOf(GRI, k_lobbyGri))
+            return 0;
+        for (UProperty* Property = GRI->Class->PropertyLink; Property != nullptr; Property = Property->PropertyLinkNext)
+        {
+            if (Property->Name == k_numPlayerSlots && Property->Class == UIntProperty::StaticClass())
+                return *reinterpret_cast<int const*>(reinterpret_cast<BYTE const*>(GRI) + Property->Offset);
+        }
+        return 0;
+    }
+
     void TickJoiner(MatchmakingState& S, Clock::time_point const Now)
     {
         bool const Migrating = S.MigrationPending || S.AwaitingHostCandidates;
@@ -2490,6 +2501,17 @@ namespace
             MILAN_INFOW(ELOG_Matchmaking, L"joined the host's game; releasing the reservation");
             PostHttp(S, false, L"POST", "/v1/reservations/" + S.ReservationId + "/joined", S.JoinKey, "",
                 [](MatchmakingState&, MatchmakingNet::HttpResult const&) {});
+        }
+
+        // The host can resize the lobby after this member reserved its place. The size only changes
+        // in the lobby, so the last one seen there still holds during the match.
+        if (S.JoinedReported && !Traveling)
+        {
+            if (int const Slots = LobbyPlayerSlots(Engine->GetCurrentWorldInfo()); Slots > 0 && Slots != S.MemberMaxPlayers)
+            {
+                MILAN_INFOW(ELOG_Matchmaking, L"the host's lobby size is now %d", Slots);
+                S.MemberMaxPlayers = Slots;
+            }
         }
     }
 

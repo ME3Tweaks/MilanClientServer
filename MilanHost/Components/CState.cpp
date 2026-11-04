@@ -372,8 +372,13 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
     static FunctionStructIntercept SFXAccomplishmentStorage_Write{};
     bool const bSaveRecords = SFXSaveManagerMP_SaveRecordsImpl.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.SaveRecordsImpl");
     bool const bWriteAccomplishments = SFXAccomplishmentStorage_Write.Applies(Stack->Node, L"Function SFXGame.SFXAccomplishmentStorage.Write");
-    if ((bSaveRecords || bWriteAccomplishments) &&
-        HijackUtils::FindClass(SFXName(L"MilanProfileSaveBridge", 0)) == nullptr)
+    // MilanProfileSaveBridge is in SFXGame, so it won't unload
+    // So once we find class pointer we can just cache it
+    static UClass* s_profileSaveBridge = nullptr;
+    if ((bSaveRecords || bWriteAccomplishments) && s_profileSaveBridge == nullptr) {
+        s_profileSaveBridge = HijackUtils::FindClass(SFXName(L"MilanProfileSaveBridge", 0));
+    }
+    if ((bSaveRecords || bWriteAccomplishments) && s_profileSaveBridge == nullptr)
     {
         MILAN_TRACEW(ELOG_MultiProfile, L"profile save after %s", bSaveRecords
             ? L"SFXSaveManagerMP.SaveRecordsImpl" : L"SFXAccomplishmentStorage.Write");
