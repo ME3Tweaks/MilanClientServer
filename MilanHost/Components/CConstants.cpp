@@ -222,6 +222,29 @@ void CConstants::StopMinimumResolutionDialogWatchdog()
     }
 }
 
+// BugSentry has a race condition when multiple exceptions stack up
+// where it will crash the app cause it doesn't properly wait/clean up
+void CConstants::DisableBugSentry(::LESDK::Initializer& Context)
+{
+    auto* const Instance = Context.ResolveTyped<void*>(::LESDK::Address::FromOffset(REL_BUGSENTRY_INSTANCE));
+    if (Instance == nullptr)
+    {
+        MILAN_WARNW(ELOG_Startup, L"Could not resolve BugSentry isntance pointer! It will remain enabled");
+        return;
+    }
+
+    // Upda
+    void* const Previous = ::InterlockedExchangePointer(Instance, nullptr);
+    if (Previous != nullptr)
+    {
+        MILAN_INFOW(ELOG_Startup, L"Disabled crash and assert reporting (instance %p)", Previous);
+    }
+    else
+    {
+        MILAN_DEBUGW(ELOG_Startup, L"BugSentry was not initialized");
+    }
+}
+// END MILAN CHANGE
 /**
  * \brief Patches a segment of process memory.
  * \param address The address to start the overwrite of patch data to
@@ -387,6 +410,7 @@ bool CConstants::Initialize(::LESDK::Initializer& Context)
     PatchMPDLCFolderNameFilter(Context);
     PatchMountDLCBeforeEntryMenu(Context);
     PatchMultiplayerCommandGates(Context);
+    DisableBugSentry(Context);
     MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
 }

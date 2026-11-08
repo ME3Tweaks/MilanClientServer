@@ -55,6 +55,10 @@ private:
     /// </summary>
     /// <param name="Context"></param>
     void PatchMultiplayerCommandGates(::LESDK::Initializer& Context);
+    /// <summary>
+    /// Diables EA's BugSentry crash reporter
+    /// </summary>
+    void DisableBugSentry(::LESDK::Initializer& Context);
 };
 
 static_assert(ComponentType<CConstants>);
