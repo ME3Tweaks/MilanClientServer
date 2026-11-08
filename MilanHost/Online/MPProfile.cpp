@@ -181,13 +181,8 @@ ProfileSetting ProfileSetting::Construct(int const InId, FString const& InValue)
 static FString GetSharedProfilePath()
 {
     FString ProfilePath{};
-    WCHAR* DocumentPath = nullptr;
-
-    ::SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, NULL, &DocumentPath);
-    ProfilePath.AppendFormat(L"%s\\BioWare\\Mass Effect Legendary Edition\\Save\\LMP\\%s", DocumentPath, L"MP_Profile");
-
-    ::CoTaskMemFree(DocumentPath);
-    return *ProfilePath;
+    ProfilePath.AppendFormat(L"%s\\%s", ::GetLMPSaveFolder().c_str(), L"MP_Profile");
+    return ProfilePath;
 }
 
 // Each game rewrites the whole profile from memory, so concurrent instances sharing

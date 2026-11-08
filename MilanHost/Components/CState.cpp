@@ -173,10 +173,12 @@ namespace
             || Next.MatchmakerPassword != gp_clientConfig->MatchmakerPassword;
         if (bMatchmakingChanged)
         {
+            // Saving next to MP_Profile migrates a game-folder file, which is then no longer read
             game::string Error{};
-            if (!Next.TryWriteMatchmaker(k_configFilename, Error))
+            std::wstring const ConfigPath = GetConfigPath();
+            if (!Next.TryWriteMatchmaker(GetLoadConfigPath(), ConfigPath, Error))
             {
-                MILAN_WARNW(ELOG_Matchmaking, L"could not save matchmaking settings to MilanHost.toml: %S", Error.c_str());
+                MILAN_WARNW(ELOG_Matchmaking, L"could not save matchmaking settings to %s: %S", ConfigPath.c_str(), Error.c_str());
                 return NETCONFIG_APPLY_SAVE_FAILED;
             }
 

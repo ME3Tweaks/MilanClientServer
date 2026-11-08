@@ -1,5 +1,7 @@
+#include <Shlobj.h>
 #include <array>
 #include <atomic>
+#include <filesystem>
 #include <fstream>
 
 #include "Base/IOUtils.hpp"
@@ -39,6 +41,11 @@ bool TryWriteFileFullAtomic(std::wstring_view const InPath, std::span<byte const
 {
     std::wstring const Target{ InPath };
     std::wstring const Temporary = Target + L"." + std::to_wstring(::GetCurrentProcessId()) + L".tmp";
+
+    // A failure here surfaces as the open failing below
+    std::error_code DirectoryError{};
+    std::filesystem::create_directories(std::filesystem::path{ Target }.parent_path(), DirectoryError);
+
     std::ofstream Stream{ Temporary, std::ios::binary | std::ios::out | std::ios::trunc };
     if (!Stream.is_open())
         return false;
@@ -59,6 +66,18 @@ bool TryWriteFileFullAtomic(std::wstring_view const InPath, std::span<byte const
         return false;
     }
     return true;
+}
+
+// Gets location of the save folder we put data into that needs to survive a game wipe
+std::wstring GetLMPSaveFolder()
+{
+    PWSTR Documents = nullptr;
+    std::wstring Folder{ L"." };
+    if (SUCCEEDED(::SHGetKnownFolderPath(FOLDERID_Documents, KF_FLAG_DEFAULT, nullptr, &Documents))) {
+        Folder = std::wstring{ Documents } + L"\\BioWare\\Mass Effect Legendary Edition\\Save\\LMP";
+    }
+    ::CoTaskMemFree(Documents);
+    return Folder;
 }
 
 void WriteCallstackLog(CodePlaceW&& Place, ESeverity const Severity, int const Skip)
