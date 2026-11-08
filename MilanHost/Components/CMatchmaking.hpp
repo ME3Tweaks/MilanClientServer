@@ -9,9 +9,10 @@
  *
  * The matchmaker URL comes from config ([milan.matchmaker], which the in-game Multiplayer
  * Settings screen edits through ApplySettings), the command line
- * (-mmserver=<url>), the mm.server console command, or the control pipe; an empty
- * URL disables matchmaking. A join code from -mmjoin=<code> or the control pipe
- * runs once the multiplayer menu is open.
+ * (-mmserver=<url>), the mm.server console command, or the control pipe
+ * An empty URL disables matchmaking
+ *  A join code from -mmjoin=<code> or the control pipe runs once the multiplayer menu is open
+ *  If the player is already at the main menu, it transition to MP menu
  *
  * A lobby member that loses its host asks the matchmaker to check the host. If the host is
  * gone, one member opens a new listen lobby with the lobby's settings and takes the lobby

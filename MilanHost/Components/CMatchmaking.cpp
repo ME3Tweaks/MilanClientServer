@@ -24,6 +24,7 @@
 #include "Engine/ExtObject.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
+#include "Engine/MenuScenes.hpp"
 #include "Online/MatchmakingNet.hpp"
 #include "Online/Rendezvous.hpp"
 #include "Online/PeerSecurity.hpp"
@@ -407,6 +408,7 @@ struct MatchmakingState
     AutoHostPolicy                  AutoHost{};
     std::string                     PendingJoin{};
     bool                            PendingJoinLeftGame{ false };   // Left a lobby or match so PendingJoin can start.
+    bool                            PendingJoinLeftMainMenu{ false };   // Went on from the main menu so PendingJoin can start.
     UWorld*                         MenuWorld{ nullptr };   // World in which the multiplayer menu is showing.
     std::wstring                    PipeName{};
     std::shared_ptr<MatchmakingNet::ControlPipe> Pipe{};
@@ -987,6 +989,7 @@ namespace
         Next.AutoHost = S.AutoHost;
         Next.PendingJoin = std::move(S.PendingJoin);
         Next.PendingJoinLeftGame = S.PendingJoinLeftGame;
+        Next.PendingJoinLeftMainMenu = S.PendingJoinLeftMainMenu;
         Next.MenuWorld = S.MenuWorld;
         Next.PipeName = std::move(S.PipeName);
         Next.Pipe = std::move(S.Pipe);
@@ -1903,6 +1906,7 @@ namespace
         MILAN_UNUSED(Source);
         S.PendingJoin = std::move(Code);
         S.PendingJoinLeftGame = false;
+        S.PendingJoinLeftMainMenu = false;
         MILAN_INFOW(ELOG_Matchmaking, L"join %S queued (%s); it starts once the multiplayer menu is open",
             S.PendingJoin.c_str(), Source);
     }
@@ -2762,8 +2766,34 @@ namespace
             MILAN_ERRORW(ELOG_Matchmaking, L"no local player controller to run 'disconnect'");
     }
 
-    // External joins wait for the multiplayer menu: that is where direct-IP travel is known to work.
-    // A player in a lobby or match (hosting, joined, or still connecting) leaves it first.
+    // Are we in the main menu level?
+    bool IsOnMainMenu()
+    {
+        UWorld* const World = CurrentWorld();
+        return World != nullptr && World->Outer != nullptr && MenuScenes::IsMainMenuMap(*World->Outer->GetName());
+    }
+
+    // Transition to MP
+    // This is the same thing as the main menu's unrealscript
+    bool TravelToMultiplayerMenu()
+    {
+        UGameEngine* const Engine = GameEngine();
+        // If for some reason we have no players abort to avoid crash
+        if (Engine == nullptr || Engine->GamePlayers.Count() == 0 || Engine->GamePlayers(0) == nullptr || Engine->GamePlayers(0)->Actor == nullptr)
+        {
+            return false;
+        }
+
+        // Client travel string to transition to MP
+        FString const LobbyUrl = FString::Printf(L"%s?origin=MainMenu", *Engine->GetDefaultLobbyMap());
+        constexpr unsigned char k_travelAbsolute = 0;
+        Engine->GamePlayers(0)->Actor->eventClientTravel(LobbyUrl, k_travelAbsolute, FALSE, FGuid{});
+        return true;
+    }
+
+    // External joins wait for the multiplayer menu
+    // A player in a lobby or match (hosting, joined, or still connecting) leaves it first
+    // If at MP menu, joins
     void TickPendingJoin(MatchmakingState& S)
     {
         if (S.PendingJoin.empty())
@@ -2783,10 +2813,25 @@ namespace
             }
             return;
         }
-        if (S.MenuWorld == nullptr || S.MenuWorld != CurrentWorld())
+
+        if (!S.PendingJoinLeftMainMenu && IsOnMainMenu() && !IsLevelTransitioning())
+        {
+            // Go to MP menu
+            if (TravelToMultiplayerMenu())
+            {
+                MILAN_INFOW(ELOG_Matchmaking, L"transitioning from main menu to the multiplayer menu to join %S", S.PendingJoin.c_str());
+                // Mark as pending join
+                S.PendingJoinLeftMainMenu = true;
+            }
             return;
+        }
+        if (S.MenuWorld == nullptr || S.MenuWorld != CurrentWorld())
+        {
+            return;
+        }
 
         S.PendingJoinLeftGame = false;
+        S.PendingJoinLeftMainMenu = false;
         std::string const Code = std::exchange(S.PendingJoin, {});
         if (S.BaseUrl.empty())
         {
