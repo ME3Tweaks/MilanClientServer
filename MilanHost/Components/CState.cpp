@@ -58,6 +58,14 @@ namespace
         return Intercept.Applies(Node, L"SFXGameMPContent", L"SFXPRIMP", L"SetComputerName");
     }
 
+    // Is the player remote?
+    bool IsRemotePlayerPRI(UObject* const Context)
+    {
+        auto* const PRI = Context != nullptr ? Context->Cast<APlayerReplicationInfo>() : nullptr;
+        auto* const Controller = PRI != nullptr && PRI->Owner != nullptr ? PRI->Owner->Cast<APlayerController>() : nullptr;
+        return Controller != nullptr && (Controller->Player == nullptr || Controller->Player->Cast<ULocalPlayer>() == nullptr);
+    }
+
     // Suggested player name when the profile has none.
     FString const& WindowsUserName()
     {
@@ -296,14 +304,13 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
     if (HandleNetConfigBridge(Stack, Result))
         return false;
 
-    // Replace the offline online-subsystem placeholder with the MP_Profile player name,
-    // or the Windows account name when the profile has none.
+    // Ensure name is always the profile name, falling back to Windows account as last resort
     static bool bLoggedWindowsUserName = false;
     static bool bLoggedProfilePlayerName = false;
     if (IsSFXPRIMPSetComputerName(Stack->Node))
     {
         auto* const Params = reinterpret_cast<SFXPRIMP_SetComputerName_Parms*>(Stack->Locals);
-        if (Params != nullptr && (Params->ComputerName == L"Player" || Params->ComputerName == L"Local Profile"))
+        if (Params != nullptr && !IsRemotePlayerPRI(Context))
         {
             FString const& ProfilePlayerName = MPProfile::GetPlayerName();
             if (!ProfilePlayerName.Empty())
