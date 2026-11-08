@@ -441,11 +441,11 @@ extern ILogger* gp_mainLogger;
     #define MILAN_DEBUGW_INTO(Instance,  ...)           (void)0
     #define MILAN_DEBUGW(...)                           (void)0
 
-    #undef MILAN_INFOW_INTO
-    #undef MILAN_INFOW
+    //#undef MILAN_INFOW_INTO
+    //#undef MILAN_INFOW
 
-    #define MILAN_INFOW_INTO(Instance, ...)             (void)0
-    #define MILAN_INFOW(...)                            (void)0
+    //#define MILAN_INFOW_INTO(Instance, ...)             (void)0
+    //#define MILAN_INFOW(...)                            (void)0
 
 #endif // _FINAL_RELEASE
 
