@@ -279,6 +279,21 @@ namespace MenuScenes
         return nullptr;
     }
 
+    /**
+     * Hides/shows the terminal in the splash screen
+     */
+    void ShowTerminal(AActor* const Terminal)
+    {
+        Terminal->SetHidden(FALSE);
+        for (TypedObjectIterator<AActor, true, false> Iter{}; Iter; ++Iter)
+        {
+            if ((*Iter)->Base == Terminal && !(*Iter)->IsA(ASFXGUIRenderTarget_InterpActor::StaticClass()))
+            {
+                (*Iter)->SetHidden(FALSE);
+            }
+        }
+    }
+
     ACameraActor* FindTaggedCamera(char const* const Tag)
     {
         for (TypedObjectIterator<ACameraActor, true, false> Iter{}; Iter; ++Iter)
@@ -405,6 +420,7 @@ namespace MenuScenes
             {
                 Terminal->SetLocation(Anchor.Location, FALSE);
                 Terminal->SetRotation(Anchor.Rotation);
+                ShowTerminal(Terminal);
             }
             else
             {
@@ -640,13 +656,14 @@ namespace MenuScenes
                     Camera->SetRotation(View->Rotation);
                     Camera->FOVAngle = View->FOV;
                 }
-                if (Captures.TerminalAnchor)
+                if (AActor* const Terminal = FindTerminal(); Terminal != nullptr)
                 {
-                    if (AActor* const Terminal = FindTerminal(); Terminal != nullptr)
+                    if (Captures.TerminalAnchor)
                     {
                         Terminal->SetLocation(Captures.TerminalAnchor->Location, FALSE);
                         Terminal->SetRotation(Captures.TerminalAnchor->Rotation);
                     }
+                    ShowTerminal(Terminal);
                 }
 
                 FViewTargetTransitionParams Transition{};
