@@ -20,7 +20,7 @@ namespace ModVersion
         std::string_view Error{};
     };
 
-    // Bound each physical line; an oversized/malformed file must not be read in full.
+    // Read a single line, C++ style
     inline bool ReadLine(std::istream& input, std::string& line, std::size_t maximum)
     {
         line.clear();
@@ -30,24 +30,29 @@ namespace ModVersion
             if (c == std::char_traits<char>::eof())
             {
                 if (input.bad())
+                {
                     return false;
+                }
                 break;
             }
             if (c == '\n')
+            {
                 break;
-            if (line.size() >= maximum)
+            }
+            if (line.size() >= maximum) {
                 return false;
+            }
             line.push_back(static_cast<char>(c));
         }
         if (!line.empty() && line.back() == '\r')
+        {
             line.pop_back();
+        }
         return true;
     }
 
-    // Temporary source until AutoTOC publishes the registry. Only the DLC identity
-    // is fixed: always read the installed version, never the ASI build version.
-    inline Result Resolve(std::filesystem::path const& executable, std::string_view configured,
-        std::optional<std::string> const& commandLine = std::nullopt)
+    // Resolves the mod version by reading its _metacmm.txt
+    inline Result Resolve(std::filesystem::path const& executable, std::string_view configured, std::optional<std::string> const& commandLine = std::nullopt)
     {
         Result result{};
         if (commandLine)
@@ -75,8 +80,7 @@ namespace ModVersion
                 result.Error = "could not open Project Milan's _metacmm.txt";
                 return result;
             }
-            // The UTF-8 name (optionally BOM-prefixed) is line 1; version is line 2.
-            // Never skip empty lines or substitute the installer build on line 3.
+            // Version is on line 2
             std::string name;
             if (!ReadLine(input, name, 4096) || !ReadLine(input, result.Version, 65))
             {
@@ -87,6 +91,7 @@ namespace ModVersion
         }
         if (!PeerSecurity::IsModVersion(result.Version))
         {
+            // Someone has tampered with it
             result.Version.clear();
             result.Error = "mod version must contain 1-64 printable ASCII characters without spaces";
         }

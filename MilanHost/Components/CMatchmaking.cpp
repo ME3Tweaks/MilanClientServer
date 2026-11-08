@@ -340,7 +340,7 @@ struct MatchmakingState
     Clock::time_point               LastServiceContact{};
     Clock::time_point               NextInviteUiUpdate{};
     std::vector<PendingLobbyKick>    PendingKicks{};
-    UWorld*                         PendingKickWorld{ nullptr }; // Local kick: defer travel out of the script/RPC stack.
+    UWorld* PendingKickWorld{ nullptr }; // Local kick: defer travel out of the script/RPC stack.
 
     // From /v1/info and DNS.
     bool                            InfoReady{ false };
@@ -352,7 +352,7 @@ struct MatchmakingState
     PresenceState                   Presence{};
 
     // Current UE3 game socket.
-    FSocket*                        Socket{ nullptr };
+    FSocket* Socket{ nullptr };
     int                             LocalPort{ -1 };
 
     DiscoveryState                  Discovery{};
@@ -409,7 +409,7 @@ struct MatchmakingState
     std::string                     PendingJoin{};
     bool                            PendingJoinLeftGame{ false };   // Left a lobby or match so PendingJoin can start.
     bool                            PendingJoinLeftMainMenu{ false };   // Went on from the main menu so PendingJoin can start.
-    UWorld*                         MenuWorld{ nullptr };   // World in which the multiplayer menu is showing.
+    UWorld* MenuWorld{ nullptr };   // World in which the multiplayer menu is showing.
     std::wstring                    PipeName{};
     std::shared_ptr<MatchmakingNet::ControlPipe> Pipe{};
 };
@@ -455,28 +455,28 @@ namespace
         int const Timeout = Poll ? k_longPollTimeoutMs : k_requestTimeoutMs;
 
         Job Work = [=]() -> Completion
-        {
-            if (Delay.count() > 0)
-                std::this_thread::sleep_for(Delay);
-            MatchmakingNet::HttpResult Result = MatchmakingNet::Request(Url, Method, Path, Bearer, Body, Timeout);
-            return [Generation, Done, Result = std::move(Result)](MatchmakingState& S)
             {
-                if (Generation != S.Generation)
-                    return;
-                if (Result.Status >= 200 && Result.Status < 300)
-                    S.LastServiceContact = Clock::now();
-                else if (Result.Status == 0 || Result.Status == 401)
-                    S.LastServiceContact = {};
-                try
-                {
-                    Done(S, Result);
-                }
-                catch (json::exception const& Exception)
-                {
-                    MILAN_ERRORW(ELOG_Matchmaking, L"malformed matchmaker response: %S", Exception.what());
-                }
+                if (Delay.count() > 0)
+                    std::this_thread::sleep_for(Delay);
+                MatchmakingNet::HttpResult Result = MatchmakingNet::Request(Url, Method, Path, Bearer, Body, Timeout);
+                return [Generation, Done, Result = std::move(Result)](MatchmakingState& S)
+                    {
+                        if (Generation != S.Generation)
+                            return;
+                        if (Result.Status >= 200 && Result.Status < 300)
+                            S.LastServiceContact = Clock::now();
+                        else if (Result.Status == 0 || Result.Status == 401)
+                            S.LastServiceContact = {};
+                        try
+                        {
+                            Done(S, Result);
+                        }
+                        catch (json::exception const& Exception)
+                        {
+                            MILAN_ERRORW(ELOG_Matchmaking, L"malformed matchmaker response: %S", Exception.what());
+                        }
+                    };
             };
-        };
 
         std::lock_guard Lock{ State.Box->Mutex };
         (Poll ? State.Box->PollJobs : State.Box->ControlJobs).push_back(std::move(Work));
@@ -660,7 +660,7 @@ namespace
     struct LocalizedText
     {
         int             StrRef;
-        wchar_t const*  English;
+        wchar_t const* English;
     };
 
     namespace Text
@@ -1004,59 +1004,59 @@ namespace
         std::uint64_t const Generation = S.Generation;
 
         Job Work = [=]() -> Completion
-        {
-            MatchmakingNet::HttpResult Result = MatchmakingNet::Request(Url, L"GET", "/v1/info", "", "", k_requestTimeoutMs);
-            std::uint32_t Address = 0;
-            std::string ResolveError{};
-            bool const Resolved = MatchmakingNet::ResolveUrlHostIPv4(Url, Address, ResolveError);
-
-            return [=](MatchmakingState& State)
             {
-                if (Generation != State.Generation)
-                    return;
-                try
-                {
-                    std::optional<json> const Info = SuccessJson(Result, "server info");
-                    State.AccessKeyRejected = !Info && Result.Status == 401 && ErrorCode(Result) == "access_key_invalid";
-                    if (!Info)
-                    {
-                        if (Failed) Failed(State);
-                        return;
-                    }
-                    if (Info->at("protocolVersion").get<int>() != k_protocolVersion)
-                    {
-                        MILAN_ERRORW(ELOG_Matchmaking, L"matchmaker protocol %d is not supported (need %d)",
-                            Info->at("protocolVersion").get<int>(), k_protocolVersion);
-                        if (Failed) Failed(State);
-                        return;
-                    }
-                    if (!Resolved)
-                    {
-                        MILAN_ERRORW(ELOG_Matchmaking, L"%S", ResolveError.c_str());
-                        if (Failed) Failed(State);
-                        return;
-                    }
+                MatchmakingNet::HttpResult Result = MatchmakingNet::Request(Url, L"GET", "/v1/info", "", "", k_requestTimeoutMs);
+                std::uint32_t Address = 0;
+                std::string ResolveError{};
+                bool const Resolved = MatchmakingNet::ResolveUrlHostIPv4(Url, Address, ResolveError);
 
-                    State.ServerAddress = Address;
-                    State.ServerUdpPort = static_cast<std::uint16_t>(Info->at("udpPort").get<int>());
-                    State.HeartbeatSeconds = std::max(5, Info->at("heartbeatSeconds").get<int>());
-                    State.ServerMaxPlayersCeiling = Info->value("maxPlayersCeiling", 0);
-                    State.Presence.Url = Url;
-                    State.Presence.InfoKnown = true;
-                    State.Presence.Seconds = Info->value("presenceSeconds", 0);
-                    State.Presence.Next = {};
-                    State.InfoReady = true;
-                    if (State.ServerUdpPort == 0)
-                        MILAN_WARNW(ELOG_Matchmaking, L"matchmaker has UDP discovery disabled; no observed endpoints");
-                    Next(State);
-                }
-                catch (json::exception const& Exception)
-                {
-                    MILAN_ERRORW(ELOG_Matchmaking, L"malformed server info: %S", Exception.what());
-                    if (Failed) Failed(State);
-                }
+                return [=](MatchmakingState& State)
+                    {
+                        if (Generation != State.Generation)
+                            return;
+                        try
+                        {
+                            std::optional<json> const Info = SuccessJson(Result, "server info");
+                            State.AccessKeyRejected = !Info && Result.Status == 401 && ErrorCode(Result) == "access_key_invalid";
+                            if (!Info)
+                            {
+                                if (Failed) Failed(State);
+                                return;
+                            }
+                            if (Info->at("protocolVersion").get<int>() != k_protocolVersion)
+                            {
+                                MILAN_ERRORW(ELOG_Matchmaking, L"matchmaker protocol %d is not supported (need %d)",
+                                    Info->at("protocolVersion").get<int>(), k_protocolVersion);
+                                if (Failed) Failed(State);
+                                return;
+                            }
+                            if (!Resolved)
+                            {
+                                MILAN_ERRORW(ELOG_Matchmaking, L"%S", ResolveError.c_str());
+                                if (Failed) Failed(State);
+                                return;
+                            }
+
+                            State.ServerAddress = Address;
+                            State.ServerUdpPort = static_cast<std::uint16_t>(Info->at("udpPort").get<int>());
+                            State.HeartbeatSeconds = std::max(5, Info->at("heartbeatSeconds").get<int>());
+                            State.ServerMaxPlayersCeiling = Info->value("maxPlayersCeiling", 0);
+                            State.Presence.Url = Url;
+                            State.Presence.InfoKnown = true;
+                            State.Presence.Seconds = Info->value("presenceSeconds", 0);
+                            State.Presence.Next = {};
+                            State.InfoReady = true;
+                            if (State.ServerUdpPort == 0)
+                                MILAN_WARNW(ELOG_Matchmaking, L"matchmaker has UDP discovery disabled; no observed endpoints");
+                            Next(State);
+                        }
+                        catch (json::exception const& Exception)
+                        {
+                            MILAN_ERRORW(ELOG_Matchmaking, L"malformed server info: %S", Exception.what());
+                            if (Failed) Failed(State);
+                        }
+                    };
             };
-        };
 
         std::lock_guard Lock{ S.Box->Mutex };
         S.Box->ControlJobs.push_back(std::move(Work));
@@ -1274,26 +1274,26 @@ namespace
     {
         std::string const Path = "/v1/lobbies/" + S.LobbyId + "/introductions/poll?after=" + std::to_string(S.IntroductionsVersion);
         PostHttp(S, true, L"POST", Path, S.HostKey, "", [](MatchmakingState& State, MatchmakingNet::HttpResult const& Result)
-        {
-            if (Result.Status == 404)
             {
-                MILAN_WARNW(ELOG_Matchmaking, L"lobby is gone from the matchmaker; registering it again");
-                ResetSession(State);
-                return;
-            }
-            if (WasReplaced(Result))
-            {
-                HandleReplaced(State);
-                return;
-            }
-            if (std::optional<json> const List = SuccessJson(Result, "introductions poll"))
-            {
-                ApplyIntroductions(State, *List);
-                ContinueIntroductions(State);
-                return;
-            }
-            ContinueIntroductions(State, k_pollRetryDelay);
-        }, Delay);
+                if (Result.Status == 404)
+                {
+                    MILAN_WARNW(ELOG_Matchmaking, L"lobby is gone from the matchmaker; registering it again");
+                    ResetSession(State);
+                    return;
+                }
+                if (WasReplaced(Result))
+                {
+                    HandleReplaced(State);
+                    return;
+                }
+                if (std::optional<json> const List = SuccessJson(Result, "introductions poll"))
+                {
+                    ApplyIntroductions(State, *List);
+                    ContinueIntroductions(State);
+                    return;
+                }
+                ContinueIntroductions(State, k_pollRetryDelay);
+            }, Delay);
     }
 
     void SendHeartbeat(MatchmakingState& S)
@@ -1340,53 +1340,53 @@ namespace
         S.LanAddresses = MatchmakingNet::LanIPv4Addresses(4);
 
         FetchInfo(S, [](MatchmakingState& State)
-        {
-            json State0 = BuildLobbyState(State);
-            State.LastStateBody = State0.dump();
-            State.Revision = 1;
-            State0["revision"] = State.Revision;
-            json const Request{ { "gameVersion", State.ModVersion }, { "state", State0 } };
-
-            PostHttp(State, false, L"POST", "/v1/lobbies", "", Request.dump(), [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
             {
-                std::optional<json> const Created = SuccessJson(Result, "lobby creation");
-                if (!Created)
-                {
-                    RetryHostLater(Session);
-                    return;
-                }
+                json State0 = BuildLobbyState(State);
+                State.LastStateBody = State0.dump();
+                State.Revision = 1;
+                State0["revision"] = State.Revision;
+                json const Request{ { "gameVersion", State.ModVersion },{ "state", State0 } };
 
-                Session.LobbyId = Created->at("lobbyId").get<std::string>();
-                Session.HostKey = Created->at("hostKey").get<std::string>();
-                Session.InviteCode = Created->at("inviteCode").get<std::string>();
-                Session.Discovery.Ticket = UdpTicket::FromJson(Created->at("udpTicket"));
-                Session.Discovery.Restart();
-                Session.NextHeartbeat = Clock::now() + std::chrono::seconds(Session.HeartbeatSeconds);
-                Session.AutoHost.Failures = 0;
+                PostHttp(State, false, L"POST", "/v1/lobbies", "", Request.dump(), [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
+                    {
+                        std::optional<json> const Created = SuccessJson(Result, "lobby creation");
+                        if (!Created)
+                        {
+                            RetryHostLater(Session);
+                            return;
+                        }
 
-                MILAN_INFOW(ELOG_Matchmaking, L"lobby registered (%s); invite code %S (game port %d)",
-                    PrivacyName(Session.Hosted), Session.InviteCode.c_str(), Session.LocalPort);
-                ContinueIntroductions(Session);
-            });
-        }, [](MatchmakingState& State) { RetryHostLater(State); });
+                        Session.LobbyId = Created->at("lobbyId").get<std::string>();
+                        Session.HostKey = Created->at("hostKey").get<std::string>();
+                        Session.InviteCode = Created->at("inviteCode").get<std::string>();
+                        Session.Discovery.Ticket = UdpTicket::FromJson(Created->at("udpTicket"));
+                        Session.Discovery.Restart();
+                        Session.NextHeartbeat = Clock::now() + std::chrono::seconds(Session.HeartbeatSeconds);
+                        Session.AutoHost.Failures = 0;
+
+                        MILAN_INFOW(ELOG_Matchmaking, L"lobby registered (%s); invite code %S (game port %d)",
+                            PrivacyName(Session.Hosted), Session.InviteCode.c_str(), Session.LocalPort);
+                        ContinueIntroductions(Session);
+                    });
+            }, [](MatchmakingState& State) { RetryHostLater(State); });
     }
 
     std::optional<Endpoint> ChooseTravelTarget(std::vector<Endpoint> const& Candidates, bool const SamePublicAddress)
     {
         auto const IsLoopback = [](Endpoint const& Candidate)
-        {
-            return reinterpret_cast<std::uint8_t const*>(&Candidate.Address)[0] == 127;
-        };
+            {
+                return reinterpret_cast<std::uint8_t const*>(&Candidate.Address)[0] == 127;
+            };
 
         // A loopback observation only occurs when the host contacted a matchmaker on its
         // own machine. It reaches the host only from that machine (the local two-instance test).
         auto const Find = [&](char const* Kind) -> std::optional<Endpoint>
-        {
-            for (auto const& Candidate : Candidates)
-                if (Candidate.Kind == Kind && (SamePublicAddress || !IsLoopback(Candidate)))
-                    return Candidate;
-            return std::nullopt;
-        };
+            {
+                for (auto const& Candidate : Candidates)
+                    if (Candidate.Kind == Kind && (SamePublicAddress || !IsLoopback(Candidate)))
+                        return Candidate;
+                return std::nullopt;
+            };
 
         if (SamePublicAddress)
             if (auto Observed = Find("PublicObserved"); Observed && IsLoopback(*Observed))
@@ -1414,51 +1414,51 @@ namespace
     {
         std::string const Path = "/v1/reservations/" + S.ReservationId + "/poll?after=" + std::to_string(S.ReservationVersion);
         PostHttp(S, true, L"POST", Path, S.JoinKey, "", [](MatchmakingState& State, MatchmakingNet::HttpResult const& Result)
-        {
-            if (Result.Status == 404)
             {
-                if (State.AwaitingHostCandidates)
-                    FailMigration(State, L"the new host's lobby closed");
-                else if (!State.JoinedReported)
-                    MILAN_WARNW(ELOG_Matchmaking, L"reservation ended before the join completed");
-                return;
-            }
-            std::optional<json> const Status = SuccessJson(Result, "reservation poll");
-            if (!Status)
-            {
-                PollReservation(State, k_pollRetryDelay);
-                return;
-            }
-
-            State.ReservationVersion = Status->at("version").get<long long>();
-            State.SamePublicAddress = Status->at("samePublicAddress").get<bool>();
-            std::vector<Endpoint> Candidates = ParseCandidates(Status->at("hostCandidates"),
-                reinterpret_cast<std::uint8_t const*>(&State.ServerAddress)[0] == 127);
-            if (Candidates != State.HostPath.Candidates)
-            {
-                for (auto const& Candidate : Candidates)
+                if (Result.Status == 404)
                 {
-                    MILAN_UNUSED(Candidate);
-                    MILAN_INFOW(ELOG_Matchmaking, L"host candidate %S (%S)", Candidate.ToString().c_str(), Candidate.Kind.c_str());
+                    if (State.AwaitingHostCandidates)
+                        FailMigration(State, L"the new host's lobby closed");
+                    else if (!State.JoinedReported)
+                        MILAN_WARNW(ELOG_Matchmaking, L"reservation ended before the join completed");
+                    return;
                 }
-                State.HostPath.Candidates = std::move(Candidates);
-                State.HostPath.ProbeUntil = Clock::now() + k_probeWindow;
-                State.HostPath.NextProbe = Clock::now();
-            }
+                std::optional<json> const Status = SuccessJson(Result, "reservation poll");
+                if (!Status)
+                {
+                    PollReservation(State, k_pollRetryDelay);
+                    return;
+                }
 
-            // A new host after migration has reported from its lobby, so it can be joined.
-            if (State.AwaitingHostCandidates && !State.HostPath.Candidates.empty())
-            {
-                State.AwaitingHostCandidates = false;
-                MILAN_INFOW(ELOG_Matchmaking, L"the new host's lobby is up");
-                if (!TravelToHost(State, false))
-                    FailMigration(State, L"the new host has no usable address");
-                return;
-            }
-            // Nothing more to learn once in the host's game, and the poll worker is shared.
-            if (!State.JoinedReported)
-                PollReservation(State);
-        }, Delay);
+                State.ReservationVersion = Status->at("version").get<long long>();
+                State.SamePublicAddress = Status->at("samePublicAddress").get<bool>();
+                std::vector<Endpoint> Candidates = ParseCandidates(Status->at("hostCandidates"),
+                    reinterpret_cast<std::uint8_t const*>(&State.ServerAddress)[0] == 127);
+                if (Candidates != State.HostPath.Candidates)
+                {
+                    for (auto const& Candidate : Candidates)
+                    {
+                        MILAN_UNUSED(Candidate);
+                        MILAN_INFOW(ELOG_Matchmaking, L"host candidate %S (%S)", Candidate.ToString().c_str(), Candidate.Kind.c_str());
+                    }
+                    State.HostPath.Candidates = std::move(Candidates);
+                    State.HostPath.ProbeUntil = Clock::now() + k_probeWindow;
+                    State.HostPath.NextProbe = Clock::now();
+                }
+
+                // A new host after migration has reported from its lobby, so it can be joined.
+                if (State.AwaitingHostCandidates && !State.HostPath.Candidates.empty())
+                {
+                    State.AwaitingHostCandidates = false;
+                    MILAN_INFOW(ELOG_Matchmaking, L"the new host's lobby is up");
+                    if (!TravelToHost(State, false))
+                        FailMigration(State, L"the new host has no usable address");
+                    return;
+                }
+                // Nothing more to learn once in the host's game, and the poll worker is shared.
+                if (!State.JoinedReported)
+                    PollReservation(State);
+            }, Delay);
     }
 
     using QuickMatchOutcome = CMatchmaking::EQuickMatchOutcome;
@@ -1598,28 +1598,28 @@ namespace
         S.QuickMatchDone = std::move(Done);
         MILAN_INFOW(ELOG_Matchmaking, L"quick match search: map %d, enemy %d, difficulty %d", MapId, EnemyModeId, DifficultyId);
         FetchInfo(S, [MapId, EnemyModeId, DifficultyId](MatchmakingState& State)
-        {
-            json const Request{
-                { "gameVersion", State.ModVersion },
-                { "mapId", MapId },
-                { "enemyModeId", EnemyModeId },
-                { "difficultyId", DifficultyId },
-                { "widen", true },
-            };
-            PostHttp(State, false, L"POST", "/v1/searches", "", Request.dump(),
-                [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
-                {
-                    std::optional<json> const Created = SuccessJson(Result, "quick match search");
-                    if (!Created)
+            {
+                json const Request{
+                    { "gameVersion", State.ModVersion },
+                    { "mapId", MapId },
+                    { "enemyModeId", EnemyModeId },
+                    { "difficultyId", DifficultyId },
+                    { "widen", true },
+                };
+                PostHttp(State, false, L"POST", "/v1/searches", "", Request.dump(),
+                    [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
                     {
-                        FinishQuickMatch(Session, QuickMatchServerFailure(Session));
-                        return;
-                    }
-                    Session.SearchId = Created->at("searchId").get<std::string>();
-                    Session.SearchKey = Created->at("searchKey").get<std::string>();
-                    HandleSearchStatus(Session, Created->at("status"));
-                });
-        }, [](MatchmakingState& State) { FinishQuickMatch(State, QuickMatchServerFailure(State)); });
+                        std::optional<json> const Created = SuccessJson(Result, "quick match search");
+                        if (!Created)
+                        {
+                            FinishQuickMatch(Session, QuickMatchServerFailure(Session));
+                            return;
+                        }
+                        Session.SearchId = Created->at("searchId").get<std::string>();
+                        Session.SearchKey = Created->at("searchKey").get<std::string>();
+                        HandleSearchStatus(Session, Created->at("status"));
+                    });
+            }, [](MatchmakingState& State) { FinishQuickMatch(State, QuickMatchServerFailure(State)); });
     }
 
     // What to tell the player when the matchmaker refuses an invite code. The codes are
@@ -1666,39 +1666,39 @@ namespace
         // A failed join ends the session, so the game does not look like it is still joining,
         // and tells the player why: the join may have come from a link or Discord.
         FetchInfo(S, [InviteCode](MatchmakingState& State)
-        {
-            json const Request{ { "inviteCode", InviteCode }, { "gameVersion", State.ModVersion } };
-            PostHttp(State, false, L"POST", "/v1/invites/redeem", "", Request.dump(), [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
             {
-                std::optional<json> const Reservation = SuccessJson(Result, "invite redemption");
-                if (!Reservation)
-                {
-                    ResetSession(Session);
-                    ReportJoinFailure(RedeemFailureMessage(Result));
-                    return;
-                }
+                json const Request{ { "inviteCode", InviteCode },{ "gameVersion", State.ModVersion } };
+                PostHttp(State, false, L"POST", "/v1/invites/redeem", "", Request.dump(), [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
+                    {
+                        std::optional<json> const Reservation = SuccessJson(Result, "invite redemption");
+                        if (!Reservation)
+                        {
+                            ResetSession(Session);
+                            ReportJoinFailure(RedeemFailureMessage(Result));
+                            return;
+                        }
 
-                if (!AcceptReservation(Session, *Reservation, false))
+                        if (!AcceptReservation(Session, *Reservation, false))
+                        {
+                            Leave(Session); // Releases the reservation.
+                            // Usually a reservation without a host address this game can reach.
+                            ReportJoinFailure(Localize(Text::HostUnreachable));
+                        }
+                    });
+            }, [](MatchmakingState& State)
                 {
-                    Leave(Session); // Releases the reservation.
-                    // Usually a reservation without a host address this game can reach.
-                    ReportJoinFailure(Localize(Text::HostUnreachable));
-                }
-            });
-        }, [](MatchmakingState& State)
-        {
-            std::wstring const Server = Widen(State.BaseUrl);
-            bool const bKeyRejected = State.AccessKeyRejected;
-            bool const bDefaultServer = State.BaseUrl == k_defaultMatchmakerUrl;
-            ResetSession(State);
-            // The default server's address is not shown to players.
-            if (bKeyRejected)
-                ReportJoinFailure(Localize(Text::AccessKeyRejected));
-            else if (bDefaultServer)
-                ReportJoinFailure(Localize(Text::ServerUnreachable));
-            else
-                ReportJoinFailure(Localize(Text::ServerConnectFailed, Server));
-        });
+                    std::wstring const Server = Widen(State.BaseUrl);
+                    bool const bKeyRejected = State.AccessKeyRejected;
+                    bool const bDefaultServer = State.BaseUrl == k_defaultMatchmakerUrl;
+                    ResetSession(State);
+                    // The default server's address is not shown to players.
+                    if (bKeyRejected)
+                        ReportJoinFailure(Localize(Text::AccessKeyRejected));
+                    else if (bDefaultServer)
+                        ReportJoinFailure(Localize(Text::ServerUnreachable));
+                    else
+                        ReportJoinFailure(Localize(Text::ServerConnectFailed, Server));
+                });
     }
 
     void Leave(MatchmakingState& S)
@@ -1834,17 +1834,17 @@ namespace
     {
         std::string const Path = "/v1/members/" + S.ReservationId + "/poll?after=" + std::to_string(S.MigrationVersion);
         PostHttp(S, true, L"POST", Path, S.JoinKey, "", [](MatchmakingState& State, MatchmakingNet::HttpResult const& Result)
-        {
-            if (Result.Status == 404)
             {
-                FailMigration(State, L"the lobby is gone from the matchmaker");
-                return;
-            }
-            if (std::optional<json> const Status = SuccessJson(Result, "migration poll"))
-                HandleMigrationStatus(State, *Status);
-            else
-                PollMember(State, k_pollRetryDelay);
-        }, Delay);
+                if (Result.Status == 404)
+                {
+                    FailMigration(State, L"the lobby is gone from the matchmaker");
+                    return;
+                }
+                if (std::optional<json> const Status = SuccessJson(Result, "migration poll"))
+                    HandleMigrationStatus(State, *Status);
+                else
+                    PollMember(State, k_pollRetryDelay);
+            }, Delay);
     }
 
     // A lobby member that lost its host asks the matchmaker to check the host and, if it is
@@ -1936,12 +1936,12 @@ namespace
         if (Box.Stop)
             return false;
         Box.Completions.push_back([Url = std::move(Url), Code = std::move(Code), Source](MatchmakingState& S)
-        {
-            if (Url)
-                SetMatchmaker(S, *Url, Source);
-            if (Code)
-                QueueJoin(S, *Code, Source);
-        });
+            {
+                if (Url)
+                    SetMatchmaker(S, *Url, Source);
+                if (Code)
+                    QueueJoin(S, *Code, Source);
+            });
         return true;
     }
 
@@ -1949,9 +1949,9 @@ namespace
     std::string HandleControlRequest(std::shared_ptr<Mailbox> const& Box, std::string const& Text)
     {
         auto const Reply = [](char const* const Error)
-        {
-            return (Error == nullptr ? json{ { "ok", true } } : json{ { "ok", false }, { "error", Error } }).dump();
-        };
+            {
+                return (Error == nullptr ? json{ { "ok", true } } : json{ { "ok", false },{ "error", Error } }).dump();
+            };
 
         try
         {
@@ -2017,7 +2017,7 @@ namespace
 
     // Leaves the field empty rather than handing out a truncated value.
     template<std::size_t N>
-    void CopyField(char (&Field)[N], std::string const& Value)
+    void CopyField(char(&Field)[N], std::string const& Value)
     {
         if (Value.size() < N)
             std::memcpy(Field, Value.c_str(), Value.size() + 1);
@@ -2321,23 +2321,23 @@ namespace
     {
         PostHttp(S, false, L"GET", "/v1/members/" + S.ReservationId + "/invite", S.JoinKey, "",
             [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
-        {
-            if (Result.Status == 403 && ErrorCode(Result) == "invites_host_only")
             {
-                ShowInviteHint(Localize(Text::InvitesHostOnly), 5.f);
-                return;
-            }
+                if (Result.Status == 403 && ErrorCode(Result) == "invites_host_only")
+                {
+                    ShowInviteHint(Localize(Text::InvitesHostOnly), 5.f);
+                    return;
+                }
 
-            std::optional<json> const Body = SuccessJson(Result, "invite code request");
-            std::string Code = Body ? Body->value("inviteCode", std::string{}) : std::string{};
-            if (Code.empty())
-            {
-                ShowInviteHint(Localize(Text::InviteCodeUnavailable), 3.f);
-                return;
-            }
-            Session.InviteCode = std::move(Code);
-            ShareInvite(Session);
-        });
+                std::optional<json> const Body = SuccessJson(Result, "invite code request");
+                std::string Code = Body ? Body->value("inviteCode", std::string{}) : std::string{};
+                if (Code.empty())
+                {
+                    ShowInviteHint(Localize(Text::InviteCodeUnavailable), 3.f);
+                    return;
+                }
+                Session.InviteCode = std::move(Code);
+                ShareInvite(Session);
+            });
     }
 
     void RegisterLobbyService(::LESDK::Initializer& Context, std::shared_ptr<Mailbox> Box)
@@ -2488,9 +2488,8 @@ namespace
         if (S.Socket != nullptr && S.LocalPort != S.ReportedPort && !S.ReservationId.empty())
         {
             S.ReportedPort = S.LocalPort;
-            json const Request{ { "gamePort", S.LocalPort }, { "lanAddresses", MatchmakingNet::LanIPv4Addresses(4) } };
-            PostHttp(S, false, L"PUT", "/v1/reservations/" + S.ReservationId + "/candidates", S.JoinKey, Request.dump(),
-                [](MatchmakingState&, MatchmakingNet::HttpResult const& Result)
+            json const Request{ { "gamePort", S.LocalPort },{ "lanAddresses", MatchmakingNet::LanIPv4Addresses(4) } };
+            PostHttp(S, false, L"PUT", "/v1/reservations/" + S.ReservationId + "/candidates", S.JoinKey, Request.dump(), [](MatchmakingState&, MatchmakingNet::HttpResult const& Result)
                 {
                     if (Result.Status != 204)
                         MILAN_WARNW(ELOG_Matchmaking, L"reporting LAN candidates failed: %S", DescribeFailure(Result).c_str());
@@ -2589,14 +2588,14 @@ namespace
         P.Next = Now + std::chrono::seconds{ std::clamp(P.Seconds, 30, 3600) };
         P.Reported = true;
         PostHttp(S, false, L"PUT", "/v1/presence/" + P.Id, "", "", [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
-        {
-            // The matchmaker turned presence off since /v1/info was read.
-            if (Result.Status == 404)
             {
-                Session.Presence.Seconds = 0;
-                Session.Presence.Reported = false;
-            }
-        });
+                // The matchmaker turned presence off since /v1/info was read.
+                if (Result.Status == 404)
+                {
+                    Session.Presence.Seconds = 0;
+                    Session.Presence.Reported = false;
+                }
+            });
     }
 
     void TickHosting(MatchmakingState& S, Clock::time_point const Now)
@@ -2718,14 +2717,14 @@ namespace
             return;
 
         auto const Write = [](APlayerReplicationInfo* const PRI, unsigned char const Ping, bool const Replicate)
-        {
-            if (PRI == nullptr || PRI->Ping == Ping)
-                return;
-            PRI->Ping = Ping;
-            // Script assignments mark an actor for replication; native writes do not.
-            if (Replicate)
-                PRI->bNetDirty = TRUE;
-        };
+            {
+                if (PRI == nullptr || PRI->Ping == Ping)
+                    return;
+                PRI->Ping = Ping;
+                // Script assignments mark an actor for replication; native writes do not.
+                if (Replicate)
+                    PRI->bNetDirty = TRUE;
+            };
 
         if (IsListenServer())
         {
@@ -2869,24 +2868,31 @@ bool CMatchmaking::Initialize(::LESDK::Initializer& Context)
     std::wstring executable(32768, L'\0');
     DWORD const executableLength = ::GetModuleFileNameW(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
     if (executableLength == 0 || executableLength >= executable.size())
+    {
         executable.clear();
+    }
     else
+    {
         executable.resize(executableLength);
-    auto version = ModVersion::Resolve(std::filesystem::path{ executable },
-        gp_clientConfig != nullptr ? std::string_view{ gp_clientConfig->ModVersion.c_str() } : std::string_view{},
+    }
+    auto version = ModVersion::Resolve(std::filesystem::path{ executable }, gp_clientConfig != nullptr ? std::string_view{ gp_clientConfig->ModVersion.c_str() } : std::string_view{},
         CommandLineValue(L"-mmversion="));
     if (!version.Version.empty())
     {
         mp_state->ModVersion = std::move(version.Version);
         if (version.From == ModVersion::Source::Metadata)
+        {
             MILAN_INFOW(ELOG_Matchmaking, L"mod version %S from %s", mp_state->ModVersion.c_str(), version.MetadataPath.c_str());
+        }
         else
-            MILAN_INFOW(ELOG_Matchmaking, L"mod version %S from %s", mp_state->ModVersion.c_str(),
-                version.From == ModVersion::Source::CommandLine ? L"-mmversion" : L"[milan.game] version");
+        {
+            MILAN_INFOW(ELOG_Matchmaking, L"mod version %S from %s", mp_state->ModVersion.c_str(), version.From == ModVersion::Source::CommandLine ? L"-mmversion" : L"[milan.game] version");
+        }
     }
-    else
-        MILAN_WARNW(ELOG_Matchmaking, L"mod version is unknown: %S (metadata: %s). Matchmaking is disabled; check the installed _metacmm.txt or set [milan.game] version / mm.version.",
-            version.Error.data(), version.MetadataPath.empty() ? L"explicit override or executable path unavailable" : version.MetadataPath.c_str());
+    else {
+        MILAN_WARNW(ELOG_Matchmaking, L"mod version is unknown: %S (metadata: %s). Matchmaking is disabled: check the installed _metacmm.txt", version.Error.data(), version.MetadataPath.empty() ? L"explicit override or executable path unavailable" : version.MetadataPath.c_str());
+    }
+
     // Tied to the configured server, so -mmserver naming another one sends no key.
     if (gp_clientConfig != nullptr)
         MatchmakingNet::SetAccessKey(mp_state->BaseUrl, gp_clientConfig->SelectedAccessKey().c_str());
@@ -3123,7 +3129,7 @@ bool CMatchmaking::On_ScriptCall(UStruct* const Function)
         mp_state->MenuWorld = nullptr;
     else if (Function->Name == k_invite &&
         (s_invite.Applies(Function, L"SFXGameMPContent", L"SFXGUI_MPLobby", L"InviteFriends") ||
-         s_pauseInvite.Applies(Function, L"SFXGameMPContent", L"SFXGUI_MPPauseMenu", L"InviteFriends")))
+            s_pauseInvite.Applies(Function, L"SFXGameMPContent", L"SFXGUI_MPPauseMenu", L"InviteFriends")))
     {
         // The original function opens the platform invite UI, which is unavailable on PC.
         MatchmakingState& S = *mp_state;
@@ -3194,148 +3200,148 @@ void CMatchmaking::RegisterCommands()
 
     // Hosted games register automatically; this re-registers now, e.g. after mm.leave.
     Commands.RegisterCommand(L"mm", L"host", [this](wchar_t const* const Params) -> bool
-    {
-        MILAN_UNUSED(Params);
-        if (!IsListenServer() || mp_state->Socket == nullptr)
         {
-            MILAN_WARNW(ELOG_Matchmaking, L"mm.host: start hosting a match first (no listen socket yet)");
+            MILAN_UNUSED(Params);
+            if (!IsListenServer() || mp_state->Socket == nullptr)
+            {
+                MILAN_WARNW(ELOG_Matchmaking, L"mm.host: start hosting a match first (no listen socket yet)");
+                return true;
+            }
+            if (!mp_state->Hosted.Known)
+            {
+                MILAN_WARNW(ELOG_Matchmaking, L"mm.host: the lobby has not published its match settings yet");
+                return true;
+            }
+            Leave(*mp_state);
+            mp_state->AutoHost = {};
             return true;
-        }
-        if (!mp_state->Hosted.Known)
-        {
-            MILAN_WARNW(ELOG_Matchmaking, L"mm.host: the lobby has not published its match settings yet");
-            return true;
-        }
-        Leave(*mp_state);
-        mp_state->AutoHost = {};
-        return true;
-    });
+        });
 
     Commands.RegisterCommand(L"mm", L"join", [this](wchar_t const* const Params) -> bool
-    {
-        std::string const Code = Narrow(Params);
-        if (Code.empty())
         {
-            MILAN_WARNW(ELOG_Matchmaking, L"usage: mm.join <invite code>");
+            std::string const Code = Narrow(Params);
+            if (Code.empty())
+            {
+                MILAN_WARNW(ELOG_Matchmaking, L"usage: mm.join <invite code>");
+                return true;
+            }
+            mp_state->PendingJoin.clear();
+            Leave(*mp_state);
+            StartJoin(*mp_state, Code);
             return true;
-        }
-        mp_state->PendingJoin.clear();
-        Leave(*mp_state);
-        StartJoin(*mp_state, Code);
-        return true;
-    });
+        });
 
     // Also stops automatic registration until this game stops hosting.
     Commands.RegisterCommand(L"mm", L"leave", [this](wchar_t const* const Params) -> bool
-    {
-        MILAN_UNUSED(Params);
-        mp_state->AutoHost.Suppressed = IsListenServer();
-        mp_state->PendingJoin.clear();
-        Leave(*mp_state);
-        return true;
-    });
+        {
+            MILAN_UNUSED(Params);
+            mp_state->AutoHost.Suppressed = IsListenServer();
+            mp_state->PendingJoin.clear();
+            Leave(*mp_state);
+            return true;
+        });
 
     // mm.server shows the URL, mm.server <url> sets it, and mm.server off disables matchmaking.
     Commands.RegisterCommand(L"mm", L"server", [this](wchar_t const* const Params) -> bool
-    {
-        std::string Url = Narrow(Params);
-        Url.erase(0, Url.find_first_not_of(' '));
-        Url.erase(Url.find_last_not_of(' ') + 1);
-        if (Url == "off")
-            SetMatchmaker(*mp_state, {}, L"console");
-        else if (!Url.empty() && !MatchmakingNet::IsValidBaseUrl(Url))
-            MILAN_WARNW(ELOG_Matchmaking, L"mm.server: expected an http:// or https:// URL, or 'off'");
-        else if (!Url.empty())
-            SetMatchmaker(*mp_state, std::move(Url), L"console");
-        MILAN_INFOW(ELOG_Matchmaking, L"matchmaker: %S", mp_state->BaseUrl.empty() ? "disabled" : mp_state->BaseUrl.c_str());
-        return true;
-    });
+        {
+            std::string Url = Narrow(Params);
+            Url.erase(0, Url.find_first_not_of(' '));
+            Url.erase(Url.find_last_not_of(' ') + 1);
+            if (Url == "off")
+                SetMatchmaker(*mp_state, {}, L"console");
+            else if (!Url.empty() && !MatchmakingNet::IsValidBaseUrl(Url))
+                MILAN_WARNW(ELOG_Matchmaking, L"mm.server: expected an http:// or https:// URL, or 'off'");
+            else if (!Url.empty())
+                SetMatchmaker(*mp_state, std::move(Url), L"console");
+            MILAN_INFOW(ELOG_Matchmaking, L"matchmaker: %S", mp_state->BaseUrl.empty() ? "disabled" : mp_state->BaseUrl.c_str());
+            return true;
+        });
 
     Commands.RegisterCommand(L"mm", L"version", [this](wchar_t const* const Params) -> bool
-    {
-        std::string value = Narrow(Params);
-        auto first = value.find_first_not_of(' ');
-        if (first != std::string::npos)
         {
-            value = value.substr(first, value.find_last_not_of(' ') - first + 1);
-            if (!SetModVersion(value == "off" ? std::string{} : value))
-                MILAN_WARNW(ELOG_Matchmaking, L"mm.version: expected 1-64 printable ASCII characters without spaces, or off");
-        }
-        if (mp_state != nullptr)
-            MILAN_INFOW(ELOG_Matchmaking, L"mod version: %S", mp_state->ModVersion.empty() ? "unknown" : mp_state->ModVersion.c_str());
-        return true;
-    });
+            std::string value = Narrow(Params);
+            auto first = value.find_first_not_of(' ');
+            if (first != std::string::npos)
+            {
+                value = value.substr(first, value.find_last_not_of(' ') - first + 1);
+                if (!SetModVersion(value == "off" ? std::string{} : value))
+                    MILAN_WARNW(ELOG_Matchmaking, L"mm.version: expected 1-64 printable ASCII characters without spaces, or off");
+            }
+            if (mp_state != nullptr)
+                MILAN_INFOW(ELOG_Matchmaking, L"mod version: %S", mp_state->ModVersion.empty() ? "unknown" : mp_state->ModVersion.c_str());
+            return true;
+        });
 
     Commands.RegisterCommand(L"mm", L"status", [this](wchar_t const* const Params) -> bool
-    {
-        MILAN_UNUSED(Params);
-        MatchmakingState const& S = *mp_state;
-        static constexpr wchar_t const* k_roles[] = { L"none", L"host", L"joiner" };
-        MILAN_INFOW(ELOG_Matchmaking, L"role %s, matchmaker %S, game socket port %d", k_roles[static_cast<int>(S.Role)],
-            S.BaseUrl.empty() ? "disabled" : S.BaseUrl.c_str(), S.LocalPort);
-        UNetDriver* const Driver = FindGameDriver();
-        MILAN_UNUSED(Driver);
-        MILAN_INFOW(ELOG_Matchmaking, L"  net driver %s, listen server %d, UDP socket %s, multiplayer menu %d, control pipe %s",
-            Driver != nullptr ? *Driver->Class->GetName() : L"none", IsListenServer() ? 1 : 0,
-            SocketOf(Driver) != nullptr ? L"found" : L"not found", S.MenuWorld != nullptr && S.MenuWorld == CurrentWorld() ? 1 : 0,
-            S.Pipe ? S.PipeName.c_str() : L"none");
-        if (IsListenServer())
         {
-            MILAN_INFOW(ELOG_Matchmaking, L"  lobby size %d (largest allowed %d, matchmaker limit %d)", HostMaxPlayers(),
-                CurrentMaxPlayersAllowed(), S.ServerMaxPlayersCeiling);
-        }
-        if (S.Hosted.Known)
-        {
-            [[maybe_unused]] bool const InLobby = HostIsInLobby();
-            MILAN_INFOW(ELOG_Matchmaking, L"  hosted settings: %s, map %d, enemy %d, difficulty %d, %s, %s",
-                PrivacyName(S.Hosted), S.Hosted.MapId, S.Hosted.EnemyModeId, S.Hosted.DifficultyId,
-                IsJoinable(S.Hosted, InLobby) ? L"joinable" : L"not joinable", InLobby ? L"lobby" : L"in progress");
-        }
-        UEngine* const Engine = (GEngine != nullptr) ? *GEngine : nullptr;
-        AWorldInfo* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
-        if (Driver != nullptr && WorldInfo != nullptr && WorldInfo->GRI != nullptr)
-        {
-            for (APlayerReplicationInfo* const PRI : WorldInfo->GRI->PRIArray)
+            MILAN_UNUSED(Params);
+            MatchmakingState const& S = *mp_state;
+            static constexpr wchar_t const* k_roles[] = { L"none", L"host", L"joiner" };
+            MILAN_INFOW(ELOG_Matchmaking, L"role %s, matchmaker %S, game socket port %d", k_roles[static_cast<int>(S.Role)],
+                S.BaseUrl.empty() ? "disabled" : S.BaseUrl.c_str(), S.LocalPort);
+            UNetDriver* const Driver = FindGameDriver();
+            MILAN_UNUSED(Driver);
+            MILAN_INFOW(ELOG_Matchmaking, L"  net driver %s, listen server %d, UDP socket %s, multiplayer menu %d, control pipe %s",
+                Driver != nullptr ? *Driver->Class->GetName() : L"none", IsListenServer() ? 1 : 0,
+                SocketOf(Driver) != nullptr ? L"found" : L"not found", S.MenuWorld != nullptr && S.MenuWorld == CurrentWorld() ? 1 : 0,
+                S.Pipe ? S.PipeName.c_str() : L"none");
+            if (IsListenServer())
             {
-                if (PRI != nullptr)
-                    MILAN_INFOW(ELOG_Matchmaking, L"  player %s: ping %s", *PRI->PlayerName, DescribePing(PRI->Ping).c_str());
+                MILAN_INFOW(ELOG_Matchmaking, L"  lobby size %d (largest allowed %d, matchmaker limit %d)", HostMaxPlayers(),
+                    CurrentMaxPlayersAllowed(), S.ServerMaxPlayersCeiling);
             }
-        }
-        if (!S.Presence.InfoKnown)
-            MILAN_INFOW(ELOG_Matchmaking, L"  presence: not known yet (learned when this game first hosts, joins or searches)");
-        else if (S.Presence.Seconds <= 0)
-            MILAN_INFOW(ELOG_Matchmaking, L"  presence: off (the matchmaker does not ask for it)");
-        else
-            MILAN_INFOW(ELOG_Matchmaking, L"  presence: every %d s while in no lobby or search%s", S.Presence.Seconds,
-                S.Presence.Reported ? L" (reporting)" : L"");
-        if (S.AutoHost.Suppressed)
-            MILAN_INFOW(ELOG_Matchmaking, L"  automatic registration paused by mm.leave until hosting ends (mm.host resumes)");
-        else if (S.AutoHost.Failures > 0)
-            MILAN_INFOW(ELOG_Matchmaking, L"  registration failed %d time(s); retrying in the background", S.AutoHost.Failures);
-        if (!S.PendingJoin.empty())
-            MILAN_INFOW(ELOG_Matchmaking, L"  join %S waiting for the multiplayer menu", S.PendingJoin.c_str());
-        if (S.Discovery.Answered)
-            MILAN_INFOW(ELOG_Matchmaking, L"  observed endpoint %S", S.Discovery.Observed.ToString().c_str());
-        if (S.MigrationPending)
-            MILAN_INFOW(ELOG_Matchmaking, L"  lost the host; waiting for the matchmaker to choose a new one");
-        else if (S.AwaitingHostCandidates)
-            MILAN_INFOW(ELOG_Matchmaking, L"  waiting for the new host's lobby to come up");
-        else if (S.AdoptUntil != Clock::time_point{})
-            MILAN_INFOW(ELOG_Matchmaking, L"  new host; waiting for this game's lobby to listen");
-        if (S.Role == EMatchmakingRole::Host)
-        {
-            MILAN_INFOW(ELOG_Matchmaking, L"  lobby %S, invite %S, revision %lld", S.LobbyId.c_str(), S.InviteCode.c_str(), S.Revision);
-            for (auto const& [Id, Path] : S.Joiners)
-                MILAN_INFOW(ELOG_Matchmaking, L"  joiner %S: %zu candidates, verified %S, joined %d", Id.c_str(), Path.Candidates.size(),
-                    Path.Verified ? Path.Verified->ToString().c_str() : "no", Path.Joined ? 1 : 0);
-        }
-        else if (S.Role == EMatchmakingRole::Joiner)
-        {
-            MILAN_INFOW(ELOG_Matchmaking, L"  reservation %S, verified host %S, joined %d", S.ReservationId.c_str(),
-                S.HostPath.Verified ? S.HostPath.Verified->ToString().c_str() : "no", S.JoinedReported ? 1 : 0);
-        }
-        return true;
-    });
+            if (S.Hosted.Known)
+            {
+                [[maybe_unused]] bool const InLobby = HostIsInLobby();
+                MILAN_INFOW(ELOG_Matchmaking, L"  hosted settings: %s, map %d, enemy %d, difficulty %d, %s, %s",
+                    PrivacyName(S.Hosted), S.Hosted.MapId, S.Hosted.EnemyModeId, S.Hosted.DifficultyId,
+                    IsJoinable(S.Hosted, InLobby) ? L"joinable" : L"not joinable", InLobby ? L"lobby" : L"in progress");
+            }
+            UEngine* const Engine = (GEngine != nullptr) ? *GEngine : nullptr;
+            AWorldInfo* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
+            if (Driver != nullptr && WorldInfo != nullptr && WorldInfo->GRI != nullptr)
+            {
+                for (APlayerReplicationInfo* const PRI : WorldInfo->GRI->PRIArray)
+                {
+                    if (PRI != nullptr)
+                        MILAN_INFOW(ELOG_Matchmaking, L"  player %s: ping %s", *PRI->PlayerName, DescribePing(PRI->Ping).c_str());
+                }
+            }
+            if (!S.Presence.InfoKnown)
+                MILAN_INFOW(ELOG_Matchmaking, L"  presence: not known yet (learned when this game first hosts, joins or searches)");
+            else if (S.Presence.Seconds <= 0)
+                MILAN_INFOW(ELOG_Matchmaking, L"  presence: off (the matchmaker does not ask for it)");
+            else
+                MILAN_INFOW(ELOG_Matchmaking, L"  presence: every %d s while in no lobby or search%s", S.Presence.Seconds,
+                    S.Presence.Reported ? L" (reporting)" : L"");
+            if (S.AutoHost.Suppressed)
+                MILAN_INFOW(ELOG_Matchmaking, L"  automatic registration paused by mm.leave until hosting ends (mm.host resumes)");
+            else if (S.AutoHost.Failures > 0)
+                MILAN_INFOW(ELOG_Matchmaking, L"  registration failed %d time(s); retrying in the background", S.AutoHost.Failures);
+            if (!S.PendingJoin.empty())
+                MILAN_INFOW(ELOG_Matchmaking, L"  join %S waiting for the multiplayer menu", S.PendingJoin.c_str());
+            if (S.Discovery.Answered)
+                MILAN_INFOW(ELOG_Matchmaking, L"  observed endpoint %S", S.Discovery.Observed.ToString().c_str());
+            if (S.MigrationPending)
+                MILAN_INFOW(ELOG_Matchmaking, L"  lost the host; waiting for the matchmaker to choose a new one");
+            else if (S.AwaitingHostCandidates)
+                MILAN_INFOW(ELOG_Matchmaking, L"  waiting for the new host's lobby to come up");
+            else if (S.AdoptUntil != Clock::time_point{})
+                MILAN_INFOW(ELOG_Matchmaking, L"  new host; waiting for this game's lobby to listen");
+            if (S.Role == EMatchmakingRole::Host)
+            {
+                MILAN_INFOW(ELOG_Matchmaking, L"  lobby %S, invite %S, revision %lld", S.LobbyId.c_str(), S.InviteCode.c_str(), S.Revision);
+                for (auto const& [Id, Path] : S.Joiners)
+                    MILAN_INFOW(ELOG_Matchmaking, L"  joiner %S: %zu candidates, verified %S, joined %d", Id.c_str(), Path.Candidates.size(),
+                        Path.Verified ? Path.Verified->ToString().c_str() : "no", Path.Joined ? 1 : 0);
+            }
+            else if (S.Role == EMatchmakingRole::Joiner)
+            {
+                MILAN_INFOW(ELOG_Matchmaking, L"  reservation %S, verified host %S, joined %d", S.ReservationId.c_str(),
+                    S.HostPath.Verified ? S.HostPath.Verified->ToString().c_str() : "no", S.JoinedReported ? 1 : 0);
+            }
+            return true;
+        });
 }
 
 // UE3's UWorld::TickNetClient reported a closed server connection through
@@ -3428,7 +3434,7 @@ bool CMatchmaking::On_ReceivedDatagram(FSocket* const Socket, BYTE const* const 
 
     MatchmakingState& S = *mp_state;
     std::span<std::uint8_t const> const Packet{ Data, static_cast<std::size_t>(Length) };
-    Endpoint const From{ Source->sin_addr.s_addr, ntohs(Source->sin_port), {} };
+    Endpoint const From{ Source->sin_addr.s_addr, ntohs(Source->sin_port),{} };
 
     if (Kind == Rendezvous::EPacket::DiscoveryResponse)
     {
