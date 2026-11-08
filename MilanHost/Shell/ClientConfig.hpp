@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "Base/Base.hpp"
 #include "Containers/string.hpp"
 #include "Containers/vector.hpp"
@@ -39,16 +41,19 @@ struct ClientConfig final
     game::string SelectedAccessKey() const;
 
     /**
-     * Writes the [milan.matchmaker] settings into the file at @p InPath, replacing only those
-     * keys so comments and other settings are kept. Creates the section or file if missing.
+     * Writes the file at InSourcePath to InTargetPath with the [milan.matchmaker] settings
+     * replaced, keeping comments and other settings. Creates the section or file if missing.
      */
-    bool TryWriteMatchmaker(std::wstring_view InPath, game::string& OutError) const noexcept;
+    bool TryWriteMatchmaker(std::wstring_view InSourcePath, std::wstring_view InTargetPath, game::string& OutError) const noexcept;
 };
 
 extern ClientConfig* gp_clientConfig;
 extern game::string* gp_clientConfigError;
 
-static constexpr wchar_t const* k_configFilename = L"./MilanHost.toml";
+/** Where MilanHost.toml is saved to - not same as read since it transfers  */
+std::wstring GetConfigPath();
+/** Where MilanHost.toml is read from - handles migration of side-by-side to exe version */
+std::wstring GetLoadConfigPath();
 
 void InitGlobalConfig(wchar_t const* Filename);
 void CleanupGlobalConfig();

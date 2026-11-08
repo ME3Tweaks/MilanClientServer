@@ -67,7 +67,7 @@ SPI_IMPLEMENT_ATTACH
     gb_disableSafeBreak = CmdArgs::Contain(L"-nobreak");
 
     InitSDKBasics(*gp_sdkContext);
-    InitGlobalConfig(k_configFilename);
+    InitGlobalConfig(GetLoadConfigPath().c_str());
 
     // Initialize subsystems / compontents.
     // ----------------------------------------
@@ -214,6 +214,7 @@ void InitSDKBasics(::LESDK::Initializer& Context)
 
 void ReportConfigError()
 {
+    MILAN_INFOW(ELOG_Startup, L"config file: %s", GetLoadConfigPath().c_str());
     if (gp_clientConfig == nullptr && gp_clientConfigError != nullptr) [[unlikely]]
         MILAN_ERRORW(ELOG_Startup, L"failed to read config: %S", gp_clientConfigError->c_str());
 }

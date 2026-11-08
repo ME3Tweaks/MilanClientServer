@@ -50,7 +50,7 @@ bool ClientConfig::TryRead(std::wstring_view const InPath, game::string& OutErro
         MatchmakerPassword  = MLN_CONFIG_OPT(Table, "milan.matchmaker.password", std::string, std::string{}).c_str();
         MatchmakerUrl       = SelectedMatchmakerUrl();
 
-    #ifndef _FINAL_RELEASE
+#ifndef _FINAL_RELEASE
         if (toml::array const* LoggingSuppressedArray = Table.at_path("milan.logging.suppressed").as_array())
         {
             LoggingSuppressed.reserve(LoggingSuppressedArray->size());
@@ -61,7 +61,7 @@ bool ClientConfig::TryRead(std::wstring_view const InPath, game::string& OutErro
                 LoggingSuppressed.emplace_back(String->c_str());
             }
         }
-    #endif // ! _FINAL_RELEASE
+#endif // ! _FINAL_RELEASE
 
         return true;
     }
@@ -76,7 +76,7 @@ bool ClientConfig::TryRead(std::wstring_view const InPath, game::string& OutErro
         OutError.append(Exception.description());
         if (auto const& Source = Exception.source().begin; Source)
             OutError.append(" (at ").append(std::to_string(Source.line))
-                    .append(":").append(std::to_string(Source.column)).append(")");
+            .append(":").append(std::to_string(Source.column)).append(")");
         return false;
     }
 }
@@ -149,12 +149,21 @@ namespace
     }
 }
 
-bool ClientConfig::TryWriteMatchmaker(std::wstring_view const InPath, game::string& OutError) const noexcept
+bool ClientConfig::TryWriteMatchmaker(std::wstring_view const InSourcePath, std::wstring_view const InTargetPath, game::string& OutError) const noexcept
 {
     OutError.clear();
 
     try
     {
+        // An unreadable existing file must not be replaced by one holding only these keys
+        ::game::vector<byte> Buffer{};
+        std::error_code FileError{};
+        if (!::ReadFileFull(InSourcePath, Buffer) && std::filesystem::exists(std::filesystem::path{ InSourcePath }, FileError))
+        {
+            OutError = "could not read the existing file";
+            return false;
+        }
+
         std::pair<std::string_view, std::string> const Values[]
         {
             { "enabled",  MatchmakerEnabled ? "true" : "false" },
@@ -164,8 +173,6 @@ bool ClientConfig::TryWriteMatchmaker(std::wstring_view const InPath, game::stri
         };
         bool Written[std::size(Values)]{};
 
-        ::game::vector<byte> Buffer{};
-        ::ReadFileFull(InPath, Buffer);
         std::string const Original(reinterpret_cast<char const*>(Buffer.data()), Buffer.size());
         char const* const Newline = Original.find("\r\n") != std::string::npos ? "\r\n" : "\n";
 
@@ -234,7 +241,7 @@ bool ClientConfig::TryWriteMatchmaker(std::wstring_view const InPath, game::stri
         // Never replace the file with one the next start could not read.
         static_cast<void>(toml::parse(Text));
 
-        if (!::TryWriteFileFullAtomic(InPath, std::span<byte const>{ reinterpret_cast<byte const*>(Text.data()), Text.size() }))
+        if (!::TryWriteFileFullAtomic(InTargetPath, std::span<byte const>{ reinterpret_cast<byte const*>(Text.data()), Text.size() }))
         {
             OutError = "could not write the file";
             return false;
@@ -255,6 +262,31 @@ bool ClientConfig::TryWriteMatchmaker(std::wstring_view const InPath, game::stri
 
 ClientConfig* gp_clientConfig = nullptr;
 game::string* gp_clientConfigError = nullptr;
+
+namespace
+{
+    // Older releases kept the file in the game's Binaries\Win64 folder
+    constexpr wchar_t const* k_legacyConfigPath = L"./MilanHost.toml";
+}
+
+std::wstring GetConfigPath()
+{
+    return ::GetLMPSaveFolder() + L"\\MilanHost.toml";
+}
+
+std::wstring GetLoadConfigPath()
+{
+    std::wstring const Path = GetConfigPath();
+    std::error_code Error{};
+    // Does new file exist?
+    if (!std::filesystem::exists(Path, Error) && !Error && std::filesystem::exists(k_legacyConfigPath, Error))
+    {
+        // No, use old path
+        return k_legacyConfigPath;
+    }
+    // Use new path
+    return Path;
+}
 
 void InitGlobalConfig(wchar_t const* const Filename)
 {
