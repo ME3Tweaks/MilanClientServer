@@ -27,6 +27,8 @@
 #define REL_SHOW_GATE_PENDINGLEVEL_JNZ ::LESDK::Address::FromOffset(0x6d4a19) // JNZ on UGameEngine::GPendingLevel != NULL
 #define REL_SHOW_GATE_DISALLOWTRAVEL_WRITE ::LESDK::Address::FromOffset(0x6d4a1f) // GDisallowNetworkTravel = TRUE
 
+// Pointer to bugsentry - null essentially disable bugsentry
+#define REL_BUGSENTRY_INSTANCE 0x1cb8be0
 namespace
 {
     std::atomic_bool g_resolutionWatchdogStop{ false };
