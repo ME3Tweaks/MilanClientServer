@@ -11,6 +11,10 @@
 
 namespace
 {
+    // GScreenShotRequest in MassEffectMultiplayer.exe. The viewport clears it after capture.
+    constexpr auto k_screenshotRequestRva = 0x18B4F7C;
+    UBOOL const* gp_screenshotRequest = nullptr;
+
     bool SaveLocalProfile()
     {
         ::RelativeTimer ProfileTimer{};
@@ -250,7 +254,7 @@ namespace
 
 bool CState::Initialize(::LESDK::Initializer& Context)
 {
-    MILAN_UNUSED(Context);
+    gp_screenshotRequest = Context.ResolveTyped<UBOOL const>(::LESDK::Address::FromOffset(k_screenshotRequestRva));
     MILAN_DEBUGW(ELOG_Startup, L"component '%s' initialized", k_typeName);
     return true;
 }
@@ -272,17 +276,25 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
 {
     MILAN_UNUSED_3(Context, Stack, Result);
 
-    // BaseDelta's wrapper dispatches the normal completion delegate only after this
-    // bridge returns. An unhooked bridge returns false rather than claiming a save.
-    // BaseDelta compiles it into SFXGame.pcc under its own SFXGameContent_MilanBase package.
+    // Default code for this in SFXGame does nothing. We hook it here to provide
+    // a native implementation for it instead
     static FunctionNamedIntercept MilanProfileSaveBridge_WriteProfile{};
-    if (MilanProfileSaveBridge_WriteProfile.Applies(Stack->Node,
-        L"SFXGameContent_MilanBase", L"MilanProfileSaveBridge", L"WriteProfile"))
+    if (MilanProfileSaveBridge_WriteProfile.Applies(Stack->Node, L"SFXGameContent_MilanBase", L"MilanProfileSaveBridge", L"WriteProfile"))
     {
         if (Result != nullptr)
         {
             *static_cast<UBOOL*>(Result) = SaveLocalProfile() ? TRUE : FALSE;
         }
+
+        return false;
+    }
+
+    static FunctionNamedIntercept SFXHUDMP_IsScreenshotPending{};
+    if (SFXHUDMP_IsScreenshotPending.Applies(Stack->Node,
+        L"SFXGameMPContent", L"SFXHUDMP", L"IsScreenshotPending"))
+    {
+        if (Result != nullptr)
+            *static_cast<UBOOL*>(Result) = gp_screenshotRequest != nullptr && *gp_screenshotRequest != 0 ? TRUE : FALSE;
 
         return false;
     }
