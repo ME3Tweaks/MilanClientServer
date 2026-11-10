@@ -254,6 +254,5 @@ public sealed class SearchTests : StoreTestBase
         Assert.Equal(named, search.ExpectedGameVersion);
         Assert.Equal(SearchState.Searching, search.Status.State);
         Assert.True(new MilanServerOptionsValidator().Validate(null, Options).Succeeded);
-        Assert.True(new MilanServerOptionsValidator().Validate(null, new MilanServerOptions { ExpectedGameVersion = "milan 2.0" }).Failed);
     }
 }

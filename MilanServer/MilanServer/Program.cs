@@ -3,15 +3,42 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Extensions.Options;
 using MilanServer;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
+// config/milan.json is optional and reloads while the server runs. In a container it is a
+// mounted folder. It overrides appsettings.json. Command line and environment variables override the config file.
+LiveConfigFile liveConfig = new() { Path = LiveConfigFile.RelativePath, Optional = true, ReloadOnChange = true };
+((IConfigurationBuilder)builder.Configuration).Add(liveConfig);
+{
+    IList<IConfigurationSource> sources = builder.Configuration.Sources;
+    IConfigurationSource liveFile = sources[^1];
+    int environment = -1;
+    for (int i = 0; i < sources.Count - 1; i++)
+    {
+        if (sources[i] is EnvironmentVariablesConfigurationSource { Prefix: null or "" })
+        {
+            environment = i;
+        }
+    }
+    if (environment >= 0)
+    {
+        sources.RemoveAt(sources.Count - 1);
+        sources.Insert(environment, liveFile);
+    }
+}
+
 builder.Services.AddOptions<MilanServerOptions>()
     .Bind(builder.Configuration.GetSection(MilanServerOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<MilanServerOptions>, MilanServerOptionsValidator>();
+// The settings that apply without a restart
+builder.Services.AddOptions<MilanLiveOptions>().Bind(builder.Configuration.GetSection(MilanServerOptions.SectionName));
+builder.Services.AddSingleton(liveConfig);
+builder.Services.AddSingleton<ServerNotice>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<MatchmakingStore>();
 builder.Services.AddSingleton<RequestBudget>();
@@ -114,11 +141,13 @@ app.UseMilanAccessKey();
 app.MapMilanApi();
 
 MilanServerOptions settings = app.Services.GetRequiredService<IOptions<MilanServerOptions>>().Value;
-app.Logger.LogInformation("Milan control protocol {Protocol}; expected game version {ExpectedGameVersion}; server password {PasswordMode}; active request limits {Total}/{Address} per address; UDP work limits {UdpTotal}/{UdpAddress} per second.",
-    Api.ProtocolVersion, settings.ExpectedGameVersion.Length > 0 ? settings.ExpectedGameVersion : "any",
+app.Logger.LogInformation("Milan control protocol {Protocol}; server password {PasswordMode}; active request limits {Total}/{Address} per address; UDP work limits {UdpTotal}/{UdpAddress} per second.",
+    Api.ProtocolVersion,
     settings.AccessKey.Length > 0 ? "requires HTTPS" : "disabled (HTTP permitted)",
     settings.MaxConcurrentRequests, settings.MaxConcurrentRequestsPerAddress,
     settings.DiscoveryPacketsPerSecond, settings.DiscoveryPacketsPerSecondPerAddress);
+// Created now, log the current game version and notice, and log edits too
+app.Services.GetRequiredService<ServerNotice>();
 
 app.Run();
 

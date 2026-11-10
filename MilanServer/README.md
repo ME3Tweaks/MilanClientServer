@@ -79,9 +79,10 @@ Never clear proxy trust restrictions or trust arbitrary forwarding headers.
 Hosting, searching, and invite redemption submit `gameVersion`, an opaque 1-64 character
 identity for the installed **Project Milan mod**. Searches compare it exactly; invite
 joins with a different value return `409 version_mismatch`. The server logs it for every
-lobby and search. Set `Milan__ExpectedGameVersion` to the version most of the server's
-players run: a search from any other version still runs, but its response carries
-`expectedGameVersion` so the game can warn that few players will match. It is independent of the
+lobby and search. Set `Milan__ExpectedGameVersion` to the current version, which most of the
+server's players run: a search from any other version still runs, but its response carries
+`expectedGameVersion` so the game can warn that few players will match, and `/v1/info` tells
+an older game to update (see Message of the day). It is independent of the
 MilanHost ASI release. On each launch, MilanHost reads the second physical line of
 `BioGame/DLC/DLC_MOD_ProjectMilan/_metacmm.txt` relative to the running game's root.
 Only the DLC folder identity is fixed; the installed version is read from disk.
@@ -135,6 +136,44 @@ observed addresses. MilanHost further restricts private targets to local subnets
 on-link VPN routes and rejects gateways, broadcasts, and remote loopback. Same-PC loopback
 testing remains supported when the matchmaker itself resolves to loopback.
 
+### Message of the day and the current version
+
+`config/milan.json` beside the server is optional and applies while the server runs, with no
+restart, so lobbies are not dropped. `deploy.sh` mounts the server folder's `config/` there, and
+`compose.yaml` mounts `./config`. It takes the same settings as `appsettings.json`, but only
+these two apply live; any other setting in it is read at startup.
+
+```json
+{
+  "Milan": {
+    "ExpectedGameVersion": "1.4.0",
+    "Notice": {
+      "Id": "maint-1109",
+      "Text": {
+        "INT": "Maintenance on Saturday at 18:00 UTC.",
+        "DEU": "Wartung am Samstag um 18:00 UTC."
+      }
+    }
+  }
+}
+```
+
+- MilanHost sends its version and the game's language when the multiplayer menu opens
+  (`/v1/info?gameVersion=…&language=DEU`), and shows a message box once for each notice `Id`,
+  remembered per server in `MilanHost.toml`. An older game is also told the current version,
+  once per launch.
+- `Text` is by game language (INT, DEU, FRA, ITA, ESN, POL, RUS, JPN), falling back to INT.
+  Plain text, at most 1000 characters; `\n` starts a new line.
+- Keep `Id` to fix a typo without showing the message again; change it to show it again.
+  Without one, the server makes one from the text, so any edit shows it again.
+- Versions compare by their leading numbers: `1.3.2` is older than `1.4.0`, and a newer test
+  build is never told to update.
+- An edit that does not parse, or a value that is not valid, is ignored with a warning in the
+  log, and the last good settings stay in effect. The log names the current version and notice
+  each time they change.
+- Environment variables (`Milan__Notice__Text__INT=…`) and the command line override the file,
+  but take effect only when the container is recreated.
+
 ### Statistics
 
 `GET /v1/stats` returns counts only, never anything that identifies a lobby or a player.
@@ -166,6 +205,10 @@ It is off until one of these is set:
 - The token must not ship in a game client or a web page. A website should fetch with the
   token from its own server, or read the public summary.
 - Counts reset when the server restarts. Keep a history by polling the endpoint.
+- For all-time totals, `deploy.sh` copies `milan-stats.sh` to the server folder. Run
+  `milan-stats.sh save` from cron every minute; it keeps each server run's latest statistics in
+  `stats/<start time>_<container>.json`, and `deploy.sh` saves once more before it replaces the
+  container. `milan-stats.sh total` adds the runs up.
 
 ## Publish
 
@@ -287,7 +330,7 @@ A wrong key and a missing object return the same 404.
 
 | Method | Route | Credential | Purpose |
 | --- | --- | --- | --- |
-| GET | `/v1/info` | none | Protocol version and timings |
+| GET | `/v1/info` | none | Protocol version and timings; with `?gameVersion=…&language=…`, the current version and the message of the day |
 | GET | `/v1/stats` | none or stats token | Player and lobby counts; see Statistics |
 | PUT | `/v1/presence/{id}` | none | A game in no lobby and no search reports that it is running; `id` is its own random ID |
 | DELETE | `/v1/presence/{id}` | none | Withdraw a presence report |

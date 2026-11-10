@@ -43,12 +43,15 @@ public static class Api
 
         RouteGroupBuilder v1 = app.MapGroup("/v1");
 
-        v1.MapGet("/info", (IOptions<MilanServerOptions> options, DiscoveryEndpoint discovery) =>
+        // Clients can send a game version and langauge to learn if its out of day and get message of the day
+        v1.MapGet("/info", (IOptions<MilanServerOptions> options, DiscoveryEndpoint discovery, ServerNotice notice,
+            string? gameVersion, string? language) =>
         {
             MilanServerOptions o = options.Value;
+            (string? latest, bool? outdated, NoticeText? text) = notice.For(gameVersion, language);
             return new ServerInfo(ProtocolVersion, o.HeartbeatSeconds, o.LobbyLeaseSeconds,
                 o.ReservationSeconds, o.SearchSeconds, o.MaxPlayersCeiling, o.LongPollSeconds, discovery.Port,
-                o.Stats.Presence ? o.Stats.PresenceSeconds : 0);
+                o.Stats.Presence ? o.Stats.PresenceSeconds : 0, latest, outdated, text);
         });
 
         // Counts for a dashboard or a "players online" display. Milan:Stats:Public sets what

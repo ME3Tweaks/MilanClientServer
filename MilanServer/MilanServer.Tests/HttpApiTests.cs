@@ -177,6 +177,32 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
     }
 
     [Fact]
+    public async Task Info_GivesTheNoticeInTheGamesLanguage_AndTellsOldGamesToUpdate()
+    {
+        using WebApplicationFactory<Program> withNotice = _factory.WithWebHostBuilder(builder => builder
+            .UseSetting("Milan:ExpectedGameVersion", "1.4.0")
+            .UseSetting("Milan:Notice:Id", "maint-1109")
+            .UseSetting("Milan:Notice:Text:INT", "Maintenance Saturday.")
+            .UseSetting("Milan:Notice:Text:DEU", "Wartung am Samstag."));
+        HttpClient client = withNotice.CreateClient();
+
+        ServerInfo old = (await client.GetFromJsonAsync<ServerInfo>("/v1/info?gameVersion=1.3.2&language=DEU", Ct))!;
+        Assert.Equal("1.4.0", old.LatestGameVersion);
+        Assert.True(old.Outdated);
+        Assert.Equal(new NoticeText("maint-1109", "Wartung am Samstag."), old.Notice);
+
+        ServerInfo current = (await client.GetFromJsonAsync<ServerInfo>("/v1/info?gameVersion=1.4.0&language=FRA", Ct))!;
+        Assert.False(current.Outdated);
+        Assert.Equal("Maintenance Saturday.", current.Notice?.Text);
+
+        // An older game that sends nothing still learns the current version.
+        ServerInfo bare = (await client.GetFromJsonAsync<ServerInfo>("/v1/info", Ct))!;
+        Assert.Equal("1.4.0", bare.LatestGameVersion);
+        Assert.Null(bare.Outdated);
+        Assert.Equal("Maintenance Saturday.", bare.Notice?.Text);
+    }
+
+    [Fact]
     public async Task Stats_AreOffUntilConfigured()
     {
         HttpClient client = _factory.CreateClient();

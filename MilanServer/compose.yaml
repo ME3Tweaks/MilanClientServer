@@ -32,7 +32,12 @@ services:
       - "5081:5081/udp"
     # Alternative on Linux: share the host's network stack instead of publishing ports.
     # network_mode: host
+    # config/milan.json beside this file applies while the server runs (the message of the day,
+    # the current game version). Mount the folder, not the file: editors replace the file on save.
+    volumes:
+      - ./config:/app/config:ro
     environment:
+      DOTNET_USE_POLLING_FILE_WATCHER: "true"
       # Any setting from MilanServer/Options.cs can be overridden as Milan__<Name>.
       # Milan__LobbyLeaseSeconds: "60"
       # Milan__TrustedProxies__0: "10.0.0.5"   # only behind a TLS reverse proxy

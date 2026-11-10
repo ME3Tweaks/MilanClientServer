@@ -18,6 +18,7 @@ public sealed class MatchmakingStore
 
     readonly Lock _lock = new();
     readonly MilanServerOptions _options;
+    readonly ServerNotice? _notice;
     readonly TimeProvider _time;
     readonly ILogger<MatchmakingStore> _logger;
 
@@ -48,9 +49,11 @@ public sealed class MatchmakingStore
     long _hostMigrationsCompleted;
     long _hostMigrationsFailed;
 
-    public MatchmakingStore(IOptions<MilanServerOptions> options, TimeProvider time, ILogger<MatchmakingStore> logger)
+    public MatchmakingStore(IOptions<MilanServerOptions> options, TimeProvider time, ILogger<MatchmakingStore> logger,
+        ServerNotice? notice = null)
     {
         _options = options.Value;
+        _notice = notice;
         _time = time;
         _logger = logger;
         _startedAt = time.GetUtcNow();
@@ -268,8 +271,8 @@ public sealed class MatchmakingStore
                 : now;
             _searches.Add(search.Id, search);
             _searchesStarted++;
-            string? expectedVersion = _options.ExpectedGameVersion.Length > 0 && _options.ExpectedGameVersion != request.GameVersion
-                ? _options.ExpectedGameVersion : null;
+            string current = _notice?.ExpectedGameVersion ?? _options.ExpectedGameVersion;
+            string? expectedVersion = current.Length > 0 && current != request.GameVersion ? current : null;
             _logger.LogInformation(
                 "Search {SearchId} started: game version {GameVersion}{VersionNote}, map {MapId}, enemy {EnemyModeId}, difficulty {DifficultyId}, widen {Widen}; matches in progress {InProgress}.",
                 search.Id, request.GameVersion, expectedVersion is null ? "" : $" (server expects {expectedVersion})",

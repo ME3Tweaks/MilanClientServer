@@ -66,8 +66,9 @@ public sealed class MilanServerOptions
     public int DiscoveryPacketsPerSecond { get; set; } = 5000;
     public int DiscoveryPacketsPerSecondPerAddress { get; set; } = 100;
 
-    // The game version most players on this server run. A quick match search from any other
-    // version still runs, but the game is told that few players will match it. Empty: no notice.
+    // The current game version, which most players on this server run. An older game is told to
+    // update (GET /v1/info), and a quick match from any other version is told few players will
+    // match it. Both will still work
     public string ExpectedGameVersion { get; set; } = "";
 
     // Reverse proxies whose X-Forwarded-For and X-Forwarded-Proto headers are trusted, as single
@@ -81,6 +82,31 @@ public sealed class MilanServerOptions
 
     // GET /v1/stats and the presence reports that feed it. Both are off by default.
     public MilanStatsOptions Stats { get; set; } = new();
+}
+
+/// <summary>
+/// Live part of Milan that clients get on game startup
+/// </summary>
+public sealed class MilanLiveOptions
+{
+    public string ExpectedGameVersion { get; set; } = "";
+    public MilanNoticeOptions Notice { get; set; } = new();
+}
+
+/// <summary>
+/// Handles message of the day system
+/// </summary>
+public sealed class MilanNoticeOptions
+{
+    /// <summary>
+    /// One-time ID that clients track
+    /// </summary>
+    public string Id { get; set; } = "";
+
+    /// <summary>
+    /// Language text for the MOTD
+    /// </summary>
+    public Dictionary<string, string> Text { get; set; } = [];
 }
 
 public enum StatsAccess
@@ -180,8 +206,6 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
         // The game only sends keys it can put in an HTTP header unchanged.
         if (options.AccessKey.Length > 256 || options.AccessKey.Any(c => c is <= ' ' or >= '\x7F'))
             errors.Add("AccessKey must be printable ASCII without spaces, at most 256 characters.");
-        if (options.ExpectedGameVersion.Length > 0 && MatchmakingStore.ValidateGameVersion(options.ExpectedGameVersion) is not null)
-            errors.Add("ExpectedGameVersion must be empty or a game version: printable ASCII without spaces, at most 64 characters.");
 
         foreach (string proxy in options.TrustedProxies)
         {

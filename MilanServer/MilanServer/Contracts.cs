@@ -221,7 +221,15 @@ public sealed record ServerInfo(
     int LongPollSeconds,
     int UdpPort,
     // How often a game in no lobby and no search reports presence; 0 means do not.
-    int PresenceSeconds = 0);
+    int PresenceSeconds = 0,
+    // Milan:ExpectedGameVersion, when set. Setting outdated makes it compare the versions
+    string? LatestGameVersion = null,
+    bool? Outdated = null,
+    // MOTD
+    NoticeText? Notice = null);
+
+// Id changes whenever the game should show the message again
+public sealed record NoticeText(string Id, string Text);
 
 // GET /v1/stats: counts only, nothing that identifies a lobby or a player.
 //  - Players are those in registered lobbies, as their hosts report them. A 1-player lobby is
