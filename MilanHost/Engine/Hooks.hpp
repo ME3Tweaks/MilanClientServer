@@ -436,6 +436,11 @@ UObject* SFXEngine_SeekFreeLoadStatus_hook(void* Context, INT MappingIndex, UCla
 using t_UObject_IsAsyncLoading = bool();
 extern t_UObject_IsAsyncLoading* UObject_IsAsyncLoading;
 
+// Returns game's langauge code, e.g. INT
+#define GLOBAL_APPGETLANGUAGEEXT_RVA  ::LESDK::Address::FromOffset(0xBD1FC0)
+using t_appGetLanguageExt = wchar_t const*(int Type, int Variant);
+extern t_appGetLanguageExt* appGetLanguageExt;
+
 
 // Used by matchmaking vote kicks, so it exists in every build.
 using t_UNetConnection_Close = void(UNetConnection* Context);

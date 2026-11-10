@@ -197,6 +197,7 @@ void CGlobals::InitNetworkHooks(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(FSocketWin, RecvFrom, GLOBAL_FSOCKETWIN_RECVFROM_OFFSET);
 
     FIND_VAR_TWO(UObject, IsAsyncLoading, GLOBAL_UOBJECT_ISASYNCLOADING_RVA);
+    FIND_VAR_ONE(appGetLanguageExt, GLOBAL_APPGETLANGUAGEEXT_RVA);
 
     // Joiners wait for packages the host uses to finish async loading
     INSTALL_HOOK_TWO(Net, VerifyPackageInfo, GLOBAL_NET_VERIFYPACKAGEINFO_RVA);

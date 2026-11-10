@@ -6,6 +6,8 @@
 #pragma once
 
 #include <string>
+#include <string_view>
+#include <utility>
 
 #include "Base/Base.hpp"
 #include "Containers/string.hpp"
@@ -33,7 +35,17 @@ struct ClientConfig final
     game::string                    MatchmakerCustomUrl{};                      // Never the default server.
     game::string                    MatchmakerPassword{};                       // Sent to the custom server only.
 
+    // [milan.notices]: keyed by matchmaker URL mapped to the Id of the server's message of the day last shown
+    game::vector<std::pair<game::string, game::string>> SeenNotices{};
+
     bool TryRead(std::wstring_view InPath, game::string& OutError) noexcept;
+
+    /** Gets the server's last seen notice */
+    game::string SeenNotice(std::string_view Server) const;
+    /** Records a notice as seen */
+    void RememberNotice(std::string_view Server, std::string_view Id);
+    /** Attempts to commit the notice as seen to disk */
+    bool TryWriteSeenNotice(std::wstring_view InSourcePath, std::wstring_view InTargetPath, std::string_view Server, game::string& OutError) const noexcept;
 
     /** The matchmaker the [milan.matchmaker] settings select, or empty when matchmaking is off. */
     game::string SelectedMatchmakerUrl() const;

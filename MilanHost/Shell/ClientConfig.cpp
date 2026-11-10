@@ -1,5 +1,7 @@
 #include <format>
 #include <filesystem>
+#include <span>
+#include <vector>
 #include <tomlplusplus/toml.hpp>
 
 #include "Base/IOUtils.hpp"
@@ -49,6 +51,17 @@ bool ClientConfig::TryRead(std::wstring_view const InPath, game::string& OutErro
         MatchmakerCustomUrl = bDefaultUrl ? "" : Url.c_str();
         MatchmakerPassword  = MLN_CONFIG_OPT(Table, "milan.matchmaker.password", std::string, std::string{}).c_str();
         MatchmakerUrl       = SelectedMatchmakerUrl();
+
+        // Build notices list
+        if (toml::table const* Notices = Table.at_path("milan.notices").as_table())
+        {
+            for (auto&& [Server, Id] : *Notices)
+            {
+                if (auto const Value = Id.value<std::string>()) {
+                    SeenNotices.emplace_back(game::string{ std::string{ Server.str() }.c_str() }, game::string{ Value->c_str() });
+                }
+            }
+        }
 
 #ifndef _FINAL_RELEASE
         if (toml::array const* LoggingSuppressedArray = Table.at_path("milan.logging.suppressed").as_array())
@@ -149,113 +162,178 @@ namespace
     }
 }
 
-bool ClientConfig::TryWriteMatchmaker(std::wstring_view const InSourcePath, std::wstring_view const InTargetPath, game::string& OutError) const noexcept
+namespace
 {
-    OutError.clear();
-
-    try
+    struct TomlEntry
     {
-        // An unreadable existing file must not be replaced by one holding only these keys
-        ::game::vector<byte> Buffer{};
-        std::error_code FileError{};
-        if (!::ReadFileFull(InSourcePath, Buffer) && std::filesystem::exists(std::filesystem::path{ InSourcePath }, FileError))
+        std::string                 Key;        // As written in the file, quoted if it has to be
+        std::string                 Value;      // A TOML value, e.g. true or a quoted string
+        std::string                 Alias{};    // Another spelling of Key that also matches
+    };
+
+    // Writes the file at InSourcePath to InTargetPath with Values set in the [SectionName] table,
+    // keeping comments and other settings
+    bool TryWriteTomlSection(std::wstring_view const InSourcePath, std::wstring_view const InTargetPath, std::string_view const SectionName, std::span<TomlEntry const> const Values, game::string& OutError) noexcept
+    {
+        OutError.clear();
+
+        try
         {
-            OutError = "could not read the existing file";
+            // An unreadable existing file must not be replaced by one holding only these keys
+            ::game::vector<byte> Buffer{};
+            std::error_code FileError{};
+            if (!::ReadFileFull(InSourcePath, Buffer) && std::filesystem::exists(std::filesystem::path{ InSourcePath }, FileError))
+            {
+                OutError = "could not read the existing file";
+                return false;
+            }
+
+            std::vector<bool> Written(Values.size());
+
+            std::string const Original(reinterpret_cast<char const*>(Buffer.data()), Buffer.size());
+            char const* const Newline = Original.find("\r\n") != std::string::npos ? "\r\n" : "\n";
+
+            std::vector<std::string> Lines{};
+            for (std::size_t Begin = 0; Begin < Original.size();)
+            {
+                std::size_t End = Original.find('\n', Begin);
+                if (End == std::string::npos)
+                    End = Original.size();
+                std::string Line = Original.substr(Begin, End - Begin);
+                if (!Line.empty() && Line.back() == '\r')
+                    Line.pop_back();
+                Lines.push_back(std::move(Line));
+                Begin = End + 1;
+            }
+
+            std::size_t Section = Lines.size();
+            for (std::size_t i = 0; i < Lines.size(); ++i)
+            {
+                if (TomlTableName(Lines[i]) == SectionName)
+                {
+                    Section = i;
+                    break;
+                }
+            }
+
+            if (Section == Lines.size())
+            {
+                if (!Lines.empty() && !TrimToml(Lines.back()).empty())
+                    Lines.emplace_back();
+                Lines.emplace_back("[" + std::string{ SectionName } + "]");
+                Section = Lines.size() - 1;
+            }
+
+            std::size_t SectionEnd = Section + 1;
+            while (SectionEnd < Lines.size() && TomlTableName(Lines[SectionEnd]).empty())
+                ++SectionEnd;
+
+            std::size_t InsertAt = Section + 1;
+            for (std::size_t i = Section + 1; i < SectionEnd; ++i)
+            {
+                if (!TrimToml(Lines[i]).empty())
+                    InsertAt = i + 1;
+
+                std::string_view const Key = TomlLineKey(Lines[i]);
+                for (std::size_t v = 0; v < Values.size(); ++v)
+                {
+                    if (!Key.empty() && (Key == Values[v].Key || Key == Values[v].Alias))
+                    {
+                        Lines[i] = Values[v].Key + " = " + Values[v].Value;
+                        Written[v] = true;
+                    }
+                }
+            }
+
+            for (std::size_t v = 0; v < Values.size(); ++v)
+            {
+                if (!Written[v]) {
+                    Lines.insert(Lines.begin() + static_cast<std::ptrdiff_t>(InsertAt++), Values[v].Key + " = " + Values[v].Value);
+                }
+            }
+
+            std::string Text{};
+            for (std::string const& Line : Lines)
+                Text.append(Line).append(Newline);
+
+            // Never replace the file with one the next start could not read.
+            static_cast<void>(toml::parse(Text));
+
+            if (!::TryWriteFileFullAtomic(InTargetPath, std::span<byte const>{ reinterpret_cast<byte const*>(Text.data()), Text.size() }))
+            {
+                OutError = "could not write the file";
+                return false;
+            }
+            return true;
+        }
+        catch (toml::parse_error const& Exception)
+        {
+            OutError.append("the updated file would not parse: ").append(Exception.description());
             return false;
         }
+        catch (std::exception const& Exception)
+        {
+            OutError.append(Exception.what());
+            return false;
+        }
+    }
+}
 
-        std::pair<std::string_view, std::string> const Values[]
+bool ClientConfig::TryWriteMatchmaker(std::wstring_view const InSourcePath, std::wstring_view const InTargetPath, game::string& OutError) const noexcept
+{
+    try
+    {
+        TomlEntry const Values[]
         {
             { "enabled",  MatchmakerEnabled ? "true" : "false" },
             { "custom",   MatchmakerCustom ? "true" : "false" },
             { "url",      TomlBasicString(MatchmakerCustomUrl) },
             { "password", TomlBasicString(MatchmakerPassword) },
         };
-        bool Written[std::size(Values)]{};
-
-        std::string const Original(reinterpret_cast<char const*>(Buffer.data()), Buffer.size());
-        char const* const Newline = Original.find("\r\n") != std::string::npos ? "\r\n" : "\n";
-
-        std::vector<std::string> Lines{};
-        for (std::size_t Begin = 0; Begin < Original.size();)
-        {
-            std::size_t End = Original.find('\n', Begin);
-            if (End == std::string::npos)
-                End = Original.size();
-            std::string Line = Original.substr(Begin, End - Begin);
-            if (!Line.empty() && Line.back() == '\r')
-                Line.pop_back();
-            Lines.push_back(std::move(Line));
-            Begin = End + 1;
-        }
-
-        std::size_t Section = Lines.size();
-        for (std::size_t i = 0; i < Lines.size(); ++i)
-        {
-            if (TomlTableName(Lines[i]) == "milan.matchmaker")
-            {
-                Section = i;
-                break;
-            }
-        }
-
-        if (Section == Lines.size())
-        {
-            if (!Lines.empty() && !TrimToml(Lines.back()).empty())
-                Lines.emplace_back();
-            Lines.emplace_back("[milan.matchmaker]");
-            Section = Lines.size() - 1;
-        }
-
-        std::size_t SectionEnd = Section + 1;
-        while (SectionEnd < Lines.size() && TomlTableName(Lines[SectionEnd]).empty())
-            ++SectionEnd;
-
-        std::size_t InsertAt = Section + 1;
-        for (std::size_t i = Section + 1; i < SectionEnd; ++i)
-        {
-            if (!TrimToml(Lines[i]).empty())
-                InsertAt = i + 1;
-
-            std::string_view const Key = TomlLineKey(Lines[i]);
-            for (std::size_t v = 0; v < std::size(Values); ++v)
-            {
-                if (Key == Values[v].first)
-                {
-                    Lines[i] = std::string{ Values[v].first } + " = " + Values[v].second;
-                    Written[v] = true;
-                }
-            }
-        }
-
-        for (std::size_t v = 0; v < std::size(Values); ++v)
-        {
-            if (!Written[v])
-                Lines.insert(Lines.begin() + static_cast<std::ptrdiff_t>(InsertAt++), std::string{ Values[v].first } + " = " + Values[v].second);
-        }
-
-        std::string Text{};
-        for (std::string const& Line : Lines)
-            Text.append(Line).append(Newline);
-
-        // Never replace the file with one the next start could not read.
-        static_cast<void>(toml::parse(Text));
-
-        if (!::TryWriteFileFullAtomic(InTargetPath, std::span<byte const>{ reinterpret_cast<byte const*>(Text.data()), Text.size() }))
-        {
-            OutError = "could not write the file";
-            return false;
-        }
-        return true;
-    }
-    catch (toml::parse_error const& Exception)
-    {
-        OutError.append("the updated file would not parse: ").append(Exception.description());
-        return false;
+        return TryWriteTomlSection(InSourcePath, InTargetPath, "milan.matchmaker", Values, OutError);
     }
     catch (std::exception const& Exception)
     {
-        OutError.append(Exception.what());
+        OutError = Exception.what();
+        return false;
+    }
+}
+
+game::string ClientConfig::SeenNotice(std::string_view const Server) const
+{
+    for (auto const& [Url, Id] : SeenNotices)
+    {
+        if (std::string_view{ Url.c_str() } == Server)
+            return Id;
+    }
+    return {};
+}
+
+void ClientConfig::RememberNotice(std::string_view const Server, std::string_view const Id)
+{
+    game::string const Value{ std::string{ Id }.c_str() };
+    for (auto& [Url, Seen] : SeenNotices)
+    {
+        if (std::string_view{ Url.c_str() } == Server)
+        {
+            Seen = Value;
+            return;
+        }
+    }
+    SeenNotices.emplace_back(game::string{ std::string{ Server }.c_str() }, Value);
+}
+
+bool ClientConfig::TryWriteSeenNotice(std::wstring_view const InSourcePath, std::wstring_view const InTargetPath, std::string_view const Server,
+    game::string& OutError) const noexcept
+{
+    try
+    {
+        TomlEntry const Values[]{ { TomlBasicString(Server), TomlBasicString(SeenNotice(Server)), "'" + std::string{ Server } + "'" } };
+        return TryWriteTomlSection(InSourcePath, InTargetPath, "milan.notices", Values, OutError);
+    }
+    catch (std::exception const& Exception)
+    {
+        OutError = Exception.what();
         return false;
     }
 }

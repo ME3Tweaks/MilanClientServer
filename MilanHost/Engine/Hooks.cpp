@@ -745,6 +745,7 @@ UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read
 constexpr unsigned long long k_rfAsyncLoading = 0x0000040000000000ull;
 
 t_UObject_IsAsyncLoading* UObject_IsAsyncLoading = nullptr;
+t_appGetLanguageExt* appGetLanguageExt = nullptr;
 
 // UObject::IsAsyncLoading: Is an async load in progress?
 static bool IsAsyncLoading()

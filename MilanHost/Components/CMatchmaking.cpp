@@ -59,6 +59,11 @@ namespace
     constexpr int k_discoveryFastAttempts = 10;
     constexpr auto k_probeInterval = std::chrono::milliseconds(500);
     constexpr auto k_probeWindow = std::chrono::seconds(15);
+    // A quick match host that sends nothing this long after the travel is given up, and its lobby
+    // is left out of this game's searches for a while
+    constexpr auto k_quickMatchConnectTimeout = std::chrono::seconds(15);
+    constexpr auto k_unreachableLobbySkip = std::chrono::seconds(60);
+    constexpr std::size_t k_maxSkippedLobbies = 16;
     constexpr auto k_pollRetryDelay = std::chrono::seconds(2);
     constexpr auto k_stateCheckInterval = std::chrono::milliseconds(250);
     constexpr std::chrono::seconds k_hostRetryBase{ 5 };
@@ -96,6 +101,17 @@ namespace
     std::wstring Widen(std::string const& Text)
     {
         return std::wstring(Text.begin(), Text.end());
+    }
+
+    // Converts a string to a wide string
+    std::wstring FromUtf8(std::string const& Text)
+    {
+        int const Length = Text.empty() ? 0 : ::MultiByteToWideChar(CP_UTF8, 0, Text.data(), static_cast<int>(Text.size()), nullptr, 0);
+        std::wstring Result(static_cast<std::size_t>(std::max(Length, 0)), L'\0');
+        if (Length > 0) {
+            ::MultiByteToWideChar(CP_UTF8, 0, Text.data(), static_cast<int>(Text.size()), Result.data(), Length);
+        }
+        return Result;
     }
 
     struct Endpoint
@@ -393,6 +409,9 @@ struct MatchmakingState
     PeerPath                        HostPath{};
     bool                            SamePublicAddress{ false };
     bool                            TravelIssued{ false };
+    Endpoint                        TravelTarget{};
+    Clock::time_point               TravelIssuedAt{};
+    bool                            HostAnswered{ false };  // A game packet came from TravelTarget
     int                             ReportedPort{ -1 };
     bool                            JoinedReported{ false };
     long long                       ReservationVersion{ -1 };
@@ -410,6 +429,9 @@ struct MatchmakingState
     bool                            PendingJoinLeftGame{ false };   // Left a lobby or match so PendingJoin can start.
     bool                            PendingJoinLeftMainMenu{ false };   // Went on from the main menu so PendingJoin can start.
     UWorld* MenuWorld{ nullptr };   // World in which the multiplayer menu is showing.
+    std::map<std::string, Clock::time_point> SkippedLobbies{};   // Unreachable lobbies quick match leaves out
+    bool                            UpdateNoticeShown{ false };   // The server's "update available" notice, once per launch.
+    bool                            SearchIndicatorShown{ false };   // TickSearchIndicator turned "Communicating..." on.
     std::wstring                    PipeName{};
     std::shared_ptr<MatchmakingNet::ControlPipe> Pipe{};
 };
@@ -637,21 +659,21 @@ namespace
 
     // Queues the game's modal message box with an OK button, the way
     // SFXPlayerController.NotifyInviteFailed reports a failed platform invite.
-    bool ShowMessageBox(std::wstring const& Message)
+    // A box replaces a queued one of the same name rather than stacking. Invite failures use the
+    // game's own name for its invite failure box
+    bool ShowMessageBox(std::wstring const& Message, wchar_t const* const BoxName = L"InviteFailedMsg")
     {
         ABioPlayerController* const Player = LocalBioPlayer();
         USFXGUIInteraction* const Gui = Player != nullptr ? Player->GetSFXUIController() : nullptr;
         if (Gui == nullptr)
             return false;
 
-        // The game's own name, so a later invite failure replaces this box rather than stacking.
-        static SFXName const k_inviteFailedBox{ L"InviteFailedMsg", 0 };
         constexpr int k_priority = 2;
         FBioMessageBoxOptionalParams Params{};
         Params.srAText = Player->srOK;
         Params.bModal = TRUE;
         FScriptDelegate const NoCallback{};
-        return Gui->QueueNamedMessageBoxEx(k_inviteFailedBox, k_priority, FString{ Message.c_str() }, NoCallback, 0, Player, FALSE, &Params);
+        return Gui->QueueNamedMessageBoxEx(SFXName{ BoxName, 0 }, k_priority, FString{ Message.c_str() }, NoCallback, 0, Player, FALSE, &Params);
     }
 
     // Text the player sees. The string refs are Project Milan's own, in its DLC TLK
@@ -683,7 +705,8 @@ namespace
         constexpr LocalizedText LostHostSearching{ 49875715, L"Lost the connection to the host. Looking for a new host..." };
         constexpr LocalizedText InvitesOff{ 49875716, L"Invites are disabled when the lobby size is set to 1." };
         constexpr LocalizedText InvitesHostOnly{ 49875717, L"Only the host can invite players to a private lobby." };
-        constexpr LocalizedText AccessKeyRejected{ 49875718, L"The matchmaking server's password is missing or wrong. Check it in Options > Multiplayer Settings." };
+        constexpr LocalizedText AccessKeyRejected{ 49875718, L"The matchmaking server's password is missing or wrong. Check it in Options > Network." };
+        constexpr LocalizedText UpdateAvailable{ 49875721, L"Legendary Edition Multiplayer {0} is available. Update to find more players." };
     }
 
     // Looks @p Text up in the loaded TLKs the way script does (SFXGame.GetSimpleString).
@@ -991,6 +1014,9 @@ namespace
         Next.PendingJoinLeftGame = S.PendingJoinLeftGame;
         Next.PendingJoinLeftMainMenu = S.PendingJoinLeftMainMenu;
         Next.MenuWorld = S.MenuWorld;
+        Next.SkippedLobbies = std::move(S.SkippedLobbies);
+        Next.UpdateNoticeShown = S.UpdateNoticeShown;
+        Next.SearchIndicatorShown = S.SearchIndicatorShown;
         Next.PipeName = std::move(S.PipeName);
         Next.Pipe = std::move(S.Pipe);
         S = std::move(Next);
@@ -1523,6 +1549,9 @@ namespace
         std::string const Proof = Rendezvous::AdmissionProof(S.HostPath.TraversalKey);
         if (Proof.empty())
             return false;
+        S.TravelTarget = *Target;
+        S.TravelIssuedAt = Clock::now();
+        S.HostAnswered = false;
         std::string const TravelUrl = Target->ToString() + "?MilanMember=" + S.ReservationId + "?MilanProof=" + Proof;
         if (QuickMatch)
         {
@@ -1596,16 +1625,33 @@ namespace
         ResetSession(S);
         S.Role = EMatchmakingRole::Joiner;
         S.QuickMatchDone = std::move(Done);
-        MILAN_INFOW(ELOG_Matchmaking, L"quick match search: map %d, enemy %d, difficulty %d", MapId, EnemyModeId, DifficultyId);
-        FetchInfo(S, [MapId, EnemyModeId, DifficultyId](MatchmakingState& State)
-            {
-                json const Request{
+
+        Clock::time_point const Now = Clock::now();
+        std::erase_if(S.SkippedLobbies, [Now](auto const& Skip) { return Skip.second <= Now; });
+        std::vector<std::pair<Clock::time_point, std::string>> Skips{};
+        for (auto const& [Id, Until] : S.SkippedLobbies) {
+            Skips.emplace_back(Until, Id);
+        }
+        std::sort(Skips.begin(), Skips.end(), std::greater{});
+        json Excluded = json::array();
+        for (std::size_t i = 0; i < Skips.size() && i < k_maxSkippedLobbies; ++i)
+        {
+            Excluded.push_back(Skips[i].second);
+        }
+
+        MILAN_INFOW(ELOG_Matchmaking, L"quick match search: map %d, enemy %d, difficulty %d, skipping %zu unreachable lobbies", MapId, EnemyModeId, DifficultyId, Excluded.size());
+        FetchInfo(S, [MapId, EnemyModeId, DifficultyId, Excluded = std::move(Excluded)](MatchmakingState& State) {
+                json Request{
                     { "gameVersion", State.ModVersion },
                     { "mapId", MapId },
                     { "enemyModeId", EnemyModeId },
                     { "difficultyId", DifficultyId },
                     { "widen", true },
                 };
+                if (!Excluded.empty()) {
+                    // Do not match against these lobbies
+                    Request["excludeLobbyIds"] = Excluded;
+                }
                 PostHttp(State, false, L"POST", "/v1/searches", "", Request.dump(),
                     [](MatchmakingState& Session, MatchmakingNet::HttpResult const& Result)
                     {
@@ -2460,6 +2506,59 @@ namespace
         return 0;
     }
 
+    // The function a script call on @p Object would run: the most derived one with that name.
+    UFunction* FindScriptFunction(UObject const* const Object, SFXName const& Name)
+    {
+        for (UField const* Class = Object != nullptr ? Object->Class : nullptr; Class != nullptr; Class = Class->SuperField)
+        {
+            for (UField* Field = static_cast<UStruct const*>(Class)->Children; Field != nullptr; Field = Field->Next)
+            {
+                if (Field->Name == Name && Field->IsA(UFunction::StaticClass()))
+                    return static_cast<UFunction*>(Field);
+            }
+        }
+        return nullptr;
+    }
+
+    // Drops the connection attempt and its reservation, then runs the lobby's own retry
+    // which searches again behind the same search box
+    void RetryUnreachableQuickMatch(MatchmakingState& S, Clock::time_point const Now)
+    {
+        static SFXName const k_lobbyGameInfo{ L"SFXGameInfoMP_Lobby", 0 };
+        static SFXName const k_onQuickMatchComplete{ L"OnQuickMatchComplete", 0 };
+        constexpr BYTE k_retryQuickMatch = 3;
+        constexpr unsigned char k_progressClear = 0; // EProgressMessageType.PMT_Clear
+
+        UGameEngine* const Engine = GameEngine();
+        AWorldInfo* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
+        AGameInfo* const Game = WorldInfo != nullptr ? WorldInfo->Game : nullptr;
+        UFunction* const Retry = IsInstanceOf(Game, k_lobbyGameInfo) ? FindScriptFunction(Game, k_onQuickMatchComplete) : nullptr;
+        if (Retry == nullptr)
+        {
+            // Left to the engine's own connection timeout.
+            MILAN_ERRORW(ELOG_Matchmaking, L"no answer from the host at %S, but the lobby's quick match retry was not found",
+                S.TravelTarget.ToString().c_str());
+            S.QuickMatchTarget.clear();
+            return;
+        }
+
+        MILAN_WARNW(ELOG_Matchmaking, L"no answer from the host at %S in %lld s; searching again without lobby %S for %lld s",
+            S.TravelTarget.ToString().c_str(), static_cast<long long>(k_quickMatchConnectTimeout.count()), S.LobbyId.c_str(),
+            static_cast<long long>(k_unreachableLobbySkip.count()));
+        if (!S.LobbyId.empty())
+            S.SkippedLobbies[S.LobbyId] = Now + k_unreachableLobbySkip;
+
+        // UGameEngine::Exec CANCEL drops the pending connection and leaves "connection cancelled" as progress text.
+        RunConsoleCommand(L"cancel");
+        if (Engine->GameViewport != nullptr) {
+            Engine->GameViewport->eventSetProgressMessage(k_progressClear, FString{}, FString{}, FALSE);
+        }
+        Leave(S);
+
+        struct { BYTE Result; BYTE Padding[15]; } Parms{ k_retryQuickMatch, {} };
+        Game->ProcessEvent(Retry, &Parms);
+    }
+
     void TickJoiner(MatchmakingState& S, Clock::time_point const Now)
     {
         bool const Migrating = S.MigrationPending || S.AwaitingHostCandidates;
@@ -2483,6 +2582,15 @@ namespace
 
         if (!S.TravelIssued)
             return;
+
+        // A quick match host that has sent nothing, not even a probe, is given up for another lobby.
+        if (!S.QuickMatchTarget.empty() && !S.JoinedReported && Engine != nullptr && Engine->GPendingLevel != nullptr
+            && !S.HostAnswered && !S.HostPath.ProbedBy && !S.HostPath.Verified
+            && Now - S.TravelIssuedAt >= k_quickMatchConnectTimeout)
+        {
+            RetryUnreachableQuickMatch(S, Now);
+            return;
+        }
 
         // Once UE3 has a socket, tell the host how to reach it on the LAN too.
         if (S.Socket != nullptr && S.LocalPort != S.ReportedPort && !S.ReservationId.empty())
@@ -2853,6 +2961,143 @@ namespace
         for (auto& Done : Ready)
             Done(S);
     }
+
+    // "Communicating..." in the loading movie's corner while a quick match searches or connects to
+    // its host. That movie outlives levels, so the indicator follows the search state, not the UI.
+    void TickSearchIndicator(MatchmakingState& S)
+    {
+        UGameEngine* const Engine = GameEngine();
+        bool const Connecting = !S.QuickMatchTarget.empty() && Engine != nullptr && (Engine->GPendingLevel != nullptr || Engine->TravelURL.Length() > 0);
+        bool const Searching = S.Role == EMatchmakingRole::Joiner && !S.JoinedReported && (static_cast<bool>(S.QuickMatchDone) || Connecting);
+        if (Searching == S.SearchIndicatorShown) {
+            return;
+        }
+
+        // Without a player controller (mid-travel), the next tick tries again.
+        ABioPlayerController* const Player = LocalBioPlayer();
+        USFXGUIInteraction* const Gui = Player != nullptr ? Player->GetSFXUIController() : nullptr;
+        USFXSaveLoadWidgetProxy* const Widget = Gui != nullptr ? Gui->eventGetSaveLoadWidget() : nullptr;
+        if (Widget == nullptr) {
+            // No search widget
+            return;
+        }
+
+        // 0 = NetworkMessage, "Communicating..."
+        if (Searching)
+        {
+            Widget->ShowNetworkMessage(FALSE, 0);
+        }
+        else {
+            // Hide immediately
+            Widget->HideNetworkMessage(FALSE);
+        }
+        S.SearchIndicatorShown = Searching;
+    }
+
+    // Get the game's language code
+    std::string GameLanguage()
+    {
+        constexpr int k_textLanguage = 1;
+        wchar_t const* const Code = appGetLanguageExt != nullptr ? (*appGetLanguageExt)(k_textLanguage, 0) : nullptr;
+        std::string Result{};
+        for (wchar_t const* C = Code; C != nullptr && *C != L'\0' && Result.size() < 8; ++C)
+        {
+            if (*C < 0x80) {
+                // Cast to char and add it. Unless user is being stupid
+                // this won't matter
+                Result += static_cast<char>(*C);
+            }
+        }
+        return Result;
+    }
+
+    // Server text for a message box
+    std::wstring PlainNoticeText(std::wstring const& Text)
+    {
+        constexpr std::size_t k_maxLength = 1000;
+        std::wstring Result{};
+        for (wchar_t const C : Text)
+        {
+            // Cap text from server in case server data is bad
+            if (Result.size() == k_maxLength)
+            {
+                break;
+            }
+
+            if (C == L'\n' || (C >= 0x20 && C != 0x7F && C != L'<' && C != L'>')) {
+                Result += C;
+            }
+        }
+        return Result;
+    }
+
+    // Runs on game thread, when the multiplayer menu opens. The server's message of the day shows once
+    // per notice Id, remembered per server in MilanHost.toml, and "update available" shows at most
+    // once per launch
+    void CheckServerNotice(MatchmakingState& S)
+    {
+        if (S.BaseUrl.empty() || gp_clientConfig == nullptr) {
+            return;
+        }
+
+        std::string Path = "/v1/info?language=" + PercentEncode(GameLanguage());
+        if (!S.ModVersion.empty())
+            Path += "&gameVersion=" + PercentEncode(S.ModVersion);
+        PostHttp(S, false, L"GET", Path, "", "", [](MatchmakingState& State, MatchmakingNet::HttpResult const& Result)
+            {
+                // Quietly: the next visit to the menu asks again.
+                json const Info = Result.Status >= 200 && Result.Status < 300 ? json::parse(Result.Body, nullptr, false) : json{};
+                if (!Info.is_object() || gp_clientConfig == nullptr) {
+                    return;
+                }
+                // Never in the way of a join or search that is starting.
+                if (State.MenuWorld == nullptr || State.MenuWorld != CurrentWorld() || !State.PendingJoin.empty() || State.Role != EMatchmakingRole::None)
+                {
+                    return;
+                }
+
+                std::wstring Message{};
+                bool const ShowUpdate = !State.UpdateNoticeShown && Info.value("outdated", false) && Info.contains("latestGameVersion") && Info.at("latestGameVersion").is_string();
+                if (ShowUpdate) {
+                    Message = Localize(Text::UpdateAvailable, PlainNoticeText(FromUtf8(Info.at("latestGameVersion").get<std::string>())));
+                }
+
+                std::string NoticeId{};
+                if (auto const Notice = Info.find("notice"); Notice != Info.end() && Notice->is_object())
+                {
+                    std::string const Id = Notice->value("id", std::string{});
+                    std::wstring const Text = PlainNoticeText(FromUtf8(Notice->value("text", std::string{})));
+                    // The server's own limit, so a custom server cannot fill MilanHost.toml.
+                    if (!Id.empty() && Id.size() <= 64 && !Text.empty() && std::string_view{ gp_clientConfig->SeenNotice(State.BaseUrl).c_str() } != Id)
+                    {
+                        Message += Message.empty() ? Text : L"\n\n" + Text;
+                        NoticeId = Id;
+                    }
+                }
+                if (Message.empty()) {
+                    // No message
+                    return;
+                }
+                if (!ShowMessageBox(Message, L"MilanServerNoticeMsg"))
+                {
+                    MILAN_WARNW(ELOG_Matchmaking, L"could not show the matchmaking server's notice");
+                    return;
+                }
+
+                State.UpdateNoticeShown = State.UpdateNoticeShown || ShowUpdate;
+                if (!NoticeId.empty())
+                {
+                    MILAN_INFOW(ELOG_Matchmaking, L"showed notice %S from %S", NoticeId.c_str(), State.BaseUrl.c_str());
+                    gp_clientConfig->RememberNotice(State.BaseUrl, NoticeId);
+                    game::string Error{};
+                    // Cache notice seen to disk
+                    if (!gp_clientConfig->TryWriteSeenNotice(GetLoadConfigPath(), GetConfigPath(), State.BaseUrl, Error))
+                    {
+                        MILAN_WARNW(ELOG_Matchmaking, L"could not save the shown notice to MilanHost.toml: %S", Error.c_str());
+                    }
+                }
+            });
+    }
 }
 
 
@@ -2875,8 +3120,7 @@ bool CMatchmaking::Initialize(::LESDK::Initializer& Context)
     {
         executable.resize(executableLength);
     }
-    auto version = ModVersion::Resolve(std::filesystem::path{ executable }, gp_clientConfig != nullptr ? std::string_view{ gp_clientConfig->ModVersion.c_str() } : std::string_view{},
-        CommandLineValue(L"-mmversion="));
+    auto version = ModVersion::Resolve(std::filesystem::path{ executable }, gp_clientConfig != nullptr ? std::string_view{ gp_clientConfig->ModVersion.c_str() } : std::string_view{}, CommandLineValue(L"-mmversion="));
     if (!version.Version.empty())
     {
         mp_state->ModVersion = std::move(version.Version);
@@ -3124,7 +3368,10 @@ bool CMatchmaking::On_ScriptCall(UStruct* const Function)
     if (Function->Name == k_serverUpdatePing && s_serverUpdatePing.Applies(Function, L"Engine", L"PlayerController", L"ServerUpdatePing"))
         return false;
     if (Function->Name == k_show && s_show.Applies(Function, L"SFXGameMPContent", L"SFXLobbyFlow", L"ShowMultiplayerMenu"))
+    {
         mp_state->MenuWorld = CurrentWorld();
+        CheckServerNotice(*mp_state);
+    }
     else if (Function->Name == k_hide && s_hide.Applies(Function, L"SFXGameMPContent", L"SFXLobbyFlow", L"HideMultiplayerMenu"))
         mp_state->MenuWorld = nullptr;
     else if (Function->Name == k_invite &&
@@ -3416,6 +3663,7 @@ void CMatchmaking::On_GameEngineTick(float const Delta)
         TickProbes(S, S.HostPath, Rendezvous::EDirection::JoinerToHost, Now);
     }
 
+    TickSearchIndicator(S);
     PublishLobbyServiceState(S);
 }
 
@@ -3426,7 +3674,16 @@ bool CMatchmaking::On_ReceivedDatagram(FSocket* const Socket, BYTE const* const 
 
     Rendezvous::EPacket const Kind = Rendezvous::Classify(Data, static_cast<std::size_t>(Length));
     if (Kind == Rendezvous::EPacket::None)
+    {
+        // Game traffic from the host a joiner traveled to: the path to it works.
+        if (mp_state != nullptr && mp_state->TravelIssued && !mp_state->HostAnswered && Source != nullptr
+            && Source->sin_addr.s_addr == mp_state->TravelTarget.Address && ntohs(Source->sin_port) == mp_state->TravelTarget.Port
+            && ::GetCurrentThreadId() == mp_state->GameThreadId)
+        {
+            mp_state->HostAnswered = true;
+        }
         return false;
+    }
 
     // Our datagrams are always hidden from UE3, but state is only touched on the game thread.
     if (mp_state == nullptr || Source == nullptr || ::GetCurrentThreadId() != mp_state->GameThreadId)
