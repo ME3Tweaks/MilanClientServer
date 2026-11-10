@@ -66,22 +66,6 @@ namespace
         return Controller != nullptr && (Controller->Player == nullptr || Controller->Player->Cast<ULocalPlayer>() == nullptr);
     }
 
-    // Suggested player name when the profile has none.
-    FString const& WindowsUserName()
-    {
-        static FString Name{};
-        static bool bLoaded = false;
-        if (!bLoaded)
-        {
-            bLoaded = true;
-            wchar_t Buffer[256]{};
-            DWORD Length = static_cast<DWORD>(std::size(Buffer));
-            if (::GetUserNameW(Buffer, &Length))
-                Name = FString::Printf(L"%s", Buffer);
-        }
-        return Name;
-    }
-
     std::string ToUtf8(std::wstring_view const Text)
     {
         if (Text.empty())
@@ -239,7 +223,7 @@ namespace
         else if (Function == k_getPlayerName)
             ReturnString(MPProfile::GetPlayerName());
         else if (Function == k_getDefaultPlayerName)
-            ReturnString(WindowsUserName());
+            ReturnString(MPProfile::GetDefaultPlayerName());
         else if (Function == k_isMatchmakingEnabled)
             ReturnBool(Config == nullptr || Config->MatchmakerEnabled);
         else if (Function == k_isCustomServer)
@@ -325,9 +309,9 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
                                  *Params->ComputerName);
                 }
             }
-            else if (!WindowsUserName().Empty())
+            else if (!MPProfile::GetDefaultPlayerName().Empty())
             {
-                Params->ComputerName = WindowsUserName();
+                Params->ComputerName = MPProfile::GetDefaultPlayerName();
                 if (!bLoggedWindowsUserName)
                 {
                     bLoggedWindowsUserName = true;
