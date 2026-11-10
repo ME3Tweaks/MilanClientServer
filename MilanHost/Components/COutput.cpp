@@ -281,7 +281,7 @@ void COutput::InitMainLogger()
         MainLogger->AddSink(bUseVirtualTerminal ? (ILoggerOutput*)(new ConsoleLoggerOutput(ConsoleHandle)) : new BasicConsoleLoggerOutput(ConsoleHandle));
     MainLogger->AddSink(new FileLoggerOutput{ LogFileName, false });
 #else
-    // In FINAL_RELEASE builds only enable file sink, and set it to append.
+    // In FINAL_RELEASE builds only enable the file sink, which appends until the log expires.
     MainLogger->AddSink(new FileLoggerOutput{ LogFileName, true });
 #endif
 
