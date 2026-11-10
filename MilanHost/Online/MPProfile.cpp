@@ -234,6 +234,22 @@ FString const& MPProfile::GetPlayerName()
     return CachedPlayerName();
 }
 
+FString const& MPProfile::GetDefaultPlayerName()
+{
+    static FString Name{};
+    static bool bLoaded = false;
+    if (!bLoaded)
+    {
+        bLoaded = true;
+        wchar_t Buffer[256]{};
+        DWORD Length = static_cast<DWORD>(std::size(Buffer));
+        if (::GetUserNameW(Buffer, &Length)) {
+            Name = FString::Printf(L"%s", Buffer);
+        }
+    }
+    return Name;
+}
+
 void MPProfile::SetPlayerName(FString const& Name)
 {
     CachedPlayerName() = Name;

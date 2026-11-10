@@ -209,6 +209,8 @@ public:
 
     // Reads MP_Profile directly if SFXSaveManagerMP.Initialize has not loaded it yet.
     static FString const& GetPlayerName();
+    // Windows account name used when the profile has no custom name
+    static FString const& GetDefaultPlayerName();
     // The name the next Serialize writes.
     static void SetPlayerName(FString const& Name);
 };
