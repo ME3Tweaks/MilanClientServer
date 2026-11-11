@@ -54,6 +54,30 @@ public enum CandidateKind
     PublicReported
 }
 
+/// <summary>
+/// Effectiveness of clients joining a lobby, used to deprioritize lobbies that suck
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<LobbyReachability>))]
+public enum LobbyReachability
+{
+    /// <summary>
+    /// A player has successfully joined this lobby
+    /// </summary>
+    Proven,
+    /// <summary>
+    /// Nobody has yet successfully joined this lobby
+    /// </summary>
+    Unknown,
+    /// <summary>
+    /// Some players have failed to join this lobby
+    /// </summary>
+    Suspect,
+    /// <summary>
+    /// Many users cannot join this lobby and will not be offered to others
+    /// </summary>
+    Unreachable,
+}
+
 // Where a member stands after reporting that it lost its host.
 [JsonConverter(typeof(JsonStringEnumConverter<MigrationState>))]
 public enum MigrationState
@@ -111,8 +135,10 @@ public sealed record CreateLobbyResponse(
     UdpTicket UdpTicket);
 
 // Stale is true when the report was older than the stored revision and was ignored.
-// The lease is refreshed either way.
-public sealed record LobbyStateResponse(long Revision, bool Stale, DateTimeOffset ExpiresAt);
+// The lease is refreshed either way. FailedJoins is the count of players that
+// failed to join the lobby so the host will know it's bad
+public sealed record LobbyStateResponse(long Revision, bool Stale, DateTimeOffset ExpiresAt,
+    LobbyReachability Reachability = LobbyReachability.Unknown, int FailedJoins = 0);
 
 public sealed record InviteResponse(string InviteCode);
 
@@ -264,7 +290,10 @@ public sealed record StatsDetails(
     int PeakLobbies,
     StatsTotals Totals,
     // Lobbies per game version, the most common first; at most 20 versions.
-    IReadOnlyDictionary<string, int> GameVersions);
+    IReadOnlyDictionary<string, int> GameVersions,
+    // Deprioritization lobbies
+    int SuspectLobbies = 0,
+    int UnreachableLobbies = 0);
 
 // Since the server started.
 public sealed record StatsTotals(
@@ -276,7 +305,8 @@ public sealed record StatsTotals(
     long JoinsCompleted,
     long HostMigrationsStarted,
     long HostMigrationsCompleted,
-    long HostMigrationsFailed);
+    long HostMigrationsFailed,
+    long JoinsFailed = 0);
 
 public sealed record ServerError(string Code, string Message);
 

@@ -14,7 +14,13 @@ public sealed class MatchmakingStore
     const int MaxLanAddresses = 4;
     const int MaxExcludedLobbies = 16;
     const int MaxWaveNumber = 10_000;
+    const int MaxTrackedPerRecord = 64;
+    const int MaxTrackedAddresses = 50_000;
     static readonly TimeSpan SearchRetention = TimeSpan.FromSeconds(60);
+    /// <summary>
+    /// How long an aborted join is excluded from the next result set
+    /// </summary>
+    static readonly TimeSpan AbandonedWindow = TimeSpan.FromSeconds(120);
 
     readonly Lock _lock = new();
     readonly MilanServerOptions _options;
@@ -32,6 +38,12 @@ public sealed class MatchmakingStore
     readonly DiscoveryWorkBudget _discoveryWork;
     long _nextLobbySequence;
 
+    /// <summary>
+    /// IP -> joiner information
+    /// </summary>
+    readonly Dictionary<string, JoinerRecord> _joiners = new(StringComparer.Ordinal);
+    readonly Dictionary<string, Dictionary<string, DateTimeOffset>> _hostFailures = new(StringComparer.Ordinal);
+
     // Statistics (GetStats): presence reports, the cached snapshot, and counters since the start.
     readonly Dictionary<string, PresenceRecord> _presence = new(StringComparer.Ordinal);
     readonly Dictionary<string, int> _presenceBySource = new(StringComparer.Ordinal);
@@ -48,6 +60,7 @@ public sealed class MatchmakingStore
     long _hostMigrationsStarted;
     long _hostMigrationsCompleted;
     long _hostMigrationsFailed;
+    long _joinsFailed;
 
     public MatchmakingStore(IOptions<MilanServerOptions> options, TimeProvider time, ILogger<MatchmakingStore> logger,
         ServerNotice? notice = null)
@@ -106,6 +119,7 @@ public sealed class MatchmakingStore
             _lobbiesCreated++;
             udpTicket = NewUdpTicketLocked(lobby, null, out UInt128 ticketId);
             lobby.UdpTicketId = ticketId;
+            InheritHostFailuresLocked(lobby, now);
         }
 
         _logger.LogInformation("Created lobby {LobbyId} ({Privacy}, {Phase}, {Joinable}, {Players}/{MaxPlayers}), game version {GameVersion}.",
@@ -174,7 +188,8 @@ public sealed class MatchmakingStore
                 SignalLocked(lobby);
             }
             lobby.ExpiresAt = now.AddSeconds(_options.LobbyLeaseSeconds);
-            return new LobbyStateResponse(lobby.State.Revision, stale, lobby.ExpiresAt);
+            LobbyReachability reachability = ReachabilityOf(lobby, now, out int failedJoins);
+            return new LobbyStateResponse(lobby.State.Revision, stale, lobby.ExpiresAt, reachability, failedJoins);
         }
     }
 
@@ -271,6 +286,15 @@ public sealed class MatchmakingStore
                 : now;
             _searches.Add(search.Id, search);
             _searchesStarted++;
+            // MilanHost sends lobbies to exclude which we can use to determine
+            // failed joins
+            foreach (string excludedId in search.Excluded)
+            {
+                if (_lobbies.TryGetValue(excludedId, out Lobby? excluded) && excluded.Abandoned.Remove(sourceKey, out DateTimeOffset at) && now - at <= AbandonedWindow)
+                {
+                    RecordJoinFailureLocked(excluded, sourceKey, now, "the host did not answer");
+                }
+            }
             string current = _notice?.ExpectedGameVersion ?? _options.ExpectedGameVersion;
             string? expectedVersion = current.Length > 0 && current != request.GameVersion ? current : null;
             _logger.LogInformation(
@@ -313,7 +337,14 @@ public sealed class MatchmakingStore
 
             _searches.Remove(search.Id);
             if (search.Reservation is { } reservation && _reservations.ContainsKey(reservation.Id))
+            {
+                if (CouldBeFailedJoin(reservation))
+                {
+                    reservation.Lobby.Abandoned[reservation.SourceKey] = now;
+                    TrimOldest(reservation.Lobby.Abandoned);
+                }
                 RemoveReservationLocked(reservation);
+            }
         }
 
         _logger.LogInformation("Search {SearchId} cancelled.", searchId);
@@ -348,16 +379,23 @@ public sealed class MatchmakingStore
         }
 
         Lobby? best = null;
-        (int, int, int, DateTimeOffset, long) bestRank = default;
+        LobbyReachability bestReachability = LobbyReachability.Unknown;
+        (int, int, int, int, int, DateTimeOffset, long) bestRank = default;
         foreach (Lobby lobby in _lobbies.Values)
         {
             if (!IsSearchCandidate(lobby, search, stage, now))
                 continue;
+            LobbyReachability reachability = ReachabilityOf(lobby, now, out _);
+            if (!AcceptsSearchJoiner(lobby, reachability, now))
+            {
+                continue;
+            }
 
-            (int, int, int, DateTimeOffset, long) rank = Rank(lobby, search.Request);
+            (int, int, int, int, int, DateTimeOffset, long) rank = Rank(lobby, search.Request, reachability);
             if (best is null || rank.CompareTo(bestRank) < 0)
             {
                 best = lobby;
+                bestReachability = reachability;
                 bestRank = rank;
             }
         }
@@ -373,7 +411,15 @@ public sealed class MatchmakingStore
         search.State = SearchState.Matched;
         search.Result = new SearchStatus(SearchState.Matched, stage, reservation.ExpiresAt, 0, reservation);
         _searchesMatched++;
-        _logger.LogInformation("Search {SearchId} matched lobby {LobbyId} at stage {Stage}.", search.Id, best.Id, stage);
+        if (bestReachability == LobbyReachability.Unreachable)
+        {
+            best.LastProbeAt = now;
+            _logger.LogInformation("Search {SearchId} matched lobby {LobbyId} at stage {Stage}, player matched to determine if suspect lobby is actually reachable", search.Id, best.Id, stage);
+        }
+        else
+        {
+            _logger.LogInformation("Search {SearchId} matched lobby {LobbyId} at stage {Stage}.", search.Id, best.Id, stage);
+        }
         return search.Result;
     }
 
@@ -412,9 +458,10 @@ public sealed class MatchmakingStore
         return mapMatches && enemyMatches;
     }
 
-    // Lower sorts first: lobbies before matches in progress, then closer matches to the
-    // player's original filters, earlier waves, and then the lobby that has waited longest.
-    static (int, int, int, DateTimeOffset, long) Rank(Lobby lobby, SearchRequest request)
+    // Lower sorts first: lobbies players could not connect to last, then lobbies before matches
+    // in progress, closer matches to the player's original filters, a lobby someone has joined
+    // before one nobody has, earlier waves, and then the lobby that has waited longest
+    (int, int, int, int, int, DateTimeOffset, long) Rank(Lobby lobby, SearchRequest request, LobbyReachability reachability)
     {
         LobbySnapshot state = lobby.State;
         int specificity = 0;
@@ -423,7 +470,33 @@ public sealed class MatchmakingStore
         if (request.EnemyModeId != GameSettingIds.AnyEnemy && state.EnemyModeId == request.EnemyModeId)
             specificity++;
 
-        return (state.Phase == MatchPhase.Lobby ? 0 : 1, -specificity, state.WaveNumber, lobby.WaitingSince, lobby.Sequence);
+        bool enabled = _options.Reachability.Enabled;
+        int demoted = !enabled ? 0 : reachability switch
+        {
+            LobbyReachability.Suspect => 1,
+            LobbyReachability.Unreachable => 2,
+            _ => 0,
+        };
+        int unproven = enabled && reachability != LobbyReachability.Proven ? 1 : 0;
+        return (demoted, state.Phase == MatchPhase.Lobby ? 0 : 1, -specificity, unproven, state.WaveNumber, lobby.WaitingSince, lobby.Sequence);
+    }
+
+    // A lobby nobody from another network has joined takes one quick-match joiner at a time, so a
+    // host that cannot be reached costs one player rather than several. An unreachable lobby only
+    // takes one now and then, to see whether its host was fixed
+    bool AcceptsSearchJoiner(Lobby lobby, LobbyReachability reachability, DateTimeOffset now)
+    {
+        MilanReachabilityOptions options = _options.Reachability;
+        if (!options.Enabled || reachability == LobbyReachability.Proven)
+        {
+            // We're good
+            return true;
+        }
+        if (lobby.Reservations.Count(r => r.ExpiresAt > now && r.JoinedAt is null && !r.Migration) >= options.UnprovenPendingJoins)
+        {
+            return false;
+        }
+        return reachability != LobbyReachability.Unreachable || now - lobby.LastProbeAt >= TimeSpan.FromSeconds(options.ProbeSeconds);
     }
 
     #endregion
@@ -769,6 +842,7 @@ public sealed class MatchmakingStore
                 continue;
             if (_reservations.TryGetValue(id, out Reservation? admitted) && admitted.Lobby == lobby && admitted.ExpiresAt > now)
             {
+                RecordJoinSuccessLocked(admitted, now);
                 AdmitMemberLocked(admitted);
                 _joinsCompleted++;
             }
@@ -911,6 +985,12 @@ public sealed class MatchmakingStore
         lobby.UdpTicketId = ticketId;
         lobby.ExpiresAt = now.AddSeconds(_options.LobbyLeaseSeconds);
         lobby.Migration!.Stage = MigrationStage.Handoff;
+        //Clear out lobby info
+        lobby.JoinFailures.Clear();
+        lobby.Abandoned.Clear();
+        lobby.LastJoinedAt = null;
+        lobby.LastProbeAt = DateTimeOffset.MinValue;
+        InheritHostFailuresLocked(lobby, now);
 
         // Settling takes the reporters off the member list; each joins the new host as a new member.
         newHost.Handoff = new HostHandoff(lobby.Id, hostKey, Secrets.FormatInviteCode(lobby.InviteCode), lobby.State.Revision,
@@ -919,7 +999,7 @@ public sealed class MatchmakingStore
         foreach (Member joiner in reporters.Skip(1))
         {
             joiner.Reservation = CreateReservationLocked(lobby, joiner.SourceKey, joiner.PublicAddress, now, out _,
-                _options.MigrationJoinSeconds);
+                _options.MigrationJoinSeconds, migration: true);
             SettleLocked(joiner, MigrationState.JoinNewHost, now);
         }
         SignalLocked(lobby);
@@ -1016,7 +1096,7 @@ public sealed class MatchmakingStore
     }
 
     JoinReservation CreateReservationLocked(Lobby lobby, string sourceKey, IPAddress? joinerPublicAddress,
-        DateTimeOffset now, out Reservation record, int? lifetimeSeconds = null)
+        DateTimeOffset now, out Reservation record, int? lifetimeSeconds = null, bool migration = false)
     {
         string joinKey = Secrets.NewKey();
         record = new Reservation
@@ -1028,6 +1108,7 @@ public sealed class MatchmakingStore
             PublicAddress = joinerPublicAddress,
             TraversalKey = Secrets.NewKey(),
             ExpiresAt = now.AddSeconds(lifetimeSeconds ?? _options.ReservationSeconds),
+            Migration = migration,
         };
         _reservations.Add(record.Id, record);
         lobby.Reservations.Add(record);
@@ -1085,6 +1166,251 @@ public sealed class MatchmakingStore
 
     #endregion
 
+    #region Reachability
+    /// <summary>
+    /// Returns the probable reachability of a lobby
+    /// </summary>
+    /// <param name="lobby"></param>
+    /// <param name="now"></param>
+    /// <param name="failures"></param>
+    /// <returns></returns>
+    LobbyReachability ReachabilityOf(Lobby lobby, DateTimeOffset now, out int failures)
+    {
+        MilanReachabilityOptions options = _options.Reachability;
+        failures = CountJoinFailures(lobby, now);
+        if (failures >= options.UnreachableAfterFailures)
+        {
+            return LobbyReachability.Unreachable;
+        }
+        if (failures >= options.SuspectAfterFailures)
+        {
+            return LobbyReachability.Suspect;
+        }
+        return lobby.LastJoinedAt is null ? LobbyReachability.Unknown : LobbyReachability.Proven;
+    }
+
+    int CountJoinFailures(Lobby lobby, DateTimeOffset now)
+    {
+        TimeSpan memory = TimeSpan.FromSeconds(_options.Reachability.FailureSeconds);
+        int count = 0;
+        foreach ((string joiner, DateTimeOffset at) in lobby.JoinFailures)
+        {
+            if (now - at < memory && !IsDiscountedJoiner(joiner, now))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// A player who fails to join a bunch of lobbies shouldn't count against lobbies who have people failing to join
+    /// as it could be due to their crappy internet
+    /// </summary>
+    /// <param name="joiner"></param>
+    /// <param name="now"></param>
+    /// <returns></returns>
+    bool IsDiscountedJoiner(string joiner, DateTimeOffset now)
+    {
+        if (!_joiners.TryGetValue(joiner, out JoinerRecord? record))
+        {
+            return false;
+        }
+        TimeSpan memory = TimeSpan.FromSeconds(_options.Reachability.FailureSeconds);
+        if (record.LastJoinedAt is { } joined && now - joined < memory)
+        {
+            return false;
+        }
+        return record.FailedLobbies.Values.Count(at => now - at < memory) >= _options.Reachability.JoinerFailureLimit;
+    }
+
+    /// <summary>
+    /// Is the given reservation a failed join?
+    /// </summary>
+    /// <param name="reservation"></param>
+    /// <returns></returns>
+    static bool CouldBeFailedJoin(Reservation reservation) =>
+        // Not a migration
+        !reservation.Migration
+        // Reservation has no join time
+        && reservation.JoinedAt is null
+        // The lobby still exists
+        && !reservation.Lobby.Removed
+        // The lobby is not migrating
+        && reservation.Lobby.Migration is null
+        // Not the same public address (likely LAN)
+        && !SamePublicAddress(reservation.Lobby, reservation);
+
+    void RecordJoinFailureLocked(Lobby lobby, string joiner, DateTimeOffset now, string how)
+    {
+        if (lobby.Removed)
+        {
+            // Lobby is gone, joins don't count here
+            return;
+        }
+
+        LobbyReachability before = ReachabilityOf(lobby, now, out _);
+        lobby.JoinFailures[joiner] = now;
+        TrimOldest(lobby.JoinFailures);
+        if (!_joiners.TryGetValue(joiner, out JoinerRecord? record) && _joiners.Count < MaxTrackedAddresses)
+        {
+            record = new JoinerRecord();
+            _joiners.Add(joiner, record);
+        }
+        if (record is not null)
+        {
+            record.FailedLobbies[lobby.Id] = now;
+            TrimOldest(record.FailedLobbies);
+        }
+        _joinsFailed++;
+
+        LobbyReachability after = ReachabilityOf(lobby, now, out int failures);
+        // The first test of an unreachable lobby waits a full ProbeSeconds.
+        if (after == LobbyReachability.Unreachable && before != LobbyReachability.Unreachable)
+        {
+            lobby.LastProbeAt = now;
+        }
+        if (after != before && after >= LobbyReachability.Suspect)
+        {
+            _logger.LogWarning("Lobby {LobbyId} is now {Reachability}: {Count} players from other networks could not connect since its last successful join ({How}).", lobby.Id, after, failures, how);
+        }
+        else
+        {
+            _logger.LogInformation("Lobby {LobbyId}: a player could not connect ({How}); {Count} counted since its last successful join.", lobby.Id, how, failures);
+        }
+    }
+
+    /// <summary>
+    /// Record a succesful join to a lobby
+    /// </summary>
+    /// <param name="reservation"></param>
+    /// <param name="now"></param>
+    void RecordJoinSuccessLocked(Reservation reservation, DateTimeOffset now)
+    {
+        Lobby lobby = reservation.Lobby;
+        if (SamePublicAddress(lobby, reservation))
+        {
+            return;
+        }
+
+        if (lobby.JoinFailures.Count > 0)
+        {
+            _logger.LogInformation("Lobby {LobbyId}: a player joined, so its earlier failed joins no longer count.", lobby.Id);
+        }
+        lobby.LastJoinedAt = now;
+        lobby.JoinFailures.Clear();
+        lobby.Abandoned.Clear();
+        _hostFailures.Remove(lobby.SourceKey);
+        if (!_joiners.TryGetValue(reservation.SourceKey, out JoinerRecord? record) && _joiners.Count < MaxTrackedAddresses)
+        {
+            record = new JoinerRecord();
+            _joiners.Add(reservation.SourceKey, record);
+        }
+        if (record is not null)
+        {
+            record.LastJoinedAt = now;
+        }
+    }
+
+    /// <summary>
+    /// Transfer hosting keeps failed joins so you don't open a new poisoning lobby
+    /// </summary>
+    /// <param name="lobby"></param>
+    void KeepHostFailuresLocked(Lobby lobby)
+    {
+        if (lobby.JoinFailures.Count == 0)
+        {
+            return;
+        }
+        if (!_hostFailures.TryGetValue(lobby.SourceKey, out Dictionary<string, DateTimeOffset>? kept))
+        {
+            if (_hostFailures.Count >= MaxTrackedAddresses)
+            {
+                return;
+            }
+            kept = new(StringComparer.Ordinal);
+            _hostFailures.Add(lobby.SourceKey, kept);
+        }
+        foreach ((string joiner, DateTimeOffset at) in lobby.JoinFailures)
+        {
+            if (!kept.TryGetValue(joiner, out DateTimeOffset existing) || existing < at)
+            {
+                kept[joiner] = at;
+            }
+        }
+        TrimOldest(kept);
+    }
+
+    void InheritHostFailuresLocked(Lobby lobby, DateTimeOffset now)
+    {
+        if (!_hostFailures.TryGetValue(lobby.SourceKey, out Dictionary<string, DateTimeOffset>? kept))
+        {
+            return;
+        }
+        TimeSpan memory = TimeSpan.FromSeconds(_options.Reachability.FailureSeconds);
+        foreach ((string joiner, DateTimeOffset at) in kept)
+        {
+            if (now - at < memory)
+            {
+                lobby.JoinFailures[joiner] = at;
+            }
+        }
+        if (lobby.JoinFailures.Count > 0)
+        {
+            LobbyReachability reachability = ReachabilityOf(lobby, now, out int failures);
+            _logger.LogInformation("Lobby {LobbyId} starts {Reachability}: {Count} players could not connect to this host's earlier lobbies.",
+                lobby.Id, reachability, failures);
+        }
+    }
+
+    void SweepReachabilityLocked(DateTimeOffset now)
+    {
+        TimeSpan memory = TimeSpan.FromSeconds(_options.Reachability.FailureSeconds);
+        foreach (Lobby lobby in _lobbies.Values)
+        {
+            RemoveOlderThan(lobby.JoinFailures, now - memory);
+            RemoveOlderThan(lobby.Abandoned, now - AbandonedWindow);
+        }
+        foreach ((string joiner, JoinerRecord record) in _joiners.ToList())
+        {
+            RemoveOlderThan(record.FailedLobbies, now - memory);
+            if (record.FailedLobbies.Count == 0 && (record.LastJoinedAt is not { } joined || now - joined >= memory))
+            {
+                _joiners.Remove(joiner);
+            }
+        }
+        foreach ((string host, Dictionary<string, DateTimeOffset> kept) in _hostFailures.ToList())
+        {
+            RemoveOlderThan(kept, now - memory);
+            if (kept.Count == 0)
+            {
+                _hostFailures.Remove(host);
+            }
+        }
+    }
+
+    static void RemoveOlderThan(Dictionary<string, DateTimeOffset> times, DateTimeOffset cutoff)
+    {
+        if (times.Count == 0)
+        {
+            return;
+        }
+        foreach (string key in times.Where(t => t.Value <= cutoff).Select(t => t.Key).ToList())
+        {
+            times.Remove(key);
+        }
+    }
+
+    static void TrimOldest(Dictionary<string, DateTimeOffset> times)
+    {
+        while (times.Count > MaxTrackedPerRecord)
+        {
+            times.Remove(times.MinBy(t => t.Value).Key);
+        }
+    }
+
+    #endregion
+
     #region Statistics
 
     // Served from a snapshot at most Stats.CacheSeconds old, so polling costs one pass over the
@@ -1104,7 +1430,7 @@ public sealed class MatchmakingStore
     {
         int lobbies = 0, players = 0, capacity = 0;
         int publicLobbies = 0, friendsLobbies = 0, privateLobbies = 0, openLobbies = 0;
-        int waiting = 0, inProgress = 0, migrations = 0;
+        int waiting = 0, inProgress = 0, migrations = 0, suspect = 0, unreachable = 0;
         Dictionary<string, int> versions = new(StringComparer.Ordinal);
         foreach (Lobby lobby in _lobbies.Values)
         {
@@ -1137,6 +1463,15 @@ public sealed class MatchmakingStore
                 inProgress++;
             if (lobby.Migration is not null)
                 migrations++;
+            LobbyReachability reachability = ReachabilityOf(lobby, now, out _);
+            if (reachability == LobbyReachability.Suspect)
+            {
+                suspect++;
+            }
+            else if (reachability == LobbyReachability.Unreachable)
+            {
+                unreachable++;
+            }
             versions[lobby.GameVersion] = versions.GetValueOrDefault(lobby.GameVersion) + 1;
         }
 
@@ -1159,9 +1494,11 @@ public sealed class MatchmakingStore
             _peakPlayers,
             _peakLobbies,
             new StatsTotals(_lobbiesCreated, _lobbiesExpired, _searchesStarted, _searchesMatched, _invitesRedeemed,
-                _joinsCompleted, _hostMigrationsStarted, _hostMigrationsCompleted, _hostMigrationsFailed),
+                _joinsCompleted, _hostMigrationsStarted, _hostMigrationsCompleted, _hostMigrationsFailed, _joinsFailed),
             versions.OrderByDescending(v => v.Value).ThenBy(v => v.Key, StringComparer.Ordinal).Take(20)
-                .ToDictionary(v => v.Key, v => v.Value));
+                .ToDictionary(v => v.Key, v => v.Value),
+            suspect,
+            unreachable);
         return new ServerStats(now, players, searching, publicLobbies, openLobbies, idle,
             idle is null ? null : players + searching + idle, details);
     }
@@ -1276,11 +1613,15 @@ public sealed class MatchmakingStore
         foreach (Lobby lobby in expiredLobbies)
             RemoveLobbyLocked(lobby);
 
-        // Unconfirmed reservations expire regardless of a joiner's claimed success.
+        // Unconfirmed reservations expire regardless of a joiner's claimed success. One that never
+        // claimed it is a failed join
         foreach (Reservation reservation in _reservations.Values.Where(r => r.ExpiresAt <= now).ToList())
         {
+            if (CouldBeFailedJoin(reservation))
+                RecordJoinFailureLocked(reservation.Lobby, reservation.SourceKey, now, "its reservation ran out");
             RemoveReservationLocked(reservation);
         }
+        SweepReachabilityLocked(now);
 
         // Settled members only need to answer polls until their next step is under way.
         TimeSpan settledRetention = TimeSpan.FromSeconds(_options.MigrationJoinSeconds);
@@ -1389,6 +1730,10 @@ public sealed class MatchmakingStore
 
     void RemoveLobbyLocked(Lobby lobby)
     {
+        if (!lobby.Removed)
+        {
+            KeepHostFailuresLocked(lobby);
+        }
         lobby.Removed = true;
         _lobbies.Remove(lobby.Id);
         _lobbiesByInvite.Remove(lobby.InviteCode);
@@ -1557,6 +1902,21 @@ public sealed class MatchmakingStore
         public DateTimeOffset? HostConfirmedAliveAt { get; set; }
         public List<byte[]> ReplacedHostKeyHashes { get; } = [];
         public bool Removed { get; set; }
+
+        /// <summary>
+        /// Host reachability is traced via excluded lobbies on retry searches
+        /// </summary>
+        public Dictionary<string, DateTimeOffset> JoinFailures { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, DateTimeOffset> Abandoned { get; } = new(StringComparer.Ordinal);
+        public DateTimeOffset? LastJoinedAt { get; set; }
+        public DateTimeOffset LastProbeAt { get; set; } = DateTimeOffset.MinValue;
+    }
+
+    // A joiner address, for telling a host nobody can reach from a player who can reach nobody.
+    sealed class JoinerRecord
+    {
+        public Dictionary<string, DateTimeOffset> FailedLobbies { get; } = new(StringComparer.Ordinal);
+        public DateTimeOffset? LastJoinedAt { get; set; }
     }
 
     enum MigrationStage
@@ -1603,6 +1963,10 @@ public sealed class MatchmakingStore
         public required IPAddress? PublicAddress { get; init; }
         public required string TraversalKey { get; init; }
         public required DateTimeOffset ExpiresAt { get; init; }
+        /// <summary>
+        /// Migration changes hosts, doesn't count as a join
+        /// </summary>
+        public bool Migration { get; init; }
         public DateTimeOffset? JoinedAt { get; set; }
         public UInt128 UdpTicketId { get; set; }
         public IPEndPoint? ObservedEndpoint { get; set; }

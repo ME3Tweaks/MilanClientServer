@@ -11,4 +11,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="MilanServer.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- config/milan.json is a local, live-reloaded file, never part of the build or image. -->
+    <Content Remove="config\**" />
+  </ItemGroup>
 </Project>

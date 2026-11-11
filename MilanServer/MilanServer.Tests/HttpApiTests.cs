@@ -19,6 +19,8 @@ public sealed class MilanFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // The output folder, so a developer's config/milan.json in the project does not apply.
+        builder.UseContentRoot(AppContext.BaseDirectory);
         builder.UseSetting("Milan:UdpPort", "0");
         builder.ConfigureTestServices(services =>
             services.ConfigureHttpJsonOptions(json => json.SerializerOptions.TypeInfoResolver = MilanJsonContext.Default));
@@ -116,8 +118,11 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
         JoinReservation member = (await (await client.PostAsJsonAsync("/v1/invites/redeem",
             new RedeemInviteRequest(lobby.InviteCode, Version), Ct)).Content.ReadFromJsonAsync<JoinReservation>(Ct))!;
         await client.SendAsync(Authorized(HttpMethod.Post, $"/v1/reservations/{member.ReservationId}/joined", member.JoinKey), Ct);
-        await client.SendAsync(Authorized(HttpMethod.Put, $"/v1/lobbies/{lobby.LobbyId}/state", lobby.HostKey,
+        HttpResponseMessage admitted = await client.SendAsync(Authorized(HttpMethod.Put, $"/v1/lobbies/{lobby.LobbyId}/state", lobby.HostKey,
             State(2) with { PlayerCount = 2, MemberIds = [member.ReservationId] }), Ct);
+        string admittedBody = await admitted.Content.ReadAsStringAsync(Ct);
+        Assert.Contains("\"reachability\":\"Proven\"", admittedBody);
+        Assert.Contains("\"failedJoins\":0", admittedBody);
 
         HttpResponseMessage reported = await client.SendAsync(Authorized(HttpMethod.Post,
             $"/v1/members/{member.ReservationId}/host-lost", member.JoinKey, new HostLostReport(CanHost: true)), Ct);

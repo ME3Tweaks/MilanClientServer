@@ -82,6 +82,54 @@ public sealed class MilanServerOptions
 
     // GET /v1/stats and the presence reports that feed it. Both are off by default.
     public MilanStatsOptions Stats { get; set; } = new();
+
+    /// <summary>
+    /// Deprioritization stats for lobbies
+    /// </summary>
+    public MilanReachabilityOptions Reachability { get; set; } = new();
+}
+
+/// <summary>
+/// Stores reachability information for a lobby
+/// </summary>
+public sealed class MilanReachabilityOptions
+{
+
+    /// <summary>
+    /// If the reachability options are actually doing anything
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// How many failures triggers a lobby being suspicious and restricting how many in-progress invites are given to it
+    /// </summary>
+    public int SuspectAfterFailures { get; set; } = 2;
+
+
+    /// <summary>
+    /// How many failures marks a lobby unreachable and stops offering it entirely
+    /// </summary>
+    public int UnreachableAfterFailures { get; set; } = 4;
+
+    /// <summary>
+    /// How long to probe a lobby for reachability after offering a client to it
+    /// </summary>
+    public int ProbeSeconds { get; set; } = 180;
+
+    /// <summary>
+    /// How long a failure counts for
+    /// </summary>
+    public int FailureSeconds { get; set; } = 900;
+
+    /// <summary>
+    /// Number of times a joiner that fails to join lobbies stops trying to join. These don't count against lobbies as failures
+    /// </summary>
+    public int JoinerFailureLimit { get; set; } = 5;
+
+    /// <summary>
+    /// Number of unproven joins to offer before widening to proven
+    /// </summary>
+    public int UnprovenPendingJoins { get; set; } = 1;
 }
 
 /// <summary>
@@ -201,8 +249,22 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
         if (stats.PresenceSeconds is < 30 or > 3600)
             errors.Add("Stats:PresenceSeconds must be between 30 and 3600.");
         if (stats.MaxPresence < 1 || stats.MaxPresencePerAddress < 1)
+        {
             errors.Add("Stats:MaxPresence and Stats:MaxPresencePerAddress must be at least 1.");
-
+        }
+        MilanReachabilityOptions reachability = options.Reachability;
+        if (reachability.SuspectAfterFailures < 1 || reachability.UnreachableAfterFailures < reachability.SuspectAfterFailures)
+        {
+            errors.Add("Reachability thresholds must satisfy 1 <= SuspectAfterFailures <= UnreachableAfterFailures.");
+        }
+        if (reachability.ProbeSeconds < 1 || reachability.FailureSeconds < 60)
+        {
+            errors.Add("Reachability:ProbeSeconds must be at least 1 and Reachability:FailureSeconds at least 60.");
+        }
+        if (reachability.JoinerFailureLimit < 2 || reachability.UnprovenPendingJoins < 1)
+        {
+            errors.Add("Reachability:JoinerFailureLimit must be at least 2 and Reachability:UnprovenPendingJoins at least 1.");
+        }
         // The game only sends keys it can put in an HTTP header unchanged.
         if (options.AccessKey.Length > 256 || options.AccessKey.Any(c => c is <= ' ' or >= '\x7F'))
             errors.Add("AccessKey must be printable ASCII without spaces, at most 256 characters.");
