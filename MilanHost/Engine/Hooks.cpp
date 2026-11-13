@@ -838,7 +838,7 @@ UObject* SFXEngine_SeekFreeLoadStatus_hook(void* const Context, INT const Mappin
     if (s_lastWaited != Result)
     {
         s_lastWaited = Result;
-        MILAN_DEBUGW(ELOG_EngineHooks, L"seek-free object %s is still async loading", *Result->GetFullName());
+        //MILAN_DEBUGW(ELOG_EngineHooks, L"seek-free object %s is still async loading", *Result->GetFullName());
     }
 
     *OutStatus = k_asyncLoadInProgress;

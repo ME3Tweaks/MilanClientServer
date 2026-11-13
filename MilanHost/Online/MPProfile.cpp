@@ -13,7 +13,51 @@ static FString& CachedPlayerName()
     static FString PlayerName{};
     return PlayerName;
 }
+
 static bool bPlayerNameLoaded = false;
+static bool bProfileLoaded = false;
+
+bool MPProfile::IsProfileLoaded()
+{
+    return bProfileLoaded;
+}
+
+void MPProfile::MarkProfileLoaded()
+{
+    bProfileLoaded = true;
+}
+
+static FString BuildCompletionString
+(
+    USFXAccomplishmentStorage* const        Storage,
+    USFXAccomplishmentManager const* const  Manager
+)
+{
+    int Version = 22;
+    int Points = 0;
+
+    if (Storage != nullptr)
+    {
+        if (Storage->ChallengeSystemVersionNumber >= 22)
+        {
+            Version = Storage->ChallengeSystemVersionNumber;
+        }
+
+        Points = Storage->CurrentChallengePoints;
+    }
+
+    FString Result = FString::Printf(L"%d,%d", Version, Points);
+
+    if (Manager != nullptr)
+    {
+        for (int const Complete : Manager->AccomplishmentIsComplete)
+        {
+            Result.AppendFormat(L",%d", Complete);
+        }
+    }
+
+    return Result;
+}
 
 // Save pending online-storage changes together with the last acknowledged server value.
 // The original storage uses -1 as GetProfileSettingValue's default value-map ID.
@@ -414,6 +458,7 @@ void MPProfile::Deserialize(IInputStream& Stream)
 
     AccomplishmentStorage->ReadFromStorage(AccomplishmentManager);
     ChallengeStorage::EnsureArrays(AccomplishmentManager);
+    ChallengeStorage::RepairGroupCompletionCounts(AccomplishmentManager);
 
     // Native SetCompletionTimes reads only the original three fields.
     for (int Field = 0; Field < MP_PROFILE_EXTENDED_COMPLETION_FIELD_COUNT; ++Field)
@@ -429,6 +474,7 @@ void MPProfile::Deserialize(IInputStream& Stream)
             MILAN_WARNW(ELOG_MultiProfile, L"invalid extended completion times in profile setting %d",
                         MP_PROFILE_EXTENDED_COMPLETION_FIRST_ID + Field);
     }
+    bProfileLoaded = true;
     SaveManager->RefreshMPData();
 }
 
@@ -801,9 +847,12 @@ FString MPProfile::GetRealReinforcementsString(USFXOnlineSaveGameMP* const Onlin
 
 FString MPProfile::GetRealCompletionString(USFXAccomplishmentStorage* const AccomplishmentStorage, FString const& Fallback) const
 {
-    if (AccomplishmentStorage != nullptr && AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr)
+    if (AccomplishmentStorage != nullptr &&
+        AccomplishmentStorage->CachedOnlinePlayerStorage != nullptr &&
+        AccomplishmentManager != nullptr &&
+        bProfileLoaded)
     {
-        FString const RealString = AccomplishmentStorage->GetCompletion(&AccomplishmentManager->AccomplishmentIsComplete);
+        FString const RealString = BuildCompletionString(AccomplishmentStorage, AccomplishmentManager);
 
         if (!RealString.Empty())
         {

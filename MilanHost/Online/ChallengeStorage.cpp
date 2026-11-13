@@ -106,3 +106,162 @@ void ChallengeStorage::EnsureArrays(USFXAccomplishmentManager* const Manager)
         }
     }
 }
+
+namespace
+{
+
+void ResetGroupChildren(USFXAccomplishmentManager* const Manager, SFXName const GroupName)
+{
+    int const CompleteCount = static_cast<int>(Manager->AccomplishmentIsComplete.Count());
+    int const CompleteTimeCount = static_cast<int>(Manager->AccomplishmentCompletionTimes.Count());
+
+    int Cleared = 0;
+
+    for (FAccomplishment const& Accomplishment : Manager->AccomplishmentData)
+    {
+        if (Accomplishment.ChallengeGroupName == GroupName &&
+            Accomplishment.Name != GroupName &&
+            Accomplishment.bRepeatableChallenge &&
+            Accomplishment.Index >= 0)
+        {
+            if (Accomplishment.Index < CompleteCount && Manager->AccomplishmentIsComplete(Accomplishment.Index) != 0)
+            {
+                Manager->AccomplishmentIsComplete(Accomplishment.Index) = 0;
+                ++Cleared;
+            }
+
+            if (Accomplishment.Index < CompleteTimeCount)
+            {
+                Manager->AccomplishmentCompletionTimes(Accomplishment.Index) = 0;
+            }
+        }
+    }
+
+    if (Cleared > 0)
+    {
+        MILAN_INFOW(ELOG_MultiProfile,
+            L"challenge group '%s': cleared completion for %d reset child challenge(s)",
+            *GroupName.ToString(), Cleared);
+    }
+}
+
+}
+
+void ChallengeStorage::OnGroupCompleted(USFXAccomplishmentManager* const Manager, SFXName const GroupName)
+{
+    if (Manager != nullptr)
+    {
+        for (FAccomplishment const& Group : Manager->AccomplishmentData)
+        {
+            if (Group.Name == GroupName && Group.bRepeatableChallenge && Group.Name == Group.ChallengeGroupName)
+            {
+                ResetGroupChildren(Manager, GroupName);
+                return;
+            }
+        }
+    }
+}
+
+void ChallengeStorage::RepairGroupCompletionCounts(USFXAccomplishmentManager* const Manager)
+{
+    if (Manager != nullptr)
+    {
+        USFXAccomplishmentStorage* const Storage = Manager->AccomplishmentStorage;
+        if (Storage == nullptr) [[unlikely]] return;
+
+        int const CompleteCount = static_cast<int>(Manager->AccomplishmentIsComplete.Count());
+
+        for (FAccomplishment const& Group : Manager->AccomplishmentData)
+        {
+            if (!Group.bRepeatableChallenge || Group.Name != Group.ChallengeGroupName)
+                continue;
+
+            if (Group.Index < 0 || Group.Index >= CompleteCount || Manager->AccomplishmentIsComplete(Group.Index) == 0)
+                continue;
+
+            int ProgressSlot = -1;
+
+            for (FGrinderAccomplishment const& Grinder : Manager->GrinderAccomplishmentData)
+            {
+                if (Grinder.AccomplishmentName == Group.Name)
+                {
+                    for (FAccomplishmentProgress const& Progress : Manager->AccomplishmentProgressData)
+                    {
+                        if (Progress.Name == Grinder.AccomplishmentProgressName)
+                        {
+                            ProgressSlot = Progress.Index;
+                            break;
+                        }
+                    }
+
+                    if (ProgressSlot >= 0)
+                        break;
+                }
+            }
+
+            if (ProgressSlot >= 0 && ProgressSlot < static_cast<int>(Storage->ProgressValues.Count()))
+            {
+                // The group has completed at least once and its shared counter is 0: that is the
+                // post-reset state, where every child count is supposed to be 0. Any leftover counts
+                // are from the pre-fix saves (they were never cleared when the group reset).
+                if (Storage->ProgressValues(ProgressSlot) == 0)
+                {
+                    ResetGroupChildren(Manager, Group.Name);
+                }
+            }
+        }
+    }
+}
+
+void ChallengeStorage::OnGrinderProgressUpdated
+(
+    USFXAccomplishmentManager* const    Manager,
+    SFXName const                       ProgressName,
+    int const                           Progress,
+    bool const                          bProgressUsed
+)
+{
+    if (Manager != nullptr && bProgressUsed)
+    {
+        if (USFXAccomplishmentStorage* const Storage = Manager->AccomplishmentStorage; Storage != nullptr)
+        {
+            int ProgressSlot = -1;
+
+            for (FAccomplishmentProgress const& AccomplishmentProgress : Manager->AccomplishmentProgressData)
+            {
+                if (AccomplishmentProgress.Name == ProgressName)
+                {
+                    ProgressSlot = AccomplishmentProgress.Index;
+                    break;
+                }
+            }
+
+            if (ProgressSlot < 0 ||
+                ProgressSlot >= static_cast<int>(Storage->ProgressValues.Count()) ||
+                Storage->ProgressValues(ProgressSlot) != 0)
+            {
+                return;
+            }
+
+            for (FGrinderAccomplishment const& Grinder : Manager->GrinderAccomplishmentData)
+            {
+                if (ProgressName == Grinder.AccomplishmentProgressName && (Progress <= 0 || Progress >= Grinder.Goal))
+                {
+                    for (FAccomplishment const& Group : Manager->AccomplishmentData)
+                    {
+                        if (Group.Name == Grinder.AccomplishmentName &&
+                            Group.Name == Group.ChallengeGroupName &&
+                            Group.bRepeatableChallenge &&
+                            Group.Index >= 0 &&
+                            Group.Index < static_cast<int>(Manager->AccomplishmentIsComplete.Count()) &&
+                            Manager->AccomplishmentIsComplete(Group.Index) != 0)
+                        {
+                            ResetGroupChildren(Manager, Group.Name);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

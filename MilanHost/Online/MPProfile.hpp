@@ -213,4 +213,7 @@ public:
     static FString const& GetDefaultPlayerName();
     // The name the next Serialize writes.
     static void SetPlayerName(FString const& Name);
+
+    static bool IsProfileLoaded();
+    static void MarkProfileLoaded();
 };
