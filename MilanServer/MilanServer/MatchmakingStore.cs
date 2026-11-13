@@ -61,6 +61,7 @@ public sealed class MatchmakingStore
     long _hostMigrationsCompleted;
     long _hostMigrationsFailed;
     long _joinsFailed;
+    long _blockedVersionRequests;
 
     public MatchmakingStore(IOptions<MilanServerOptions> options, TimeProvider time, ILogger<MatchmakingStore> logger,
         ServerNotice? notice = null)
@@ -79,6 +80,8 @@ public sealed class MatchmakingStore
     {
         if (ValidateGameVersion(request.GameVersion) is { } versionFailure)
             return versionFailure;
+        if (BlockedVersionFailure(request.GameVersion) is { } blockedFailure)
+            return blockedFailure;
         if (ValidateSnapshot(request.State, out LobbySnapshot state) is { } stateFailure)
             return stateFailure;
         if (state.MemberIds!.Count != 0)
@@ -242,6 +245,8 @@ public sealed class MatchmakingStore
     {
         if (ValidateGameVersion(request.GameVersion) is { } versionFailure)
             return versionFailure;
+        if (BlockedVersionFailure(request.GameVersion) is { } blockedFailure)
+            return blockedFailure;
         if (request.MapId < GameSettingIds.AnyMap || request.EnemyModeId < 0 || request.DifficultyId < 0)
             return Failures.Invalid("Search filters must be a setting ID or the matching Any sentinel.");
         if (request.ExcludeLobbyIds is { Count: > MaxExcludedLobbies })
@@ -507,6 +512,8 @@ public sealed class MatchmakingStore
     {
         if (ValidateGameVersion(request.GameVersion) is { } versionFailure)
             return versionFailure;
+        if (BlockedVersionFailure(request.GameVersion) is { } blockedFailure)
+            return blockedFailure;
         if (!Secrets.TryNormalizeInviteCode(request.InviteCode, out string code))
             return Failures.InviteNotFound;
 
@@ -1494,7 +1501,8 @@ public sealed class MatchmakingStore
             _peakPlayers,
             _peakLobbies,
             new StatsTotals(_lobbiesCreated, _lobbiesExpired, _searchesStarted, _searchesMatched, _invitesRedeemed,
-                _joinsCompleted, _hostMigrationsStarted, _hostMigrationsCompleted, _hostMigrationsFailed, _joinsFailed),
+                _joinsCompleted, _hostMigrationsStarted, _hostMigrationsCompleted, _hostMigrationsFailed, _joinsFailed,
+                Interlocked.Read(ref _blockedVersionRequests)),
             versions.OrderByDescending(v => v.Value).ThenBy(v => v.Key, StringComparer.Ordinal).Take(20)
                 .ToDictionary(v => v.Key, v => v.Value),
             suspect,
@@ -1806,6 +1814,19 @@ public sealed class MatchmakingStore
         if (string.IsNullOrEmpty(version) || version.Length > MaxGameVersionLength || version.Any(c => c is < '!' or > '~'))
             return Failures.Invalid($"GameVersion must be 1-{MaxGameVersionLength} printable ASCII characters without spaces.");
         return null;
+    }
+
+    // BlockedGameVersions, from the live settings
+    Failure? BlockedVersionFailure(string version)
+    {
+        if (_notice?.IsBlocked(version) != true)
+        {
+            return null;
+        }
+        Interlocked.Increment(ref _blockedVersionRequests);
+        // This can be spammy for old versions so we don't log it except when debugging
+        _logger.LogDebug("Refused game version {GameVersion}: listed in BlockedGameVersions.", version);
+        return Failures.VersionBlocked;
     }
 
     Failure? ValidateSnapshot(LobbySnapshot state, out LobbySnapshot normalized)

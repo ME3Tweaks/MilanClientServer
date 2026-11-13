@@ -12,7 +12,8 @@ public sealed class ServerNotice : IDisposable
     public const string FallbackLanguage = "INT";
     public const int MaxTextLength = 1000;
 
-    sealed record Snapshot(string ExpectedGameVersion, string Id, IReadOnlyDictionary<string, string> Text, string Signature);
+    sealed record Snapshot(string ExpectedGameVersion, IReadOnlySet<string> Blocked, string Id,
+        IReadOnlyDictionary<string, string> Text, string Signature);
 
     readonly ILogger<ServerNotice> _logger;
     readonly LiveConfigFile? _file;
@@ -44,6 +45,11 @@ public sealed class ServerNotice : IDisposable
     public string ExpectedGameVersion => _current.ExpectedGameVersion;
 
     /// <summary>
+    /// Whether the version may not host, search, or redeem invites (BlockedGameVersions)
+    /// </summary>
+    public bool IsBlocked(string gameVersion) => _current.Blocked.Contains(gameVersion);
+
+    /// <summary>
     /// Get inofrmation for the client
     /// </summary>
     /// <param name="gameVersion"></param>
@@ -54,9 +60,13 @@ public sealed class ServerNotice : IDisposable
         Snapshot current = _current;
         string? latest = current.ExpectedGameVersion.Length > 0 ? current.ExpectedGameVersion : null;
         bool? outdated = null;
-        if (latest != null && gameVersion != null && MatchmakingStore.ValidateGameVersion(gameVersion) == null && CompareVersions(gameVersion, latest) is int order)
+        if (latest != null && gameVersion != null && MatchmakingStore.ValidateGameVersion(gameVersion) == null)
         {
-            outdated = order < 0;
+            // A blocked version must update, whatever its number says.
+            if (current.Blocked.Contains(gameVersion))
+                outdated = true;
+            else if (CompareVersions(gameVersion, latest) is int order)
+                outdated = order < 0;
         }
 
         NoticeText? notice = null;
@@ -116,6 +126,23 @@ public sealed class ServerNotice : IDisposable
             expected = "";
         }
 
+        SortedSet<string> blocked = new(StringComparer.Ordinal);
+        foreach (string? raw in options.BlockedGameVersions)
+        {
+            string version = (raw ?? "").Trim();
+            if (MatchmakingStore.ValidateGameVersion(version) is not null)
+            {
+                logger.LogWarning("Invalid game version presented '{Version}', discarding", version);
+                continue;
+            }
+            blocked.Add(version);
+        }
+        if (expected.Length > 0 && blocked.Contains(expected))
+        {
+            // Sanity Check
+            logger.LogWarning("ExpectedGameVersion '{Version}' is also in BlockedGameVersions, so the current version cannot use matchmaking.", expected);
+        }
+
         SortedDictionary<string, string> texts = new(StringComparer.Ordinal);
         foreach ((string rawLanguage, string? rawText) in options.Notice.Text)
         {
@@ -149,7 +176,7 @@ public sealed class ServerNotice : IDisposable
         if (id.Length == 0)
             id = textHash;
 
-        return new Snapshot(expected, id, texts, $"{expected}|{id}|{textHash}");
+        return new Snapshot(expected, blocked, id, texts, $"{expected}|{string.Join(',', blocked)}|{id}|{textHash}");
     }
 
     // Plain text for a message box: "\n" (as typed in an environment variable) and real line
@@ -178,8 +205,9 @@ public sealed class ServerNotice : IDisposable
 
     void Describe(Snapshot snapshot)
     {
-        _logger.LogInformation("Current game version {Version}; message of the day {Notice}.",
+        _logger.LogInformation("Current game version {Version}; blocked versions {Blocked}; message of the day {Notice}.",
             snapshot.ExpectedGameVersion.Length > 0 ? snapshot.ExpectedGameVersion : "not set",
+            snapshot.Blocked.Count > 0 ? string.Join(", ", snapshot.Blocked) : "none",
             snapshot.Text.Count > 0 ? $"{snapshot.Id} in {string.Join(", ", snapshot.Text.Keys)}" : "none");
     }
 }

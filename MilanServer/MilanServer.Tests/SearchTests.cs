@@ -249,7 +249,9 @@ public sealed class SearchTests : StoreTestBase
     [InlineData("milan-2.0.0", "milan-2.0.0")]
     public void ExpectedGameVersion_IsNamedOnlyToOtherVersions_AndTheSearchStillRuns(string expected, string? named)
     {
+        // The startup and live settings read the same key; the store uses the live one.
         Options.ExpectedGameVersion = expected;
+        Live.Change(new MilanLiveOptions { ExpectedGameVersion = expected });
         CreateSearchResponse search = StartSearch();
         Assert.Equal(named, search.ExpectedGameVersion);
         Assert.Equal(SearchState.Searching, search.Status.State);

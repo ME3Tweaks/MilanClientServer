@@ -11,7 +11,12 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // config/milan.json is optional and reloads while the server runs. In a container it is a
 // mounted folder. It overrides appsettings.json. Command line and environment variables override the config file.
-LiveConfigFile liveConfig = new() { Path = LiveConfigFile.RelativePath, Optional = true, ReloadOnChange = true };
+LiveConfigFile liveConfig = new() {
+    Path = LiveConfigFile.RelativePath,
+    Optional = true,
+    ReloadOnChange = true
+};
+
 ((IConfigurationBuilder)builder.Configuration).Add(liveConfig);
 {
     IList<IConfigurationSource> sources = builder.Configuration.Sources;

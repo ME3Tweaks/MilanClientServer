@@ -5,32 +5,6 @@ namespace MilanServer.Tests;
 
 public sealed class ServerNoticeTests
 {
-    // Stands in for config/milan.json being edited while the server runs.
-    sealed class LiveOptions(MilanLiveOptions value) : IOptionsMonitor<MilanLiveOptions>
-    {
-        Action<MilanLiveOptions, string?>? _listener;
-
-        public MilanLiveOptions CurrentValue { get; private set; } = value;
-        public MilanLiveOptions Get(string? name) => CurrentValue;
-
-        public IDisposable OnChange(Action<MilanLiveOptions, string?> listener)
-        {
-            _listener = listener;
-            return new Unsubscribe(() => _listener = null);
-        }
-
-        public void Change(MilanLiveOptions value)
-        {
-            CurrentValue = value;
-            _listener?.Invoke(value, null);
-        }
-
-        sealed class Unsubscribe(Action dispose) : IDisposable
-        {
-            public void Dispose() => dispose();
-        }
-    }
-
     static MilanLiveOptions Settings(string expected = "", string id = "", params (string Language, string Text)[] texts)
     {
         MilanLiveOptions options = new() { ExpectedGameVersion = expected };
@@ -41,6 +15,21 @@ public sealed class ServerNoticeTests
     }
 
     static ServerNotice Notice(MilanLiveOptions options) => new(new LiveOptions(options), NullLogger<ServerNotice>.Instance);
+
+    [Fact]
+    public void BlockedVersions_AreExact_AndToldToUpdate()
+    {
+        MilanLiveOptions options = Settings("1.4.0");
+        options.BlockedGameVersions = [" 1.0.34 ", "1.5.0", "has space", ""];
+        ServerNotice notice = Notice(options);
+
+        Assert.True(notice.IsBlocked("1.0.34"));
+        Assert.False(notice.IsBlocked("1.0.3"));
+        Assert.False(notice.IsBlocked("has space"));
+        // Blocked means update, even for a number above the current version.
+        Assert.Equal(true, notice.For("1.5.0", "INT").Outdated);
+        Assert.Equal(false, notice.For("1.4.0", "INT").Outdated);
+    }
 
     [Theory]
     [InlineData("1.3.2", "1.4.0", -1)]

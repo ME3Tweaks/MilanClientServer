@@ -306,7 +306,9 @@ public sealed record StatsTotals(
     long HostMigrationsStarted,
     long HostMigrationsCompleted,
     long HostMigrationsFailed,
-    long JoinsFailed = 0);
+    long JoinsFailed = 0,
+    // Hosting, search, and invite requests refused for a version in BlockedGameVersions
+    long BlockedVersionRequests = 0);
 
 public sealed record ServerError(string Code, string Message);
 

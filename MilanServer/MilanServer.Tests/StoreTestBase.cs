@@ -14,9 +14,13 @@ public abstract class StoreTestBase
     protected FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 9, 25, 12, 0, 0, TimeSpan.Zero));
     protected MilanServerOptions Options { get; } = new();
 
+    // The live settings (config/milan.json); Live.Change edits them while the store runs.
+    protected LiveOptions Live { get; } = new(new MilanLiveOptions());
+
     MatchmakingStore? _store;
     protected MatchmakingStore Store =>
-        _store ??= new MatchmakingStore(Microsoft.Extensions.Options.Options.Create(Options), Time, NullLogger<MatchmakingStore>.Instance);
+        _store ??= new MatchmakingStore(Microsoft.Extensions.Options.Options.Create(Options), Time, NullLogger<MatchmakingStore>.Instance,
+            new ServerNotice(Live, NullLogger<ServerNotice>.Instance));
 
     protected static LobbySnapshot State(
         long revision = 1,

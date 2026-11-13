@@ -138,6 +138,8 @@ public sealed class MilanReachabilityOptions
 public sealed class MilanLiveOptions
 {
     public string ExpectedGameVersion { get; set; } = "";
+    // Exact game versions that may not host, search, or redeem invites
+    public string[] BlockedGameVersions { get; set; } = [];
     public MilanNoticeOptions Notice { get; set; } = new();
 }
 

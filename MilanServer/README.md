@@ -82,7 +82,8 @@ joins with a different value return `409 version_mismatch`. The server logs it f
 lobby and search. Set `Milan__ExpectedGameVersion` to the current version, which most of the
 server's players run: a search from any other version still runs, but its response carries
 `expectedGameVersion` so the game can warn that few players will match, and `/v1/info` tells
-an older game to update (see Message of the day). It is independent of the
+an older game to update (see Message of the day). Versions in `BlockedGameVersions` get no
+matchmaking at all (`403 version_blocked`). The game version is independent of the
 MilanHost ASI release. On each launch, MilanHost reads the second physical line of
 `BioGame/DLC/DLC_MOD_ProjectMilan/_metacmm.txt` relative to the running game's root.
 Only the DLC folder identity is fixed; the installed version is read from disk.
@@ -136,17 +137,50 @@ observed addresses. MilanHost further restricts private targets to local subnets
 on-link VPN routes and rejects gateways, broadcasts, and remote loopback. Same-PC loopback
 testing remains supported when the matchmaker itself resolves to loopback.
 
-### Message of the day and the current version
+### Hosts players cannot reach
+
+Some hosts' networks block incoming connections, so every player quick match sends them fails.
+The server counts those failed joins per lobby and stops sending players there.
+
+- **A failed join** is a player from another network whose reservation runs out without the
+  host's roster admitting it (and without a `joined` notice), or whose game searches again with
+  the lobby in `excludeLobbyIds` within two minutes of giving it up. MilanHost does that only when
+  the host never answered. Joins between players behind the same public address, and members
+  moving to a new host, never count.
+- Each player counts once per lobby. A player who failed on `JoinerFailureLimit` lobbies and
+  joined none counts nowhere, since the problem is likely theirs.
+- **One player from another network getting in** (the host's roster admits them) clears the
+  lobby's failures. Failures also expire after `FailureSeconds`.
+- A host that closes such a lobby and hosts again from the same address keeps its failures.
+- **Quick match:** a lobby nobody from another network has joined takes one search joiner at a
+  time. `Suspect` lobbies are offered after all others. `Unreachable` lobbies are offered only
+  when nothing else fits, at most once every `ProbeSeconds`. Invites are never held back.
+- The host's state response reports `reachability` (`Proven`, `Unknown`, `Suspect`,
+  `Unreachable`) and `failedJoins`, for a game that can warn its player. The log names each
+  failure and each lobby that becomes `Suspect` or `Unreachable`.
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `Milan__Reachability__Enabled` | true | `false` keeps the counts but leaves quick match unchanged |
+| `Milan__Reachability__SuspectAfterFailures` | 2 | Failed players before a lobby is `Suspect` |
+| `Milan__Reachability__UnreachableAfterFailures` | 4 | Failed players before a lobby is `Unreachable` |
+| `Milan__Reachability__ProbeSeconds` | 180 | Minimum time between tests of an `Unreachable` lobby |
+| `Milan__Reachability__FailureSeconds` | 900 | How long a failed join counts |
+| `Milan__Reachability__JoinerFailureLimit` | 5 | Lobbies a player may fail on before their failures stop counting |
+| `Milan__Reachability__UnprovenPendingJoins` | 1 | Search joiners still connecting that an unproven lobby may have |
+
+### Message of the day, the current version, and blocked versions
 
 `config/milan.json` beside the server is optional and applies while the server runs, with no
 restart, so lobbies are not dropped. `deploy.sh` mounts the server folder's `config/` there, and
 `compose.yaml` mounts `./config`. It takes the same settings as `appsettings.json`, but only
-these two apply live; any other setting in it is read at startup.
+these three apply live; any other setting in it is read at startup.
 
 ```json
 {
   "Milan": {
     "ExpectedGameVersion": "1.4.0",
+    "BlockedGameVersions": [ "1.0.34" ],
     "Notice": {
       "Id": "maint-1109",
       "Text": {
@@ -168,9 +202,15 @@ these two apply live; any other setting in it is read at startup.
   Without one, the server makes one from the text, so any edit shows it again.
 - Versions compare by their leading numbers: `1.3.2` is older than `1.4.0`, and a newer test
   build is never told to update.
+- `BlockedGameVersions` turns matchmaking off for those exact versions, for releases that cannot
+  show a notice. Hosting, quick match, and invites answer `403 version_blocked`: a blocked game's
+  lobby is not listed and it retries at most once a minute, quick match reports the server
+  unavailable, and an invite shows the error code. Matches already under way are left alone. A
+  blocked version that sends its version to `/v1/info` is told to update. `details.totals.blockedVersionRequests`
+  in `/v1/stats` counts the refusals.
 - An edit that does not parse, or a value that is not valid, is ignored with a warning in the
-  log, and the last good settings stay in effect. The log names the current version and notice
-  each time they change.
+  log, and the last good settings stay in effect. The log names the current version, blocked
+  versions, and notice each time they change.
 - Environment variables (`Milan__Notice__Text__INT=…`) and the command line override the file,
   but take effect only when the container is recreated.
 
@@ -190,8 +230,9 @@ It is off until one of these is set:
 - **Summary:** `players`, `searching`, `publicLobbies`, `openLobbies`, and with presence
   `idle` and `online`.
 - **Full** adds `details`: lobbies by privacy and phase, capacity, joins and host
-  migrations under way, peaks, totals since the server started, and lobbies per game
-  version.
+  migrations under way, peaks, totals since the server started (including `joinsFailed`),
+  lobbies per game version, and `suspectLobbies` and `unreachableLobbies` (see Hosts players
+  cannot reach).
 - `players` are those in registered lobbies, as their hosts report them. A 1-player lobby
   is never registered, and a player in the menus is in no lobby, so without presence the
   server cannot see them.
@@ -357,6 +398,7 @@ Credentials use `Authorization: Bearer <key>`.
 State reports carry a host-chosen revision that must increase. An older revision is
 acknowledged with `stale: true` and ignored. Resending the current revision with the
 same content is a heartbeat. The same revision with different content is `revision_conflict`.
+Every state response also carries the lobby's `reachability` and `failedJoins`.
 
 Quick match holds difficulty fixed. It widens from the exact map and enemy to any
 map after `MapWidenSeconds`, then to any enemy after `EnemyWidenSeconds`, and ends
@@ -366,7 +408,9 @@ progress are candidates straight away. Otherwise they wait `InProgressAfterSecon
 (10), even if those lobbies' map or enemy does not fit yet, and lobbies still rank first
 after that. Among
 lobbies, the one that has waited longest is offered first; a lobby that returns from a
-match starts waiting again. Private
+match starts waiting again. Lobbies players failed to connect to come after all others, and
+one that a player from another network has joined comes before one nobody has (see Hosts
+players cannot reach). Private
 lobbies, extraction, and complete matches never match a search. Invites work for
 private lobbies and during extraction.
 

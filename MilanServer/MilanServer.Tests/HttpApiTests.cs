@@ -323,6 +323,26 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
     }
 
     [Fact]
+    public async Task BlockedVersion_IsRefusedMatchmaking_AndToldToUpdate()
+    {
+        using WebApplicationFactory<Program> blocking = _factory.WithWebHostBuilder(builder => builder
+            .UseSetting("Milan:ExpectedGameVersion", "milan-2.0.0")
+            .UseSetting("Milan:BlockedGameVersions:0", Version));
+        HttpClient client = blocking.CreateClient();
+
+        HttpResponseMessage search = await client.PostAsJsonAsync("/v1/searches", new SearchRequest(Version), Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, search.StatusCode);
+        Assert.Equal("version_blocked", (await search.Content.ReadFromJsonAsync<ServerError>(Ct))?.Code);
+        HttpResponseMessage host = await client.PostAsJsonAsync("/v1/lobbies", new CreateLobbyRequest(Version, State()), Ct);
+        Assert.Equal(HttpStatusCode.Forbidden, host.StatusCode);
+
+        ServerInfo info = (await client.GetFromJsonAsync<ServerInfo>($"/v1/info?gameVersion={Version}", Ct))!;
+        Assert.True(info.Outdated);
+        Assert.Equal(HttpStatusCode.Created,
+            (await client.PostAsJsonAsync("/v1/searches", new SearchRequest("milan-2.0.0"), Ct)).StatusCode);
+    }
+
+    [Fact]
     public async Task UdpBinding_ReachesJoinersAndWakesHostPoll()
     {
         HttpClient client = _factory.CreateClient();

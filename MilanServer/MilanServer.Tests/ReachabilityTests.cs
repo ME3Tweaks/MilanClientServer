@@ -177,12 +177,13 @@ public sealed class ReachabilityTests : StoreTestBase
     public void PlayerWhoFailsEverywhere_DoesNotCount()
     {
         CreateLobbyResponse a = Host();
-        CreateLobbyResponse b = Host(from: OtherJoinerIp);
-        CreateLobbyResponse c = Host(from: Player(50));
+        List<CreateLobbyResponse> lobbies = [a];
+        for (int n = 1; n < Options.Reachability.JoinerFailureLimit; n++)
+            lobbies.Add(Host(from: Player(50 + n)));
 
-        // One player fails on all three lobbies in turn.
+        // One player fails on JoinerFailureLimit lobbies in turn.
         List<string> excluded = [];
-        foreach (CreateLobbyResponse lobby in new[] { a, b, c })
+        foreach (CreateLobbyResponse lobby in lobbies)
         {
             CreateSearchResponse search = StartSearch(from: JoinerIp, exclude: [.. excluded]);
             Assert.Equal(lobby.LobbyId, search.Status.Reservation?.Lobby.LobbyId);
