@@ -4,6 +4,7 @@
 #include <cwchar>
 
 #include "Base/IOUtils.hpp"
+#include "Online/ChallengeStorage.hpp"
 #include "Online/MPProfile.hpp"
 
 // The game has no profile field for the player name, so it is cached here between load and save.
@@ -412,6 +413,8 @@ void MPProfile::Deserialize(IInputStream& Stream)
     }
 
     AccomplishmentStorage->ReadFromStorage(AccomplishmentManager);
+    ChallengeStorage::EnsureArrays(AccomplishmentManager);
+
     // Native SetCompletionTimes reads only the original three fields.
     for (int Field = 0; Field < MP_PROFILE_EXTENDED_COMPLETION_FIELD_COUNT; ++Field)
     {
@@ -436,6 +439,8 @@ void MPProfile::Serialize(IOutputStream& Stream) const
 
     MILAN_CHECKW(OnlineSave != nullptr, L"");
     MILAN_CHECKW(AccomplishmentStorage != nullptr, L"");
+
+    ChallengeStorage::EnsureArrays(AccomplishmentManager);
 
     int SettingsCount = 0;
 

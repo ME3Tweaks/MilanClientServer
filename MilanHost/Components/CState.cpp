@@ -4,6 +4,7 @@
 #include "Components/CMatchmaking.hpp"
 #include "Components/CState.hpp"
 #include "Engine/Intercept.hpp"
+#include "Online/ChallengeStorage.hpp"
 #include "Online/MatchmakingNet.hpp"
 #include "Online/MPProfile.hpp"
 #include "Shell/ClientConfig.hpp"
@@ -29,6 +30,8 @@ namespace
             MILAN_WARNW(ELOG_MultiProfile, L"local profile save failed: storage is uninitialized");
             return false;
         }
+
+        ChallengeStorage::EnsureArrays(Engine->AccomplishmentManager);
 
         MPProfile Profile{ Engine };
         MemoryOutputStream ProfileStream{ 204800 };
@@ -347,6 +350,15 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
             MILAN_WARNW(ELOG_MultiProfile, L"cannot add current reward profile setting before storage is initialized");
     }
 
+    static SFXName s_sfxAccomplishmentManager{};
+    if (s_sfxAccomplishmentManager == SFXName()) [[unlikely]]
+        s_sfxAccomplishmentManager = SFXName(L"SFXAccomplishmentManager", 0);
+
+    if (Stack->Node->Outer != nullptr && Stack->Node->Outer->Name == s_sfxAccomplishmentManager)
+    {
+        ChallengeStorage::EnsureArrays(Context->Cast<USFXAccomplishmentManager>());
+    }
+
     return true;
 }
 
@@ -415,6 +427,13 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
         Profile.Deserialize(ProfileStream);
 
         MILAN_INFOW(ELOG_MultiProfile, L"profile loaded from %s in %.3f ms", *ProfilePath, ProfileTimer.GetMilliseconds());
+    }
+
+    static FunctionStructIntercept SFXAccomplishmentManager_LoadStorageData{};
+    if (SFXAccomplishmentManager_LoadStorageData.Applies(Stack->Node, L"Function SFXGame.SFXAccomplishmentManager.LoadStorageData"))
+    {
+        MILAN_TRACEW(ELOG_MultiProfile, L"intercepted SFXGame.SFXSaveManagerMP.LoadStorageData:");
+        ChallengeStorage::EnsureArrays(Context->Cast<USFXAccomplishmentManager>());
     }
 }
 
