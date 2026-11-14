@@ -27,6 +27,7 @@ public:
     /** Executes some code when a UWorld::Tick hook is triggered. */
     void On_UWorld_Tick(UWorld* Context, int Unknown, float Delta);
 
+    static void CommitProfileImmediately();
 };
 
 static_assert(ComponentType<CState>);

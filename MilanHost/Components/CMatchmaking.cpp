@@ -21,6 +21,7 @@
 
 #include "Components/CCommands.hpp"
 #include "Components/CMatchmaking.hpp"
+#include "Components/CState.hpp"
 #include "Engine/ExtObject.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
@@ -2852,25 +2853,46 @@ namespace
     // What the lobby's Exit (SFXGUI_MPLobby.ConfirmExitLobby) and the pause menu's Exit Match
     // (SFXGUI_MPPauseMenu.ConfirmExitPopupCallback) do: the match saves accomplishments, then
     // both leave the online game and disconnect, which returns to the multiplayer menu.
-    void LeaveCurrentGame(MatchmakingState& S)
+    void LeaveCurrentGame(MatchmakingState& State)
     {
-        static SFXName const k_lobbyGri{ L"SFXGRIMP_Lobby", 0 };
         auto* const Engine = static_cast<USFXEngine*>(GameEngine());
-        AWorldInfo* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
-        bool const InMatch = WorldInfo != nullptr && WorldInfo->GRI != nullptr && !IsInstanceOf(WorldInfo->GRI, k_lobbyGri);
-        if (InMatch && Engine->AccomplishmentManager != nullptr) {
+        auto* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
+        auto* const SaveManager = Engine != nullptr ? Engine->MPSaveManager : nullptr;
+
+        if (WorldInfo != nullptr && WorldInfo->GRI != nullptr &&
+            !IsInstanceOf(WorldInfo->GRI, SFXName(L"SFXGRIMP_Lobby", 0)) &&
+            Engine->AccomplishmentManager != nullptr)
+        {
             Engine->AccomplishmentManager->Save();
         }
 
-        TypedObjectIterator<USFXOnlineComponentBlazeGame, true, false> Iter{};
-        if (Iter)
+        if (SaveManager != nullptr && SaveManager->bInitialized && SaveManager->OnlineSave != nullptr)
+        {
+            if (SaveManager->bDisableSaving)
+            {
+                MILAN_WARNW(ELOG_Matchmaking, L"LeaveCurrentGame: saving is disabled");
+            }
+            else if (SaveManager->m_bSaveInProgress)
+            {
+                CState::CommitProfileImmediately();
+            }
+            else
+            {
+                SaveManager->SaveRecords(TRUE, FScriptDelegate{});
+            }
+        }
+
+        if (TypedObjectIterator<USFXOnlineComponentBlazeGame, true, false> Iter{}; Iter)
         {
             (*Iter)->LeaveGame();
         }
 
-        Leave(S);
+        Leave(State);
+
         if (!RunConsoleCommand(L"disconnect"))
+        {
             MILAN_ERRORW(ELOG_Matchmaking, L"no local player controller to run 'disconnect'");
+        }
     }
 
     // Are we in the main menu level?

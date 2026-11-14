@@ -4,6 +4,7 @@
 #include "Components/CMatchmaking.hpp"
 #include "Components/CState.hpp"
 #include "Engine/Intercept.hpp"
+#include "Online/ChallengeStorage.hpp"
 #include "Online/MatchmakingNet.hpp"
 #include "Online/MPProfile.hpp"
 #include "Shell/ClientConfig.hpp"
@@ -29,6 +30,8 @@ namespace
             MILAN_WARNW(ELOG_MultiProfile, L"local profile save failed: storage is uninitialized");
             return false;
         }
+
+        ChallengeStorage::EnsureArrays(Engine->AccomplishmentManager);
 
         MPProfile Profile{ Engine };
         MemoryOutputStream ProfileStream{ 204800 };
@@ -302,6 +305,19 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
     if (HandleNetConfigBridge(Stack, Result))
         return false;
 
+    if (Stack->Node->Name.ToString() == L"ConfirmExitLobby" ||
+        Stack->Node->Name.ToString() == L"ConfirmExitPopupCallback" ||
+        Stack->Node->Name.ToString() == L"ExitMultiplayer")
+    {
+        if (MPProfile::IsProfileLoaded())
+        {
+            MILAN_INFOW(ELOG_MultiProfile,
+                L"saving profile before exit function '%s'",
+                *Stack->Node->Name.ToString());
+            SaveLocalProfile();
+        }
+    }
+
     // Ensure name is always the profile name, falling back to Windows account as last resort
     static bool bLoggedWindowsUserName = false;
     static bool bLoggedProfilePlayerName = false;
@@ -345,6 +361,25 @@ bool CState::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* cons
             AccomplishmentStorage->CachedOnlinePlayerStorage->AddSettingInt(CSF_CurrentReward);
         else
             MILAN_WARNW(ELOG_MultiProfile, L"cannot add current reward profile setting before storage is initialized");
+    }
+
+    static SFXName s_sfxAccomplishmentManager{};
+    if (s_sfxAccomplishmentManager == SFXName()) [[unlikely]]
+        s_sfxAccomplishmentManager = SFXName(L"SFXAccomplishmentManager", 0);
+
+    if (Stack->Node->Outer != nullptr && Stack->Node->Outer->Name == s_sfxAccomplishmentManager)
+    {
+        ChallengeStorage::EnsureArrays(Context->Cast<USFXAccomplishmentManager>());
+    }
+
+    if (MPProfile::IsProfileLoaded())
+    {
+        static FunctionStructIntercept SFXAccomplishmentStorage_ReadFromStorage{};
+        if (SFXAccomplishmentStorage_ReadFromStorage.Applies(Stack->Node, L"Function SFXGame.SFXAccomplishmentStorage.ReadFromStorage"))
+        {
+            MILAN_INFOW(ELOG_MultiProfile, L"skipping ReadFromStorage: profile already loaded");
+            return false;
+        }
     }
 
     return true;
@@ -391,34 +426,89 @@ void CState::On_UObject_ProcessInternal_Post(UObject* const Context, FFrame* con
         SaveLocalProfile();
     }
 
-    // This needs to be done after ProcessInternal is called so that OnlineSave and friends will have been created.
     static FunctionStructIntercept SFXSaveManagerMP_Initialize{};
     if (SFXSaveManagerMP_Initialize.Applies(Stack->Node, L"Function SFXGame.SFXSaveManagerMP.Initialize"))
     {
+        static USFXSaveManagerMP* s_loadedSaveManager = nullptr;
+        static USFXOnlineSaveGameMP* s_loadedOnlineSave = nullptr;
+
         MILAN_TRACEW(ELOG_MultiProfile, L"intercepted SFXGame.SFXSaveManagerMP.Initialize:");
 
-        MPProfile Profile{ (*GEngine)->Cast<USFXEngine>() };
-        Profile.PrepareCharacterStorage();
+        auto* const Engine = (*GEngine)->Cast<USFXEngine>();
+        auto* const SaveManager = Context != nullptr ? Context->Cast<USFXSaveManagerMP>() : (Engine != nullptr ? Engine->MPSaveManager : nullptr);
+        auto* const OnlineSave = SaveManager != nullptr ? SaveManager->OnlineSave : nullptr;
 
-        FString const ProfilePath = MPProfile::GetLoadProfilePathStatic();
-        ::game::vector<BYTE> ProfileBuffer{};
-
-        if (!::ReadFileFull(ProfilePath, ProfileBuffer))
+        if (OnlineSave != nullptr &&
+            SaveManager == s_loadedSaveManager &&
+            OnlineSave == s_loadedOnlineSave)
         {
-            MILAN_WARNW(ELOG_MultiProfile, L"profile '%s' is empty or missing, skipping deserialization", *ProfilePath);
-            return;
+            MILAN_INFOW(ELOG_MultiProfile, L"profile already loaded for this save manager; skipping deserialization");
+            ChallengeStorage::EnsureArrays(Engine != nullptr ? Engine->AccomplishmentManager : nullptr);
         }
+        else
+        {
+            MPProfile Profile{ Engine };
+            Profile.PrepareCharacterStorage();
 
-        ::RelativeTimer ProfileTimer{};
+            FString const ProfilePath = MPProfile::GetLoadProfilePathStatic();
+            ::game::vector<BYTE> ProfileBuffer{};
 
-        MemoryInputStream ProfileStream{ std::move(ProfileBuffer) };
-        Profile.Deserialize(ProfileStream);
+            if (!::ReadFileFull(ProfilePath, ProfileBuffer))
+            {
+                MILAN_WARNW(ELOG_MultiProfile, L"profile '%s' is empty or missing, skipping deserialization", *ProfilePath);
+                MPProfile::MarkProfileLoaded();
+            }
+            else
+            {
+                ::RelativeTimer ProfileTimer{};
+                MemoryInputStream ProfileStream{ std::move(ProfileBuffer) };
+                Profile.Deserialize(ProfileStream);
+                MILAN_INFOW(ELOG_MultiProfile, L"profile loaded from %s in %.3f ms", *ProfilePath, ProfileTimer.GetMilliseconds());
+            }
 
-        MILAN_INFOW(ELOG_MultiProfile, L"profile loaded from %s in %.3f ms", *ProfilePath, ProfileTimer.GetMilliseconds());
+            s_loadedSaveManager = SaveManager;
+            s_loadedOnlineSave = OnlineSave;
+        }
+    }
+
+    static FunctionStructIntercept SFXAccomplishmentManager_LoadStorageData{};
+    if (SFXAccomplishmentManager_LoadStorageData.Applies(Stack->Node, L"Function SFXGame.SFXAccomplishmentManager.LoadStorageData"))
+    {
+        ChallengeStorage::EnsureArrays(Context->Cast<USFXAccomplishmentManager>());
+    }
+
+    static FunctionStructIntercept SFXAccomplishmentManager_SetAccomplishmentCompleted{};
+    if (SFXAccomplishmentManager_SetAccomplishmentCompleted.Applies(Stack->Node, L"Function SFXGame.SFXAccomplishmentManager.SetAccomplishmentCompleted"))
+    {
+        auto* const Manager = Context->Cast<USFXAccomplishmentManager>();
+        auto const* const Parms = reinterpret_cast<USFXAccomplishmentManager_execSetAccomplishmentCompleted_Parms const*>(Stack->Locals);
+        if (Manager != nullptr && Parms != nullptr)
+        {
+            ChallengeStorage::OnGroupCompleted(Manager, Parms->AccomplishmentName);
+        }
+    }
+
+    static FunctionStructIntercept SFXAccomplishmentManager_SetGrinderProgress{};
+    if (SFXAccomplishmentManager_SetGrinderProgress.Applies(Stack->Node, L"Function SFXGame.SFXAccomplishmentManager.SetGrinderAccomplishmentProgressWithUpdate"))
+    {
+        auto const* const Parms = reinterpret_cast<USFXAccomplishmentManager_execSetGrinderAccomplishmentProgressWithUpdate_Parms const*>(Stack->Locals);
+        if (Parms != nullptr) [[likely]]
+        {
+            ChallengeStorage::OnGrinderProgressUpdated(
+                Context->Cast<USFXAccomplishmentManager>(),
+                Parms->AccomplishmentProgressName,
+                Parms->Progress,
+                Parms->ReturnValue != 0);
+        }
     }
 }
 
 void CState::On_UWorld_Tick(UWorld* const Context, int const Unknown, float const Delta)
 {
     MILAN_UNUSED_3(Context, Unknown, Delta);
+}
+
+void CState::CommitProfileImmediately()
+{
+    SaveLocalProfile();
 }
