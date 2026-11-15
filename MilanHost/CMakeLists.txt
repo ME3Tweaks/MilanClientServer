@@ -33,6 +33,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Components/CProfilers.hpp
   ${PROJ_FOLDER}/Components/CRenderdoc.cpp
   ${PROJ_FOLDER}/Components/CRenderdoc.hpp
+  ${PROJ_FOLDER}/Components/CScreenshots.cpp
+  ${PROJ_FOLDER}/Components/CScreenshots.hpp
   ${PROJ_FOLDER}/Components/CState.cpp
   ${PROJ_FOLDER}/Components/CState.hpp
   ${PROJ_FOLDER}/Components/CConstants.cpp
@@ -66,6 +68,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Engine/ConsolePipe.hpp
   ${PROJ_FOLDER}/Engine/MenuScenes.cpp
   ${PROJ_FOLDER}/Engine/MenuScenes.hpp
+  ${PROJ_FOLDER}/Engine/TransparentRender.cpp
+  ${PROJ_FOLDER}/Engine/TransparentRender.hpp
   ${PROJ_FOLDER}/Misc/GuidCacheUtils.cpp
   ${PROJ_FOLDER}/Misc/GuidCacheUtils.hpp
   ${PROJ_FOLDER}/NetProf/NetProfDecls.hpp
@@ -101,8 +105,6 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Shell/CmdArgs.hpp
   ${PROJ_FOLDER}/Shell/Entry.cpp
   ${PROJ_FOLDER}/Shell/Entry.hpp
-  ${PROJ_FOLDER}/fpng/fpng.h
-  ${PROJ_FOLDER}/fpng/fpng.cpp
   ${PROJ_FOLDER}/Version/MilanHost.rc
   ${PROJ_FOLDER}/Version/SharedVersion.h
   ${PROJ_FOLDER}/Assets/icon.ico
@@ -111,7 +113,7 @@ set (PROJ_SOURCES
 
 set (PROJ_LINKS
   LESDK-LE3
-  nlohmann-json renderdoc-api tomlplusplus Zydis
+  fpng nlohmann-json renderdoc-api tomlplusplus Zydis
   d3d11.lib dxgi.lib dxguid.lib
   Ws2_32.lib Winhttp.lib Bcrypt.lib Iphlpapi.lib Shell32.lib
 )

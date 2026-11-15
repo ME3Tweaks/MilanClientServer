@@ -7,6 +7,27 @@
 # assume build system, and neither of them provide CMakeLists.txt
 
 
+# ! fpng target.
+# ========================================
+
+set (FPNG_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/fpng")
+set (FPNG_TARGET "fpng")
+
+set (FPNG_SOURCES
+  ${FPNG_FOLDER}/fpng.cpp
+  ${FPNG_FOLDER}/fpng.h
+)
+
+add_library (${FPNG_TARGET} STATIC ${FPNG_SOURCES})
+set_target_properties (${FPNG_TARGET} PROPERTIES FOLDER "ThirdParty")
+source_group (TREE "${FPNG_FOLDER}" FILES ${FPNG_SOURCES})
+
+target_compile_definitions (${FPNG_TARGET} PRIVATE ${MILAN_COMPILE_DEFINITIONS})
+target_compile_options (${FPNG_TARGET} PRIVATE ${MILAN_COMPILE_OPTIONS})
+target_include_directories (${FPNG_TARGET} PUBLIC ${FPNG_FOLDER})
+target_link_options (${FPNG_TARGET} PUBLIC ${MILAN_LINK_OPTIONS})
+
+
 # ! ImGui target.
 # ========================================
 
@@ -87,7 +108,6 @@ target_include_directories (${RENDERDOC_TARGET} INTERFACE ${CMAKE_CURRENT_SOURCE
 set (TOMLPLUSPLUS_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/tomlplusplus")
 set (TOMLPLUSPLUS_SOURCE "${TOMLPLUSPLUS_FOLDER}/toml.hpp")
 set (TOMLPLUSPLUS_TARGET "tomlplusplus")
-
 
 add_library (${TOMLPLUSPLUS_TARGET} INTERFACE ${TOMLPLUSPLUS_SOURCE})
 set_target_properties (${TOMLPLUSPLUS_TARGET} PROPERTIES FOLDER "ThirdParty")
