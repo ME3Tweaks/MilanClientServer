@@ -122,6 +122,8 @@ if (MILAN_ENABLE_IMGUI)
   list (APPEND PROJ_SOURCES
     ${PROJ_FOLDER}/Components/CImgui.cpp
     ${PROJ_FOLDER}/Components/CImgui.hpp
+    ${PROJ_FOLDER}/Engine/ImGuiInputHooks.cpp
+    ${PROJ_FOLDER}/Engine/ImGuiInputHooks.hpp
   )
 
   list (APPEND PROJ_LINKS

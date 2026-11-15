@@ -203,14 +203,20 @@ extern bool gb_logSerializeObject;
 
 // ! Miscellaneous functions / methods.
 // ========================================
+
 void ApplyIconToWindow(HWND window);
 using t_CreateWindowExW = HWND(WINAPI)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
 extern t_CreateWindowExW* CreateWindowExW_orig;
 HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
 
 using t_WndProc = LRESULT __stdcall(HWND, UINT, WPARAM, LPARAM);
+/**
+ * Trampoline to the engine's static WndProc (see GLOBAL_WNDPROC_RVA) while the hook is installed.
+ * CImgui::Terminate repoints it at the engine function after unhooking.
+ */
 extern t_WndProc* WndProc_orig;
 
+/** Detour installed on the engine's WndProc itself, see CGlobals::InitWindowProc. */
 LRESULT __stdcall WndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 using t_IDXGISwapChain_Present = HRESULT __stdcall(IDXGISwapChain*, UINT, UINT);
