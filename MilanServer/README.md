@@ -228,3 +228,6 @@ The server must see each player's real address and UDP port:
 
 Without `--push` it writes `dist/milanserver-<version>-linux-<arch>.tar.gz` for
 `docker load`. Without `--version` the version is the current commit.
+
+## License
+MilanServer specifically is licensed as GPLv3.
