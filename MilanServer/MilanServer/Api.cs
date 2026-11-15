@@ -2,9 +2,7 @@ using Microsoft.Extensions.Options;
 
 namespace MilanServer;
 
-// v1 HTTP control API. Credentials travel as "Authorization: Bearer <key>": the host
-// key for lobby routes, the search key for search routes, and the join key for
-// reservation routes. Deploy behind TLS on the Internet because these are bearer secrets.
+// v1 HTTP control API. Credentials travel as "Authorization: Bearer <key>"
 public static class Api
 {
     public const int ProtocolVersion = 2;
@@ -12,8 +10,11 @@ public static class Api
     public const string RedeemPolicy = "redeem";
     public const string AccessKeyHeader = "X-Milan-Access-Key";
 
-    // Milan:AccessKey: every /v1 request but /v1/stats, which has its own token, must carry
-    // the key. Rejected requests still count against the rate limits.
+    /// <summary>
+    /// Checks if the milan access key is used by this request and errors out if it is missing
+    /// </summary>
+    /// <param name="app"></param>
+    /// <returns></returns>
     public static IApplicationBuilder UseMilanAccessKey(this IApplicationBuilder app)
     {
         string configured = app.ApplicationServices.GetRequiredService<IOptions<MilanServerOptions>>().Value.AccessKey;
@@ -54,8 +55,8 @@ public static class Api
                 o.Stats.Presence ? o.Stats.PresenceSeconds : 0, latest, outdated, text);
         });
 
-        // Counts for a dashboard or a "players online" display. Milan:Stats:Public sets what
-        // anyone sees, and Milan:Stats:Token always sees everything.
+        // Counts for a dashboard or a "players online" display
+        // Milan:Stats:Public sets what unauthenticated sees, and Milan:Stats:Token always sees everything.
         v1.MapGet("/stats", (HttpContext http, IOptions<MilanServerOptions> options, MatchmakingStore store) =>
         {
             MilanStatsOptions o = options.Value.Stats;
@@ -72,7 +73,7 @@ public static class Api
                 return Error(Failures.StatsUnavailable);
 
             ServerStats stats = store.GetStats();
-            // A shared cache may keep what anyone can see, never what took the token.
+            // A shared cache may keep what anyone can see
             http.Response.Headers.CacheControl = token is null ? $"public, max-age={o.CacheSeconds}" : "no-store";
             return Results.Ok(access == StatsAccess.Full ? stats : stats with { Details = null });
         });
