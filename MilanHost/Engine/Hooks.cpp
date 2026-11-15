@@ -26,6 +26,7 @@
 #include "Engine/LoadGate.hpp"
 #include "Engine/ConsolePipe.hpp"
 #include "Engine/MenuScenes.hpp"
+#include "Engine/TransparentRender.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfStream.hpp"
 #include "Online/SFXOnlineHijacks.hpp"
@@ -487,6 +488,8 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
     COMPONENT(CProfilers).On_UObject_ProcessEvent(Context, Function, Parms, Result);
     COMPONENT(CRenderdoc).On_UObject_ProcessEvent(Context, Function, Parms, Result);
 #endif
+
+    TransparentRender::OnProcessEvent(Function);
 
     (*UObject_ProcessEvent_orig)(Context, Function, Parms, Result);
 

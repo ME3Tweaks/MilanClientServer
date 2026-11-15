@@ -25,6 +25,7 @@
 #endif
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
+#include "Components/CScreenshots.hpp"
 #include "Components/CConstants.hpp"
 #include "Engine/BinkUploadPatch.hpp"
 #include "Engine/DLCConfigReload.hpp"
@@ -99,6 +100,7 @@ SPI_IMPLEMENT_ATTACH
 #endif
     gp_componentContainer->Initialize<CState>(*gp_sdkContext);
     gp_componentContainer->Initialize<CMatchmaking>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CScreenshots>(*gp_sdkContext);
 
 #ifndef _FINAL_RELEASE
     gp_componentContainer->Initialize<CNetworkProfiler>(*gp_sdkContext);
@@ -179,6 +181,7 @@ void SingleDetachImpl()
     gp_componentContainer->Terminate<CNetworkProfiler>(*gp_sdkContext);
 #endif
 
+    gp_componentContainer->Terminate<CScreenshots>(*gp_sdkContext);
     gp_componentContainer->Terminate<CMatchmaking>(*gp_sdkContext);
     gp_componentContainer->Terminate<CState>(*gp_sdkContext);
 #ifdef WITH_IMGUI
