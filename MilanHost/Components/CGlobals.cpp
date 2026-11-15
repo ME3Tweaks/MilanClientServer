@@ -157,9 +157,7 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
 void CGlobals::InitWindowProc(::LESDK::Initializer& Context)
 {
 #ifdef WITH_IMGUI
-    // WndProc is replaced via a Win32 mechanism, see CImgui::On_SwapChainPresent.
-    WndProc_orig = Context.ResolveTyped<t_WndProc>(GLOBAL_WNDPROC_RVA);
-    LOG_SDK_GLOBAL(WndProc_orig, WndProc_orig);
+    INSTALL_HOOK_ONE(WndProc, GLOBAL_WNDPROC_RVA);
     INSTALL_HOOK_TWO_ADDR(IDXGISwapChain, Present, COMPONENT(CImgui).GetSwapChainPresent());
 #else
     MILAN_UNUSED(Context);

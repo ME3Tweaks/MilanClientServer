@@ -119,12 +119,14 @@ SPI_IMPLEMENT_ATTACH
 
     ReportConfigError();
     RegisterNonshipCommands();
-#ifndef _FINAL_RELEASE
-    DLCConfigReload::RegisterCommands(COMPONENT(CCommands));
-#endif
     MenuScenes::RegisterCommands(COMPONENT(CCommands));
 #ifndef _FINAL_RELEASE
+    DLCConfigReload::RegisterCommands(COMPONENT(CCommands));
     ConsolePipe::Start();
+    // IMGUI CURRENTLY ONLY REGISTERED IN NON-FINAL BUILDS!!!
+    #ifdef WITH_IMGUI
+        COMPONENT(CImgui).RegisterInterface(std::make_unique<DemoInterface>());
+    #endif
 #endif
     RegisterVectoredExceptions();
     SpawnLocalClients();

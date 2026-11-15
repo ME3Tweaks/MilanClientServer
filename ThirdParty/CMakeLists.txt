@@ -10,7 +10,7 @@
 # ! ImGui target.
 # ========================================
 
-set (IMGUI_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/imgui-1.91.3")
+set (IMGUI_FOLDER "${CMAKE_CURRENT_SOURCE_DIR}/imgui-1.93.0")
 set (IMGUI_TARGET "ImGui")
 
 set (IMGUI_SOURCES

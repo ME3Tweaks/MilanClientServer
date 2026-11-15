@@ -8,6 +8,7 @@
 #endif
 #include "Components/CGlobals.hpp"
 #ifdef WITH_IMGUI
+#include <imgui.h>
 #include "Components/CImgui.hpp"
 #endif
 #include "Components/CMatchmaking.hpp"

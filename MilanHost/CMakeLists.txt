@@ -25,8 +25,6 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Components/CDesync.hpp
   ${PROJ_FOLDER}/Components/CMatchmaking.cpp
   ${PROJ_FOLDER}/Components/CMatchmaking.hpp
-  #${PROJ_FOLDER}/Components/CImgui.cpp
-  #${PROJ_FOLDER}/Components/CImgui.hpp
   ${PROJ_FOLDER}/Components/CNetworkProfiler.cpp
   ${PROJ_FOLDER}/Components/CNetworkProfiler.hpp
   ${PROJ_FOLDER}/Components/COutput.cpp
@@ -113,10 +111,31 @@ set (PROJ_SOURCES
 
 set (PROJ_LINKS
   LESDK-LE3
-  ImGui nlohmann-json renderdoc-api tomlplusplus Zydis
+  nlohmann-json renderdoc-api tomlplusplus Zydis
   d3d11.lib dxgi.lib dxguid.lib
   Ws2_32.lib Winhttp.lib Bcrypt.lib Iphlpapi.lib Shell32.lib
 )
+
+set (PROJ_DEFINITIONS
+  # ...
+)
+
+if (MILAN_ENABLE_IMGUI)
+  list (APPEND PROJ_SOURCES
+    ${PROJ_FOLDER}/Components/CImgui.cpp
+    ${PROJ_FOLDER}/Components/CImgui.hpp
+    ${PROJ_FOLDER}/Engine/ImGuiInputHooks.cpp
+    ${PROJ_FOLDER}/Engine/ImGuiInputHooks.hpp
+  )
+
+  list (APPEND PROJ_LINKS
+    ImGui
+  )
+
+  list (APPEND PROJ_DEFINITIONS
+    WITH_IMGUI
+  )
+endif ()
 
 add_library (${PROJ_TARGET} SHARED ${PROJ_SOURCES})
 source_group (TREE "${PROJ_FOLDER}" FILES ${PROJ_SOURCES})
@@ -124,7 +143,7 @@ source_group (TREE "${PROJ_FOLDER}" FILES ${PROJ_SOURCES})
 set_target_properties (${PROJ_TARGET} PROPERTIES SUFFIX ".asi")
 set_property (DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJ_TARGET})
 
-target_compile_definitions (${PROJ_TARGET} PUBLIC ${MILAN_COMPILE_DEFINITIONS})
+target_compile_definitions (${PROJ_TARGET} PUBLIC ${MILAN_COMPILE_DEFINITIONS} ${PROJ_DEFINITIONS})
 target_compile_options (${PROJ_TARGET} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${MILAN_COMPILE_OPTIONS}>)
 target_include_directories (${PROJ_TARGET} PUBLIC ${PROJ_FOLDER})
 target_link_options (${PROJ_TARGET} PUBLIC ${MILAN_LINK_OPTIONS})
