@@ -13,6 +13,14 @@
 bool ReadFileFull(std::wstring_view InPath, ::game::vector<byte>& OutBuffer);
 /** Writes contents of an entire buffer into a file. */
 void WriteFileFull(std::wstring_view InPath, std::span<byte const> InBuffer);
+/**
+ * Replaces a file only after the entire buffer has been written and closed successfully.
+ * Also creates missing parent folders.
+ */
+bool TryWriteFileFullAtomic(std::wstring_view InPath, std::span<byte const> InBuffer);
+
+/** Documents\BioWare\Mass Effect Legendary Edition\Save\LMP */
+std::wstring GetLMPSaveFolder();
 
 /** Logs current callstack with the given severity and _as if_ at the given place. */
 __declspec(noinline) void WriteCallstackLog(CodePlaceW&& Place, ESeverity Severity, int Skip = 0);

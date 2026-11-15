@@ -26,7 +26,7 @@ class TypedObjectIterator final : public NonCopyable
 
         if constexpr (bAllowDerived)
         {
-            while (++Current <= IterEnd)
+            while (++Current < IterEnd)
             {
                 if (*Current && (*Current)->Cast<T>())
                 {
@@ -44,7 +44,7 @@ class TypedObjectIterator final : public NonCopyable
         }
         else
         {
-            while (++Current <= IterEnd)
+            while (++Current < IterEnd)
             {
                 if (*Current && (*Current)->CastDirect<T>())
                 {

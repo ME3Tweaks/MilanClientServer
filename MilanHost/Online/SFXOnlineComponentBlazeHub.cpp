@@ -35,9 +35,12 @@ void SFXOnlineHijacks::InstallComponentBlazeHub()
  * always returns 0 - it presumably used to call out to a live Blaze server for a
  * synced clock, but never implemented as LE3 used no such online functionality.
  *
- * Everything that reads this value (SFXGRIMP.MatchStartTime, SFXPRIMP.GatherMatchResults'
- * MatchEndTime) only ever uses the *difference* between two calls, so any monotonically
- * increasing per-second counter works fine here - it doesn't need to be wall-clock time.
+ * This counter is local machine uptime, not a clock synchronized between players.
+ * The listen host measures both SFXGRIMP.MatchStartTime and the end time in
+ * SFXGameInfoMP.MatchOver.CheckGoToLobby, then sends the duration to each player
+ * through SFXPRIMP.GatherMatchResults. Clients must never subtract the replicated
+ * host start time from their own uptime. Measuring both ends on the listen host
+ * works without a matchmaking service or wall-clock synchronization.
  */
 void SFXOnlineComponentBlazeHub::GetCurrentTime_Hook(USFXOnlineComponentBlazeHub* const Context, FFrame* const Stack, void* const Result)
 {

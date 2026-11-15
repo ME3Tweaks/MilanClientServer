@@ -1,0 +1,64 @@
+diff --git a/Tests/Tests.TArray.hpp b/Tests/Tests.TArray.hpp
+index 919a4a4..468f2d2 100644
+--- a/Tests/Tests.TArray.hpp
++++ b/Tests/Tests.TArray.hpp
+@@ -555,6 +555,59 @@ SCENARIO("TArray - non-trivial elements") {
+ }
+ 
+ 
++SCENARIO("TArray - self-owning elements (regression: growth must construct, not assign)") {
++    // See Utilities.hpp for why Copyable/Movable above can't catch this class of bug.
++
++    GIVEN("an array reserved to a small capacity") {
++        TArray<SelfOwning> Array{};
++        Array.Reserve(2);
++
++        WHEN("more elements are appended one at a time, forcing several regrowths") {
++            for (int i = 0; i < 50; ++i) {
++                Array.Add(SelfOwning{ i });
++            }
++
++            THEN("its count matches and every element holds its own correct value") {
++                CHECK_EQ(Array.Count(), 50);
++                for (int i = 0; i < 50; ++i) {
++                    REQUIRE_NE(Array(i).Data, nullptr);
++                    CHECK_EQ(*Array(i).Data, i);
++                    CHECK_EQ(Array(i).Value, i);
++                }
++            }
++
++            AND_WHEN("the array is shrunk back down") {
++                Array.Shrink();
++
++                THEN("its count, capacity and values are all consistent") {
++                    CHECK_EQ(Array.Count(), 50);
++                    CHECK_EQ(Array.Capacity(), 50);
++                    for (int i = 0; i < 50; ++i) {
++                        REQUIRE_NE(Array(i).Data, nullptr);
++                        CHECK_EQ(*Array(i).Data, i);
++                    }
++                }
++            }
++        }
++
++        WHEN("an element is inserted in the middle after appending") {
++            for (int i = 0; i < 10; ++i) {
++                Array.Add(SelfOwning{ i });
++            }
++            Array.Insert(5, SelfOwning{ 999 });
++
++            THEN("the inserted value lands at the right place and neighbors are intact") {
++                CHECK_EQ(Array.Count(), 11);
++                CHECK_EQ(*Array(5).Data, 999);
++                CHECK_EQ(*Array(4).Data, 4);
++                CHECK_EQ(*Array(6).Data, 5);
++                CHECK_EQ(*Array(10).Data, 9);
++            }
++        }
++    }
++}
++
++
+ SCENARIO("TArray - conversion to standard containers") {
+     // Some of these tests may leak memory but that's okay.
+ 

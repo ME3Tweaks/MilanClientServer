@@ -126,6 +126,37 @@ enum EStorageField : int
     EStorageField_MAX = 96,
 };
 
+// Keep the original profile setting IDs for 78 kits and reserve IDs 96-217 for kits 78-199.
+// Match this capacity in SFXOnlineSaveGameMP/UpdateCharacterValues2.uc.
+inline constexpr int MP_PROFILE_CHARACTER_CAPACITY = 200;
+inline constexpr int MP_PROFILE_LEGACY_CHARACTER_COUNT = SGF_Character77 - SGF_Character00 + 1;
+inline constexpr int MP_PROFILE_EXTENDED_CHARACTER_FIRST_ID = 96;
+inline constexpr int MP_PROFILE_EXTENDED_CHARACTER_LAST_ID =
+    MP_PROFILE_EXTENDED_CHARACTER_FIRST_ID + MP_PROFILE_CHARACTER_CAPACITY - MP_PROFILE_LEGACY_CHARACTER_COUNT - 1;
+static_assert(MP_PROFILE_EXTENDED_CHARACTER_FIRST_ID >= EStorageField_MAX);
+
+// Native accomplishment storage only exposes three 250-value timestamp strings.
+// The local profile holds another three strings without changing the legacy field IDs.
+inline constexpr int MP_PROFILE_COMPLETION_TIMES_PER_FIELD = 250;
+inline constexpr int MP_PROFILE_LEGACY_COMPLETION_TIME_COUNT =
+    3 * MP_PROFILE_COMPLETION_TIMES_PER_FIELD;
+inline constexpr int MP_PROFILE_COMPLETION_TIME_CAPACITY = 1500;
+// IDs 96-1023 are reserved for kit records, allowing 1,006 total kit slots
+// without changing timestamp field IDs in an existing profile.
+inline constexpr int MP_PROFILE_EXTENDED_COMPLETION_FIRST_ID = 1024;
+inline constexpr int MP_PROFILE_EXTENDED_COMPLETION_FIELD_COUNT =
+    (MP_PROFILE_COMPLETION_TIME_CAPACITY - MP_PROFILE_LEGACY_COMPLETION_TIME_COUNT) /
+    MP_PROFILE_COMPLETION_TIMES_PER_FIELD;
+inline constexpr int MP_PROFILE_EXTENDED_COMPLETION_LAST_ID =
+    MP_PROFILE_EXTENDED_COMPLETION_FIRST_ID + MP_PROFILE_EXTENDED_COMPLETION_FIELD_COUNT - 1;
+static_assert(MP_PROFILE_COMPLETION_TIME_CAPACITY % MP_PROFILE_COMPLETION_TIMES_PER_FIELD == 0);
+static_assert(MP_PROFILE_EXTENDED_COMPLETION_FIRST_ID > MP_PROFILE_EXTENDED_CHARACTER_LAST_ID);
+
+// MilanHost-only settings with no game storage start at 4096.
+// The player name replaces the offline "Player" placeholder before the Windows account name.
+inline constexpr int MP_PROFILE_PLAYER_NAME_ID = 4096;
+static_assert(MP_PROFILE_PLAYER_NAME_ID > MP_PROFILE_EXTENDED_COMPLETION_LAST_ID);
+
 
 struct ProfileSetting final : public NonCopyable
 {
@@ -155,9 +186,34 @@ public:
 
     MPProfile(USFXEngine* Engine);
 
+    void PrepareCharacterStorage() const;
     void Deserialize(IInputStream& Stream);
     void Serialize(IOutputStream& Stream) const;
 
+    FString GetRealBaseString(USFXOnlineSaveGameMP* OnlineSave, FString const& Fallback) const;
+    FString GetRealClassString(USFXOnlineSaveGameMP* OnlineSave, int nClassIndex, FString const& Fallback) const;
+    FString GetRealCharacterString(USFXOnlineSaveGameMP* OnlineSave, int nCharIndex, FString const& Fallback) const;
+    FString GetRealFacesString(USFXOnlineSaveGameMP* OnlineSave, FString const& Fallback) const;
+    FString GetRealReinforcementsString(USFXOnlineSaveGameMP* OnlineSave, FString const& Fallback) const;
+
+    FString GetRealCompletionString(USFXAccomplishmentStorage* AccomplishmentStorage, FString const& Fallback) const;
+    FString GetRealProgressString(USFXAccomplishmentStorage* AccomplishmentStorage, FString const& Fallback) const;
+    FString GetRealRewardLevelsString(USFXAccomplishmentStorage* AccomplishmentStorage, FString const& Fallback) const;
+    FString GetRealCompletionTimesString(USFXAccomplishmentStorage* AccomplishmentStorage, int nIndex, FString const& Fallback) const;
+
+    // Where this game instance saves: MP_Profile, or MP_Profile-<ordinal> for extra instances.
     static FString GetProfilePathStatic();
+    // Where this game instance loads from: its own file, or MP_Profile before its first save.
+    static FString GetLoadProfilePathStatic();
     FString const& GetProfilePath() const noexcept;
+
+    // Reads MP_Profile directly if SFXSaveManagerMP.Initialize has not loaded it yet.
+    static FString const& GetPlayerName();
+    // Windows account name used when the profile has no custom name
+    static FString const& GetDefaultPlayerName();
+    // The name the next Serialize writes.
+    static void SetPlayerName(FString const& Name);
+
+    static bool IsProfileLoaded();
+    static void MarkProfileLoaded();
 };

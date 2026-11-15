@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+**/.vs/
+**/TestResults/
+**/*.user
+**/Properties/launchSettings.json
+publish/
+dist/
+Dockerfile
+compose.yaml
+.dockerignore
+*.tar.gz

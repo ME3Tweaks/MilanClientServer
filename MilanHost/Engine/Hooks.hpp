@@ -6,7 +6,6 @@
 #pragma once
 
 #include <d3d11.h>
-#include <imgui.h>
 
 #include <LESDK/Headers.hpp>
 
@@ -18,6 +17,12 @@
 
 // ! Hooking macros.
 // ========================================
+//
+// Every hook goes through SPIv4's deferred path: the detour is created disabled, its trampoline is
+// published into X_orig, and only then is it enabled. A plain InstallHook enables the detour before
+// returning, so a game thread entering the target in between would run X_hook with X_orig still
+// null and call straight through address 0. The game keeps running on its own threads while
+// MilanHost attaches, so that window is real (see Engine/LoadGate.hpp).
 
 #define LOG_SDK_GLOBAL(pCheck, pReal)                                                       \
     MILAN_CHECKW(pCheck != nullptr, L"failed to find " #pCheck);                            \
@@ -25,11 +30,11 @@
 
 #define _INSTALL_HOOK_ADDR_NO_LOG(Address, String, Function)                                       \
     auto* const MILAN_VARCAT(Function, _target) = (MILAN_VARCAT(t_, Function)*)Address;     \
-    MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHook(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook)));
+    MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHookDeferred(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook))); \
+    if (MILAN_VARCAT(Function, _orig) != nullptr) Context.EnableHook(String)
 
 #define _INSTALL_HOOK_ADDR(Address, String, Function)                                       \
-    auto* const MILAN_VARCAT(Function, _target) = (MILAN_VARCAT(t_, Function)*)Address;     \
-    MILAN_VARCAT(Function, _orig) = (MILAN_VARCAT(t_, Function)*)(Context.InstallHook(String, MILAN_VARCAT(Function, _target), MILAN_VARCAT(Function, _hook))); \
+    _INSTALL_HOOK_ADDR_NO_LOG(Address, String, Function);                                   \
     MILAN_TRACEW(ELOG_StartupGlobals, L"" String L" hooked: 0x%p -> 0x%p", (void*)MILAN_VARCAT(Function, _target), (void*)MILAN_VARCAT(Function, _orig))
 
 #define _INSTALL_HOOK_INIT(Pattern, String, Function)                                       \
@@ -76,7 +81,22 @@
 #define GLOBAL_BIOREQUESTEXIT_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 89 5C 24 ?? */ "48 89 6C 24 ?? 48 89 74 24 ?? 57 48 81 EC 50 03 00 00")
 
- // TODO: Replace this with a post-hook pattern search.
+// Installed by LoadGate before anything else in attach, so it is an RVA rather than a pattern scan.
+// Matches the old pattern "48 8B C4 44 89 40 18 48 89 48 08 53 56 57 41 56 41 57 48 83 EC 50 ...".
+#define GLOBAL_LOADPACKAGE_RVA  ::LESDK::Address::FromOffset(0x12B250)
+
+// Linker patching. RVAs shared with the LExASIs LinkerPatcher, confirmed in Ghidra.
+#define GLOBAL_FPACKAGEFILECACHE_FINDPACKAGEFILE_RVA  ::LESDK::Address::FromOffset(0xABF790)
+#define GLOBAL_ULINKERLOAD_CREATEEXPORT_RVA           ::LESDK::Address::FromOffset(0xFBDD0)
+#define GLOBAL_ULINKERLOAD_FINALIZECREATION_RVA       ::LESDK::Address::FromOffset(0xFF520)
+#define GLOBAL_UOBJECT_STATICFINDOBJECT_RVA           ::LESDK::Address::FromOffset(0x134510)
+#define GLOBAL_UOBJECT_STATICLOADOBJECT_RVA           ::LESDK::Address::FromOffset(0x134DD0)
+#define GLOBAL_UOBJECT_ENDLOAD_RVA                   ::LESDK::Address::FromOffset(0x123BF0)
+#define GLOBAL_GOBJBEGINLOADCOUNT_RVA                 ::LESDK::Address::FromOffset(0x1807D80)
+#define GLOBAL_FCONFIGCACHEINI_CREATECONFIGFILE_RVA   ::LESDK::Address::FromOffset(0x91700)
+#define GLOBAL_FCONFIGCACHEINI_GETARRAY_RVA           ::LESDK::Address::FromOffset(0x94F60)
+#define GLOBAL_GCONFIG_RVA                            ::LESDK::Address::FromOffset(0x17CD5B8)
+
 #define GLOBAL_WNDPROC_RVA  ::LESDK::Address::FromOffset(0x99D2C0)
 
 #define GLOBAL_UUISTRING_STRINGSIZE_PHOOK \
@@ -84,6 +104,15 @@
 
 #define GLOBAL_UCANVAS_WRAPPEDPRINT_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 55 56 */ "57 41 54 41 55 41 56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 90 02 00 00 48 C7 45 ?? FE FF FF FF")
+
+// UWorld::FlushLevelStreaming(Context, bOnlyFlushVisibility) (LE3 0x7ff74b46ca20): loads and shows, blocking, every
+// streaming level that should be. A second copy at 0x7ff74b151600 jumps to the same body; the jump bytes pick this one.
+#define GLOBAL_UWORLD_FLUSHLEVELSTREAMING \
+    ::LESDK::Address::FromPattern("41 F7 D8 1B D2 83 C2 02 E9 93 35 00 00")
+
+// GStreamingManager (LE3 0x7ff74c143050), as LoadMap reads it for its texture streaming block at the end of a load.
+#define GLOBAL_GSTREAMINGMANAGER_RIP \
+    ::LESDK::Address::FromInstrRelative("48 8B 0D ?? ?? ?? ?? 48 85 C9 74 ?? 48 8B 01 44 8B CB 44 8B C3 8B D3 FF 50 40")
 
 #define GLOBAL_UFUNCTION_BIND_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 55 41 */ "56 41 57 48 8D A8 ?? ?? ?? ?? 48 81 EC 70 08 00 00 48 C7 44 24 50 ?? ?? ?? ??")
@@ -105,6 +134,10 @@
 
 #define GLOBAL_USFXENGINE_UPDATEDYNAMICLOADMAPPINGFINDHASH_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 89 5C 24 08 */ "48 89 6C 24 ?? 48 89 74 24 ?? 48 89 7C 24 ?? 41 56 48 83 EC 20 33 FF 44 8B F2")
+
+// USFXEngine's override of the UGameEngine virtual (vtable slot 123).
+#define GLOBAL_USFXENGINE_GETDISCONNECTFALLBACKMAP_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 89 54 24 10 */ "57 48 83 EC 40 48 C7 44 24 20 FE FF FF FF 48 89 5C 24 50 48 89 6C 24 60 48 89 74 24 68 48 8B DA 48 8B E9 E8 ?? ?? ?? ?? 48 8B F8 48 85 C0 0F 84")
 
 #define GLOBAL_UWORLD_SPAWNACTOR_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 55 41 */ "54 41 55 41 56 41 57 48 8D 68 ?? 48 81 EC A0 00 00 00 48 C7 45 ?? FE FF FF FF 48 89 58 ?? 48 89 70 ?? 48 89 78 ?? 49 8B F9")
@@ -170,14 +203,20 @@ extern bool gb_logSerializeObject;
 
 // ! Miscellaneous functions / methods.
 // ========================================
+
 void ApplyIconToWindow(HWND window);
 using t_CreateWindowExW = HWND(WINAPI)(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
 extern t_CreateWindowExW* CreateWindowExW_orig;
 HWND WINAPI CreateWindowExW_hook(DWORD dwExStyle, LPCWSTR lpClassName, LPCWSTR lpWindowName, DWORD dwStyle, int X, int Y, int nWidth, int nHeight, HWND hWndParent, HMENU hMenu, HINSTANCE hInstance, LPVOID lpParam);
 
 using t_WndProc = LRESULT __stdcall(HWND, UINT, WPARAM, LPARAM);
+/**
+ * Trampoline to the engine's static WndProc (see GLOBAL_WNDPROC_RVA) while the hook is installed.
+ * CImgui::Terminate repoints it at the engine function after unhooking.
+ */
 extern t_WndProc* WndProc_orig;
 
+/** Detour installed on the engine's WndProc itself, see CGlobals::InitWindowProc. */
 LRESULT __stdcall WndProc_hook(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 using t_IDXGISwapChain_Present = HRESULT __stdcall(IDXGISwapChain*, UINT, UINT);
@@ -216,6 +255,12 @@ extern t_UUIString_StringSize* UUIString_StringSize;
 using t_UCanvas_WrappedPrint = int(UCanvas* Context, UBOOL Draw, INT* OutX, INT* OutY, UFont* Font, float ScaleX, float ScaleY, UBOOL Center, WCHAR const* Text, FFontRenderInfo const* RenderInfo);
 extern t_UCanvas_WrappedPrint* UCanvas_WrappedPrint;
 
+using t_UWorld_FlushLevelStreaming = void(UWorld* Context, void* Unused, UBOOL bOnlyFlushVisibility);
+extern t_UWorld_FlushLevelStreaming* UWorld_FlushLevelStreaming;
+
+/** The texture streaming manager (an FStreamingManagerCollection). Its vtable slot 0x40 is LoadMap's texture block. */
+extern void** GStreamingManager;
+
 
 // ! UFunction methods.
 // ========================================
@@ -245,8 +290,57 @@ extern t_UGameEngine_Tick* UGameEngine_Tick_orig;
 void UGameEngine_Tick_hook(UGameEngine* Context, float Delta);
 
 
+// ! Package loading and linker methods.
+// ========================================
+
+using t_LoadPackage = UPackage*(UObject*, WCHAR const*, INT);
+extern t_LoadPackage* LoadPackage_orig;
+
+UPackage* LoadPackage_hook(UObject* Outer, WCHAR const* Filename, INT Flags);
+
+using t_FPackageFileCache_FindPackageFile = UBOOL(void* Context, WCHAR const* InName, FGuid* Guid, FString* OutFileName, WCHAR const* Language, UBOOL Unknown);
+extern t_FPackageFileCache_FindPackageFile* FPackageFileCache_FindPackageFile_orig;
+
+UBOOL FPackageFileCache_FindPackageFile_hook(void* Context, WCHAR const* InName, FGuid* Guid, FString* OutFileName, WCHAR const* Language, UBOOL Unknown);
+
+using t_ULinkerLoad_CreateExport = UObject*(ULinkerLoad* Context, INT Index);
+extern t_ULinkerLoad_CreateExport* ULinkerLoad_CreateExport_orig;
+
+UObject* ULinkerLoad_CreateExport_hook(ULinkerLoad* Context, INT Index);
+
+// Last stage of ULinkerLoad::Tick; returns the ELinkerStatus (0 = timed out, 1 = loaded).
+using t_ULinkerLoad_FinalizeCreation = INT(ULinkerLoad* Context);
+extern t_ULinkerLoad_FinalizeCreation* ULinkerLoad_FinalizeCreation_orig;
+
+INT ULinkerLoad_FinalizeCreation_hook(ULinkerLoad* Context);
+
+
 // ! UObject methods.
 // ========================================
+
+// UObject::EndLoad (static, no arguments). Only the outermost EndLoad does the work: nested calls just
+// decrement GObjBeginLoadCount and return.
+using t_UObject_EndLoad = void();
+extern t_UObject_EndLoad* UObject_EndLoad_orig;
+
+void UObject_EndLoad_hook();
+
+// UObject::StaticFindObject (static). InObjectPackage == ANY_PACKAGE ((UObject*)-1) or null means
+// OrigInName is a full path. Pure in-memory lookup; a null class is a wildcard. (Ghidra shows a fifth
+// argument; the body never reads it.)
+using t_UObject_StaticFindObject = UObject*(UClass* ObjectClass, UObject* InObjectPackage, WCHAR const* OrigInName, UBOOL bExactClass);
+extern t_UObject_StaticFindObject* UObject_StaticFindObject_orig;
+
+UObject* UObject_StaticFindObject_hook(UClass* ObjectClass, UObject* InObjectPackage, WCHAR const* OrigInName, UBOOL bExactClass);
+
+// UObject::StaticLoadObject (static). Finds the object in memory first, else loads it from its package.
+// ObjectClass must not be null: ULinkerLoad::Create dereferences it.
+using t_UObject_StaticLoadObject = UObject*(UClass* ObjectClass, UObject* InOuter, WCHAR const* InName, WCHAR const* Filename,
+    INT LoadFlags, UPackageMap* Sandbox, UBOOL bAllowObjectReconciliation);
+extern t_UObject_StaticLoadObject* UObject_StaticLoadObject_orig;
+
+UObject* UObject_StaticLoadObject_hook(UClass* ObjectClass, UObject* InOuter, WCHAR const* InName, WCHAR const* Filename,
+    INT LoadFlags, UPackageMap* Sandbox, UBOOL bAllowObjectReconciliation);
 
 using t_UObject_CallFunction = tCallFunction;
 extern t_UObject_CallFunction* UObject_CallFunction_orig;
@@ -280,6 +374,11 @@ extern t_USFXEngine_UpdateDynamicLoadMappingFindHash* USFXEngine_UpdateDynamicLo
 
 int USFXEngine_UpdateDynamicLoadMappingFindHash_hook(USFXEngine* Context, int ObjectNetID);
 
+using t_USFXEngine_GetDisconnectFallbackMap = FString*(USFXEngine* Context, FString* Result);
+extern t_USFXEngine_GetDisconnectFallbackMap* USFXEngine_GetDisconnectFallbackMap_orig;
+
+FString* USFXEngine_GetDisconnectFallbackMap_hook(USFXEngine* Context, FString* Result);
+
 
 // ! UWorld methods.
 // ========================================
@@ -310,6 +409,51 @@ extern t_UWorld_Tick* UWorld_Tick_orig;
 void UWorld_Tick_hook(UWorld* Context, int Unknown, float Delta);
 
 
+// ! Game socket I/O (all builds: matchmaking shares the UE3 socket).
+// ========================================
+
+using t_FSocketWin_SendTo = UINT(FSocket*, BYTE*, INT, INT*, SOCKADDR_IN*);
+extern t_FSocketWin_SendTo* FSocketWin_SendTo_orig;
+
+UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, SOCKADDR_IN* Destination);
+
+using t_FSocketWin_RecvFrom = UINT(FSocket*, BYTE*, INT, INT*, SOCKADDR_IN*);
+extern t_FSocketWin_RecvFrom* FSocketWin_RecvFrom_orig;
+
+UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read, SOCKADDR_IN* Source);
+
+// LE3 11.3.2, RVA 0x8CB640: a joiner checking a package the host uses against its own GUID.
+#define GLOBAL_NET_VERIFYPACKAGEINFO_RVA  ::LESDK::Address::FromOffset(0x8CB640)
+using t_Net_VerifyPackageInfo = void*(void* Context, FPackageInfo* Info);
+extern t_Net_VerifyPackageInfo* Net_VerifyPackageInfo_orig;
+
+void* Net_VerifyPackageInfo_hook(void* Context, FPackageInfo* Info);
+
+// Used to get status of a seek free loading object
+#define GLOBAL_SFXENGINE_SEEKFREELOADSTATUS_RVA  ::LESDK::Address::FromOffset(0xB929D0)
+using t_SFXEngine_SeekFreeLoadStatus = UObject*(void* Context, INT MappingIndex, UClass* ObjectClass, BYTE* OutStatus);
+extern t_SFXEngine_SeekFreeLoadStatus* SFXEngine_SeekFreeLoadStatus_orig;
+
+UObject* SFXEngine_SeekFreeLoadStatus_hook(void* Context, INT MappingIndex, UClass* ObjectClass, BYTE* OutStatus);
+
+// Used to tell whether an async package load is in progress
+#define GLOBAL_UOBJECT_ISASYNCLOADING_RVA  ::LESDK::Address::FromOffset(0xC1060)
+using t_UObject_IsAsyncLoading = bool();
+extern t_UObject_IsAsyncLoading* UObject_IsAsyncLoading;
+
+// Returns game's langauge code, e.g. INT
+#define GLOBAL_APPGETLANGUAGEEXT_RVA  ::LESDK::Address::FromOffset(0xBD1FC0)
+using t_appGetLanguageExt = wchar_t const*(int Type, int Variant);
+extern t_appGetLanguageExt* appGetLanguageExt;
+
+
+// Used by matchmaking vote kicks, so it exists in every build.
+using t_UNetConnection_Close = void(UNetConnection* Context);
+extern t_UNetConnection_Close* UNetConnection_Close_orig;
+
+void UNetConnection_Close_hook(UNetConnection* Context);
+
+
 // ! <Methods relevant to network debug.>
 // ========================================
 
@@ -334,11 +478,6 @@ using t_UNetConnection_ClientSupportsLevel = int(UNetConnection* Context, UObjec
 extern t_UNetConnection_ClientSupportsLevel* UNetConnection_ClientSupportsLevel_orig;
 
 int UNetConnection_ClientSupportsLevel_hook(UNetConnection* Context, UObject* Object);
-
-using t_UNetConnection_Close = void(UNetConnection* Context);
-extern t_UNetConnection_Close* UNetConnection_Close_orig;
-
-void UNetConnection_Close_hook(UNetConnection* Context);
 
 using t_UNetConnection_CreateChannel = UChannel* (UNetConnection* Context, EChannelType Type, INT bLocal, INT Index);
 extern t_UNetConnection_CreateChannel* UNetConnection_CreateChannel_orig;
@@ -391,20 +530,10 @@ extern t_GlobalDynamicBuildVersion* GlobalDynamicBuildVersion_orig;
 
 UINT GlobalDynamicBuildVersion_hook();
 
-using t_FSocketWin_SendTo = UINT(FSocket*, BYTE*, INT, INT*, SOCKADDR_IN*);
-extern t_FSocketWin_SendTo* FSocketWin_SendTo_orig;
-
-UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, SOCKADDR_IN* Destination);
-
 using t_FSocketWin_Send = UINT(FSocket*, BYTE*, INT, INT*);
 extern t_FSocketWin_Send* FSocketWin_Send_orig;
 
 UINT FSocketWin_Send_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent);
-
-using t_FSocketWin_RecvFrom = UINT(FSocket*, BYTE*, INT, INT*, SOCKADDR_IN*);
-extern t_FSocketWin_RecvFrom* FSocketWin_RecvFrom_orig;
-
-UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read, SOCKADDR_IN* Source);
 
 using t_FSocketWin_Recv = UINT(FSocket*, BYTE*, INT, INT*);
 extern t_FSocketWin_Recv* FSocketWin_Recv_orig;

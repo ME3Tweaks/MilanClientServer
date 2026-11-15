@@ -10,17 +10,30 @@
 #include "Base/Base.hpp"
 #include "Base/Logger.hpp"
 #include "Components/CCommands.hpp"
+#ifndef _FINAL_RELEASE
+#include "Components/CDesync.hpp"
+#endif
 #include "Components/CGlobals.hpp"
 #ifdef WITH_IMGUI
 #include "Components/CImgui.hpp"
+#include "Components/CChat.hpp"
 #endif
+#include "Components/CMatchmaking.hpp"
 #include "Components/CNetworkProfiler.hpp"
 #include "Components/COutput.hpp"
+#ifndef _FINAL_RELEASE
 #include "Components/CProfilers.hpp"
+#endif
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
+#include "Components/CScreenshots.hpp"
 #include "Components/CConstants.hpp"
+#include "Engine/BinkUploadPatch.hpp"
+#include "Engine/DLCConfigReload.hpp"
 #include "Engine/ExtObject.hpp"
+#include "Engine/LoadGate.hpp"
+#include "Engine/ConsolePipe.hpp"
+#include "Engine/MenuScenes.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "Shell/ClientConfig.hpp"
 #include "Shell/CmdArgs.hpp"
@@ -36,31 +49,68 @@ SPI_IMPLEMENT_ATTACH
     ::RelativeTimer AttachTimer{};
 
 
-    // Things that component initialization depends on.
+    // Immediate phase: runs while the game thread is racing ahead into engine startup, so it must
+    // be cheap and cannot log. Only for code the game reaches before its first package load;
+    // everything else belongs after the gate (see Engine/LoadGate.hpp).
     // ----------------------------------------
 
     gp_sdkContext = new ::LESDK::Initializer{ InterfacePtr, "MilanHost" };
+    BinkUploadPatch::Result const BinkUploadResult = CmdArgs::HasFlag(L"-egpu")
+        ? BinkUploadPatch::Apply(::GetModuleHandleW(nullptr)) : BinkUploadPatch::Result{};
+    CConstants::ApplyEarlyMinimumResolutionCompatibility(*gp_sdkContext);
+    LoadGate::Install(*gp_sdkContext);
+
+
+    // Gated phase: from here until LoadGate::Open(), the game is held at its first package load.
+    // Things that component initialization depends on.
+    // ----------------------------------------
+
     gp_componentContainer = new ComponentContainer;
     gb_disableSafeBreak = CmdArgs::Contain(L"-nobreak");
 
     InitSDKBasics(*gp_sdkContext);
-    InitGlobalConfig(k_configFilename);
+    InitGlobalConfig(GetLoadConfigPath().c_str());
 
     // Initialize subsystems / compontents.
     // ----------------------------------------
     gp_componentContainer->Initialize<COutput>(*gp_sdkContext);
+    switch (BinkUploadResult.State)
+    {
+    case BinkUploadPatch::Status::Disabled:
+        break;
+    case BinkUploadPatch::Status::Enabled:
+        MILAN_INFOW(ELOG_Startup, L"-egpu: enabled cached Bink uploads (four plane flags 0x80050 -> 0x80010)");
+        break;
+    case BinkUploadPatch::Status::AlreadyEnabled:
+        MILAN_WARNW(ELOG_Startup, L"-egpu: all four Bink upload sites are already patched; no writes made");
+        break;
+    default:
+        MILAN_ERRORW(ELOG_Startup, L"-egpu: Bink upload patch failed (status=%u, RVA=0x%zx, Win32 error=%lu); "
+            L"status: 3=validation refused, 4=write refused, 5=rolled back, 6=rollback incomplete",
+            static_cast<unsigned>(BinkUploadResult.State), BinkUploadResult.SiteRva, BinkUploadResult.Error);
+        break;
+    }
     gp_componentContainer->Initialize<CConstants>(*gp_sdkContext);
     gp_componentContainer->Initialize<CGlobals>(*gp_sdkContext);
     gp_componentContainer->Initialize<CCommands>(*gp_sdkContext);
+#ifndef _FINAL_RELEASE
     gp_componentContainer->Initialize<CProfilers>(*gp_sdkContext);
+#endif
 #ifdef WITH_IMGUI
     gp_componentContainer->Initialize<CImgui>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CChat>(*gp_sdkContext);
 #endif
     gp_componentContainer->Initialize<CState>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CMatchmaking>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CScreenshots>(*gp_sdkContext);
 
 #ifndef _FINAL_RELEASE
     gp_componentContainer->Initialize<CNetworkProfiler>(*gp_sdkContext);
     gp_componentContainer->Initialize<CRenderdoc>(*gp_sdkContext);
+#endif
+
+#ifndef _FINAL_RELEASE
+    gp_componentContainer->Initialize<CDesync>(*gp_sdkContext);
 #endif
 
     // These need to run after globals.
@@ -72,14 +122,25 @@ SPI_IMPLEMENT_ATTACH
     // ----------------------------------------
 
     ReportConfigError();
-    SetupImguiInterfaces();
     RegisterNonshipCommands();
+    MenuScenes::RegisterCommands(COMPONENT(CCommands));
+#ifndef _FINAL_RELEASE
+    DLCConfigReload::RegisterCommands(COMPONENT(CCommands));
+    ConsolePipe::Start();
+    // IMGUI CURRENTLY ONLY REGISTERED IN NON-FINAL BUILDS!!!
+    #ifdef WITH_IMGUI
+        COMPONENT(CImgui).RegisterInterface(std::make_shared<DemoInterface>());
+    #endif
+#endif
     RegisterVectoredExceptions();
     SpawnLocalClients();
 
 
     MILAN_INFOW(ELOG_Startup, L"attach completed in %.3f ms.", AttachTimer.GetMilliseconds());
     MILAN_INFOW(ELOG_Startup, L"game ordinal instance = %d", ::GetGameInstanceOrdinal());
+
+    // Every gated hook is live; let the game start loading packages.
+    LoadGate::Open();
 
     COMPONENT(COutput).FlushEverything();
 
@@ -105,6 +166,8 @@ void SingleDetachImpl()
 
     MILAN_INFOW(ELOG_Teardown, L"single detach starting");
 
+    CConstants::StopMinimumResolutionDialogWatchdog();
+
     COMPONENT(COutput).FlushEverything();
     COMPONENT(CGlobals).UninstallSomeHooks(*gp_sdkContext);
 
@@ -112,15 +175,24 @@ void SingleDetachImpl()
     // ----------------------------------------
 
 #ifndef _FINAL_RELEASE
+    gp_componentContainer->Terminate<CDesync>(*gp_sdkContext);
+#endif
+
+#ifndef _FINAL_RELEASE
     gp_componentContainer->Terminate<CRenderdoc>(*gp_sdkContext);
     gp_componentContainer->Terminate<CNetworkProfiler>(*gp_sdkContext);
 #endif
 
+    gp_componentContainer->Terminate<CScreenshots>(*gp_sdkContext);
+    gp_componentContainer->Terminate<CMatchmaking>(*gp_sdkContext);
     gp_componentContainer->Terminate<CState>(*gp_sdkContext);
 #ifdef WITH_IMGUI
+    gp_componentContainer->Terminate<CChat>(*gp_sdkContext);
     gp_componentContainer->Terminate<CImgui>(*gp_sdkContext);
 #endif
+#ifndef _FINAL_RELEASE
     gp_componentContainer->Terminate<CProfilers>(*gp_sdkContext);
+#endif
     gp_componentContainer->Terminate<CCommands>(*gp_sdkContext);
     gp_componentContainer->Terminate<CGlobals>(*gp_sdkContext);
     gp_componentContainer->Terminate<COutput>(*gp_sdkContext);
@@ -150,16 +222,11 @@ void InitSDKBasics(::LESDK::Initializer& Context)
 
 void ReportConfigError()
 {
+    MILAN_INFOW(ELOG_Startup, L"config file: %s", GetLoadConfigPath().c_str());
     if (gp_clientConfig == nullptr && gp_clientConfigError != nullptr) [[unlikely]]
         MILAN_ERRORW(ELOG_Startup, L"failed to read config: %S", gp_clientConfigError->c_str());
 }
 
-void SetupImguiInterfaces()
-{
-#ifdef WITH_IMGUI
-    COMPONENT(CImgui).RegisterInterface(std::make_unique<DemoInterface>());
-#endif
-}
 
 void RegisterNonshipCommands()
 {
@@ -516,11 +583,11 @@ void RegisterVectoredExceptions()
 
             if (bDispatchHandler)
             {
-                COMPONENT(CProfilers).On_VectoredException(Address, Code, Exceptions);
                 COMPONENT(COutput).On_VectoredException(Address, Code, Exceptions);
-                COMPONENT(CRenderdoc).On_VectoredException(Address, Code, Exceptions);
 
             #ifndef _FINAL_RELEASE
+                COMPONENT(CProfilers).On_VectoredException(Address, Code, Exceptions);
+                COMPONENT(CRenderdoc).On_VectoredException(Address, Code, Exceptions);
                 COMPONENT(CNetworkProfiler).On_VectoredException(Address, Code, Exceptions);
             #endif // !_FINAL_RELEASE
             }

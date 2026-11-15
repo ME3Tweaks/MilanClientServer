@@ -9,3 +9,8 @@
 
 Cargo.lock
 /MilanHost/Version/MilanHost.aps
+/MilanServer/milanserver.tar.gz
+/MilanServer/dist/
+/.lecccli
+/scratchpad
+/Docs/Matchmaking-NAT-Handoff.md

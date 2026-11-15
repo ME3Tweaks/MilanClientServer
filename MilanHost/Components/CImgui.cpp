@@ -3,6 +3,7 @@
 #include <backends/imgui_impl_dx11.h>
 
 #include "Components/CImgui.hpp"
+#include "Engine/ImGuiInputHooks.hpp"
 
 
 // Copied from <backends/imgui_impl_win32.h> according to the instructions found there.
@@ -32,11 +33,11 @@ void MyImGuiFree(void* const ptr, void*)
 
 bool CImgui::Initialize(::LESDK::Initializer& Context)
 {
-    MILAN_UNUSED(Context);
-
     ImGui::SetAllocatorFunctions(MyImGuiAlloc, MyImGuiFree);
     ImGui::CreateContext();
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+
+    ImGuiInputHooks::Initialize(Context);
 
     mp_dxgiSwapChainPresent = FindSwapChainPresent();
     MILAN_CHECKW(mp_dxgiSwapChainPresent != nullptr, L"couldn't find IDXGISwapChain::Present");
@@ -47,19 +48,23 @@ bool CImgui::Initialize(::LESDK::Initializer& Context)
 
 void CImgui::Terminate(::LESDK::Initializer& Context)
 {
-    MILAN_UNUSED(Context);
     MILAN_DEBUGW(ELOG_Teardown, L"component '%s' terminating", k_typeName);
 
-    if (m_activeWindow)
+    ImGuiInputHooks::Uninstall(Context);
+
+    if (WndProc_orig != nullptr)
     {
-        // Undo system hook to avoid WndProc_hook calling On_WndProc after CImgui has terminated.
-        SetWindowLongPtr(m_activeWindow, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WndProc_orig));
+        Context.UninstallHook("WndProc");
 
-        // Same with IDXGISwapChain::Present.
-        Context.UninstallHook("IDXGISwapChain::Present");
-
-        // Both of these led to crashes when called after CImgui::Terminate().
+        // This can run from within WndProc_hook itself (the WM_DESTROY path detaches), and the
+        // trampoline the hook handed us may be gone after the uninstall. Uninstalling restores the
+        // engine function's original bytes, so from here on the original itself is the valid call
+        // target. Window procedures only run on the window's thread, which is this one.
+        WndProc_orig = Context.ResolveTyped<t_WndProc>(GLOBAL_WNDPROC_RVA);
     }
+
+    if (IDXGISwapChain_Present_orig != nullptr)
+        Context.UninstallHook("IDXGISwapChain::Present");
 
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
@@ -68,14 +73,22 @@ void CImgui::Terminate(::LESDK::Initializer& Context)
 
 bool CImgui::On_WndProc(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
 {
-    m_activeWindow = hWnd;
-
     static bool sb_skipOwnCode = false;
     if (sb_skipOwnCode)
     {
         return false;
     }
-    else if (uMsg == WM_DESTROY)
+
+    // Engine puts this same WndProc on more than one of its windows,
+    // but only the swap chain window belongs to ImGui.
+    // Before the first Present, the handle is unknown, in which case we let
+    // messages through (there is nothing rendered to interact with yet anyway).
+    if (m_imguiWindow != nullptr && hWnd != m_imguiWindow)
+    {
+        return false;
+    }
+
+    if (uMsg == WM_DESTROY)
     {
         sb_skipOwnCode = true;
         ::SingleDetachImpl();
@@ -95,10 +108,10 @@ bool CImgui::On_WndProc(HWND const hWnd, UINT const uMsg, WPARAM const wParam, L
     for (InterfacePtr_t& Interface : m_activeInterfaces)
     {
         Interface->OnWndProc(hWnd, uMsg, wParam, lParam);
-        if (Interface->IsRendering())
+        if (Interface->IsRendering() && Interface->IsIntercepting())
         {
-            if (Interface->IsIntercepting())
-                bInterfaceIntercepting = true;
+            bInterfaceIntercepting = true;
+            break;
         }
     }
 
@@ -106,6 +119,17 @@ bool CImgui::On_WndProc(HWND const hWnd, UINT const uMsg, WPARAM const wParam, L
     {
         ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam);
         if (!MessageImguiPassthrough(uMsg, wParam, lParam))
+            return true;
+    }
+
+    return false;
+}
+
+bool CImgui::IsCapturingInput() const
+{
+    for (InterfacePtr_t const& Interface : m_activeInterfaces)
+    {
+        if (Interface->IsRendering() && Interface->IsIntercepting())
             return true;
     }
 
@@ -121,6 +145,10 @@ bool CImgui::On_SwapChainPresent(IDXGISwapChain* const pChain, UINT const SyncIn
 
     if (!bFailedInternal)
     {
+        // ImGui's backend polls XInputGetState while building the frame.
+        // Mark this thread so that the gamepad hooks let those polls through.
+        ImGuiInputHooks::ScopedImGuiFrame const ImGuiFrame{};
+
         if (!bSwapChainInitialized)
         {
             if (FAILED(GetDeviceAndContext(pChain, &mp_d3d11Device, &mp_d3d11DeviceContext)))
@@ -133,11 +161,9 @@ bool CImgui::On_SwapChainPresent(IDXGISwapChain* const pChain, UINT const SyncIn
             DXGI_SWAP_CHAIN_DESC SwapChainDescription{};
             pChain->GetDesc(&SwapChainDescription);
 
-            HWND const CurrentWindow = SwapChainDescription.OutputWindow;
-            SetWindowLongPtr(CurrentWindow, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WndProc_hook));
+            m_imguiWindow = SwapChainDescription.OutputWindow;
 
-
-            ImGui_ImplWin32_Init(CurrentWindow);
+            ImGui_ImplWin32_Init(m_imguiWindow);
             ImGui_ImplDX11_Init(mp_d3d11Device, mp_d3d11DeviceContext);
 
             ID3D11Texture2D* TextureBuffer = nullptr;
@@ -148,6 +174,8 @@ bool CImgui::On_SwapChainPresent(IDXGISwapChain* const pChain, UINT const SyncIn
 
             bSwapChainInitialized = true;
         }
+
+        ImGuiInputHooks::TryInstallGamepadHook();
 
         ImGui_ImplWin32_NewFrame();
         ImGui_ImplDX11_NewFrame();
@@ -260,6 +288,21 @@ bool CImgui::MessageImguiPassthrough(UINT const uMsg, WPARAM, LPARAM)
 
 // ! DemoInterface implementation.
 // ========================================
+
+SFXName DemoInterface::GetName() const
+{
+    return SFXName(L"im-debug", 0);
+}
+
+bool DemoInterface::IsRendering() const
+{
+    return mb_active;
+}
+
+bool DemoInterface::IsIntercepting() const
+{
+    return mb_active;
+}
 
 void DemoInterface::OnWndProc(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
 {

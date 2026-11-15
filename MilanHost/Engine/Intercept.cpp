@@ -46,15 +46,21 @@ bool FunctionNamedIntercept::Applies (
         FunctionDescriptor->Function = SFXName(FunctionName, 0);
     }
 
-    UPackage* const Package = Node->GetOutermost();
-    UObject* const Outer = Node->Outer;
+    // Performance - check only name of function before doing more
+    if (!(Node->Name == FunctionDescriptor->Function))
+    {
+        return false;
+    }
 
-    TargetDescriptor const Check {
-        .Package = Package ? Package->Name : SFXName(),
-        .Class = Outer ? Outer->Name : SFXName(),
-        .Function = Node->Name
-    };
-    return *FunctionDescriptor == Check;
+    UObject* const Outer = Node->Outer;
+    if (Outer == nullptr || !(Outer->Name == FunctionDescriptor->Class))
+    {
+        // Performance - check only name of class before doing more
+        return false;
+    }
+
+    UPackage* const Package = Node->GetOutermost();
+    return Package != nullptr && Package->Name == FunctionDescriptor->Package;
 }
 
 void FunctionNamedIntercept::InvalidateRegistered()
@@ -98,10 +104,28 @@ bool FunctionStructIntercept::Applies(UStruct* const Node, wchar_t const* const 
     if (TargetNode == nullptr)
     {
         MILAN_CHECKW(TargetFullName != nullptr, L"");
+
+        // Performance
+        // A miss is a full object scan on every script call
+        // Wait until we have a different count of objects before trying to find the target node again
+        UINT const ObjectCount = UObject::GObjObjects->Count();
+        if (MissedObjectCount == ObjectCount)
+        {
+            return false;
+        }
         TargetNode = UObject::FindObject<UStruct>(TargetFullName);
+        MissedObjectCount = TargetNode == nullptr ? ObjectCount : 0;
     }
 
     return TargetNode == Node;
+}
+
+void FunctionStructIntercept::RetryMissing()
+{
+    for (FunctionStructIntercept* Intercept : RegisteredIntercepts)
+    {
+        Intercept->MissedObjectCount = 0;
+    }
 }
 
 void FunctionStructIntercept::InvalidateRegistered()
@@ -110,6 +134,7 @@ void FunctionStructIntercept::InvalidateRegistered()
     {
         MILAN_CHECKW(Intercept->TargetFullName != nullptr, L"");
         Intercept->TargetNode = nullptr;
+        Intercept->MissedObjectCount = 0;
     }
 }
 

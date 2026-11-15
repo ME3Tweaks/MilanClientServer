@@ -17,9 +17,9 @@
 #define ASI_NAME_NO_SPACE_W L"MilanHost"
 
 
-#define ASI_VERSION 4
+#define ASI_VERSION 21
 // String that appears in the file description and part of SPI
-#define ASI_DESCRIPTION "Milan Host is the native component for the Project Milan mod."
+#define ASI_DESCRIPTION "Milan Host is the native component for Legendary Edition Multiplayer. It doesn't work without it."
 
 
 // === Identification from automated ME3Tweaks tooling ====

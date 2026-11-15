@@ -15,4 +15,5 @@ namespace SFXOnlineHijacks
     void InstallComponentBlazeGame();
     void InstallComponentBlazeLogin();
     void InstallComponentBlazeHub();
+    void InstallComponentUnrealPlayer();
 }

@@ -1,10 +1,13 @@
 #include "Components/CGlobals.hpp"
 #include "Components/CImgui.hpp"
-#include "Engine/ConsoleAutoComplete.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
+#include "Engine/InputPromptFix.hpp"
+#include "Engine/DLCConfigReload.hpp"
+#include "Engine/LinkerPatcher.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfDecls.hpp"
+#include "Online/AchievementGuard.hpp"
 #include "Online/SFXOnlineHijacks.hpp"
 
 // ! CGlobals implementation.
@@ -39,19 +42,23 @@ void CGlobals::PostInitialize(::LESDK::Initializer& Context)
     // Depends on CImgui initialization.
     InitWindowProc(Context);
 
-    // Engine is a base package, always loaded by this point (unlike e.g. SFXOnlineFoundation).
-    ConsoleAutoComplete::Install();
 }
 
 void CGlobals::UninstallSomeHooks(::LESDK::Initializer& Context)
 {
+    InputPromptFix::Uninstall(Context);
     Context.UninstallHook("UWorld::Tick");
     Context.UninstallHook("UObject::ProcessInternal");
     Context.UninstallHook("UObject::ProcessEvent");
+#ifndef _FINAL_RELEASE
     Context.UninstallHook("UObject::ProcessDelegate");
     Context.UninstallHook("UObject::CallFunction");
+#endif
     Context.UninstallHook("UGameEngine::Tick");
     Context.UninstallHook("UGameEngine::Exec");
+    // These call into CMatchmaking, which is terminated after this.
+    Context.UninstallHook("FSocketWin::RecvFrom");
+    Context.UninstallHook("FSocketWin::SendTo");
 }
 
 void CGlobals::UpdateGuidCacheOverride()
@@ -102,20 +109,47 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
 
     FIND_VAR_TWO(UUIString, StringSize, GLOBAL_UUISTRING_STRINGSIZE_PHOOK);
     FIND_VAR_TWO(UCanvas, WrappedPrint, GLOBAL_UCANVAS_WRAPPEDPRINT_PHOOK);
+    FIND_VAR_TWO(UWorld, FlushLevelStreaming, GLOBAL_UWORLD_FLUSHLEVELSTREAMING);
 
+    GStreamingManager = Context.ResolveTyped<void*>(GLOBAL_GSTREAMINGMANAGER_RIP);
+    LOG_SDK_GLOBAL(GStreamingManager, GStreamingManager != nullptr ? *GStreamingManager : nullptr);
+
+#ifndef _FINAL_RELEASE
+    // Does nothing in final builds
     INSTALL_HOOK_TWO(UFunction, Bind, GLOBAL_UFUNCTION_BIND_PHOOK);
+#endif
 
     INSTALL_HOOK_TWO(UGameEngine, Exec, GLOBAL_UGAMEENGINE_EXEC_PHOOK);
     INSTALL_HOOK_TWO(UGameEngine, LoadMap, GLOBAL_UGAMEENGINE_LOADMAP_PHOOK);
     INSTALL_HOOK_TWO(UGameEngine, Tick, GLOBAL_UGAMEENGINE_TICK_PHOOK);
+    // LoadPackage itself is installed by LoadGate::Install at the very start of attach.
 
+    InputPromptFix::Initialize(Context);
+    // Never uninstalled, so shutdown profile saves stay blocked too.
+    AchievementGuard::Initialize(Context);
+    LinkerPatcher::Initialize(Context);
+#ifndef _FINAL_RELEASE
+    DLCConfigReload::Initialize(Context);
+#endif
+    INSTALL_HOOK_TWO(FPackageFileCache, FindPackageFile, GLOBAL_FPACKAGEFILECACHE_FINDPACKAGEFILE_RVA);
+    INSTALL_HOOK_TWO(ULinkerLoad, FinalizeCreation, GLOBAL_ULINKERLOAD_FINALIZECREATION_RVA);
+    INSTALL_HOOK_TWO(ULinkerLoad, CreateExport, GLOBAL_ULINKERLOAD_CREATEEXPORT_RVA);
+    INSTALL_HOOK_TWO(UObject, EndLoad, GLOBAL_UOBJECT_ENDLOAD_RVA);
+    // By-name resolution (e.g. BioUI MovieLibrary GFxResource strings); see LinkerPatcher.hpp.
+    INSTALL_HOOK_TWO(UObject, StaticFindObject, GLOBAL_UOBJECT_STATICFINDOBJECT_RVA);
+    INSTALL_HOOK_TWO(UObject, StaticLoadObject, GLOBAL_UOBJECT_STATICLOADOBJECT_RVA);
+
+#ifndef _FINAL_RELEASE
+    // Does nothing in final builds
     INSTALL_HOOK_TWO(UObject, CallFunction, BUILTIN_CALLFUNCTION_PHOOK);
     INSTALL_HOOK_TWO(UObject, ProcessDelegate, GLOBAL_UOBJECT_PROCESSDELEGATE_PHOOK);
+#endif
     INSTALL_HOOK_TWO(UObject, ProcessEvent, BUILTIN_PROCESSEVENT_PHOOK);
     INSTALL_HOOK_TWO(UObject, ProcessInternal, BUILTIN_PROCESSINTERNAL_PHOOK);
     FIND_VAR_TWO(UObject, SkipFunction, GLOBAL_UOBJECT_SKIPFUNCTION_PHOOK);
 
     //INSTALL_HOOK_TWO(USFXEngine, UpdateDynamicLoadMappingFindHash, GLOBAL_USFXENGINE_UPDATEDYNAMICLOADMAPPINGFINDHASH_PHOOK);
+    INSTALL_HOOK_TWO(USFXEngine, GetDisconnectFallbackMap, GLOBAL_USFXENGINE_GETDISCONNECTFALLBACKMAP_PHOOK);
     INSTALL_HOOK_TWO(UWorld, SpawnActor, GLOBAL_UWORLD_SPAWNACTOR_PHOOK);
     INSTALL_HOOK_TWO(UWorld, Tick, GLOBAL_UWORLD_TICK_PHOOK);
 }
@@ -123,9 +157,7 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
 void CGlobals::InitWindowProc(::LESDK::Initializer& Context)
 {
 #ifdef WITH_IMGUI
-    // WndProc is replaced via a Win32 mechanism, see CImgui::On_SwapChainPresent.
-    WndProc_orig = Context.ResolveTyped<t_WndProc>(GLOBAL_WNDPROC_RVA);
-    LOG_SDK_GLOBAL(WndProc_orig, WndProc_orig);
+    INSTALL_HOOK_ONE(WndProc, GLOBAL_WNDPROC_RVA);
     INSTALL_HOOK_TWO_ADDR(IDXGISwapChain, Present, COMPONENT(CImgui).GetSwapChainPresent());
 #else
     MILAN_UNUSED(Context);
@@ -142,7 +174,6 @@ void CGlobals::InitNetworkHooks(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(UActorChannel, SetChannelActor, GLOBAL_UACTORCHANNEL_SETCHANNELACTOR_PHOOK);
     INSTALL_HOOK_TWO(UGuidCache, LookupPackageGuid, GLOBAL_UGUIDCACHE_LOOKUPPACKAGEGUID_PHOOK);
     INSTALL_HOOK_TWO(UNetConnection, ClientSupportsLevel, GLOBAL_UNETCONNECTION_CLIENTSUPPORTSLEVEL_PATTERN);
-    INSTALL_HOOK_TWO(UNetConnection, Close, GLOBAL_UNETCONNECTION_CLOSE_PATTERN);
     INSTALL_HOOK_TWO(UNetConnection, CreateChannel, GLOBAL_UNETCONNECTION_CREATECHANNEL_PHOOK);
     INSTALL_HOOK_TWO(UPackageMap, SupportsObject, GLOBAL_UPACKAGEMAP_SUPPORTSOBJECT_PATTERN);
     INSTALL_HOOK_TWO(UPackageMap, SerializeObject, GLOBAL_UPACKAGEMAP_SERIALIZEOBJECT_PATTERN);
@@ -151,12 +182,26 @@ void CGlobals::InitNetworkHooks(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(UWorld, ServerTickClients, GLOBAL_UWORLD_SERVERTICKCLIENTS_PHOOK);
     INSTALL_HOOK_ONE(SortReplicatedActors, GLOBAL_SORT_REPLICATED_ACTORS_OFFSET);
     INSTALL_HOOK_ONE(GlobalDynamicBuildVersion, GLOBAL_GLOBALDYNAMICBUILDVERSION_PATTERN);
-    INSTALL_HOOK_TWO(FSocketWin, SendTo, GLOBAL_FSOCKETWIN_SENDTO_OFFSET);
     INSTALL_HOOK_TWO(FSocketWin, Send, GLOBAL_FSOCKETWIN_SEND_OFFSET);
-    INSTALL_HOOK_TWO(FSocketWin, RecvFrom, GLOBAL_FSOCKETWIN_RECVFROM_OFFSET);
     INSTALL_HOOK_TWO(FSocketWin, Recv, GLOBAL_FSOCKETWIN_RECV_OFFSET);
 
 #endif // !_FINAL_RELEASE
+
+    // Matchmaking vote kicks close connections through this hook in every build.
+    INSTALL_HOOK_TWO(UNetConnection, Close, GLOBAL_UNETCONNECTION_CLOSE_PATTERN);
+
+    // Matchmaking sends and receives its datagrams on the UE3 game socket in every build.
+    INSTALL_HOOK_TWO(FSocketWin, SendTo, GLOBAL_FSOCKETWIN_SENDTO_OFFSET);
+    INSTALL_HOOK_TWO(FSocketWin, RecvFrom, GLOBAL_FSOCKETWIN_RECVFROM_OFFSET);
+
+    FIND_VAR_TWO(UObject, IsAsyncLoading, GLOBAL_UOBJECT_ISASYNCLOADING_RVA);
+    FIND_VAR_ONE(appGetLanguageExt, GLOBAL_APPGETLANGUAGEEXT_RVA);
+
+    // Joiners wait for packages the host uses to finish async loading
+    INSTALL_HOOK_TWO(Net, VerifyPackageInfo, GLOBAL_NET_VERIFYPACKAGEINFO_RVA);
+
+    // Same in reverse - host will start trying to load client kits and can crash the same way
+    INSTALL_HOOK_TWO(SFXEngine, SeekFreeLoadStatus, GLOBAL_SFXENGINE_SEEKFREELOADSTATUS_RVA);
 }
 
 void CGlobals::InitNetworkInjections()

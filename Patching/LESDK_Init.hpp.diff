@@ -1,0 +1,23 @@
+diff --git a/Src/LESDK/Init.hpp b/Src/LESDK/Init.hpp
+index 11a3852..92f450d 100644
+--- a/Src/LESDK/Init.hpp
++++ b/Src/LESDK/Init.hpp
+@@ -85,16 +85,18 @@ namespace LESDK {
+         char const* OwnerName{ nullptr };
+ 
+     public:
+ 
+         explicit Initializer(ISharedProxyInterface* SPI, char const* Name);
+ 
+         void* Resolve(Address InAddr) const;
+         void* InstallHook(char const* Name, void* Target, void* Detour);
++        void* InstallHookDeferred(char const* Name, void* Target, void* Detour);
++        void  EnableHook(char const* Name);
+         void  UninstallHook(char const* Name);
+ 
+         template<typename T>
+         T* ResolveTyped(Address const InAddr) const {
+             void* const Resolved = Resolve(InAddr);
+             return reinterpret_cast<T*>(Resolved);
+         }
+     };

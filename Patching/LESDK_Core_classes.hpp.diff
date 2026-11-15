@@ -1,8 +1,8 @@
 diff --git a/Src/LESDK/LE3/Core_classes.hpp b/Src/LESDK/LE3/Core_classes.hpp
-index d2edb76..44e8f90 100644
+index d2edb76..290c52c 100644
 --- a/Src/LESDK/LE3/Core_classes.hpp
 +++ b/Src/LESDK/LE3/Core_classes.hpp
-@@ -15,16 +15,200 @@
+@@ -15,16 +15,261 @@
  
  
  #ifdef _MSC_VER
@@ -192,6 +192,67 @@ index d2edb76..44e8f90 100644
 +static_assert(offsetof(FPackageInfo, RemoteGeneration) == 0x2C);
 +static_assert(sizeof(FPackageInfo) == 0x4C);
 +
++
++// Linker tables, ported from the LExASIs LE3 SDK. Offsets confirmed against
++// ULinkerLoad::CreateExport (RVA 0xFBDD0): export stride is 0x64, Object lives at +0x30.
++
++struct FObjectResource
++{
++    SFXName                         ObjectName;
++    int                             OuterIndex;
++};
++
++struct FObjectImport : public FObjectResource
++{
++    SFXName                         ClassPackage;
++    SFXName                         ClassName;
++    UObject*                        Object;
++    class ULinkerLoad*              SourceLinker;
++    int                             SourceIndex;
++};
++
++static_assert(offsetof(FObjectImport, Object) == 0x1C);
++static_assert(sizeof(FObjectImport) == 0x30);
++
++struct FObjectExport : public FObjectResource
++{
++    int                             ClassIndex;
++    int                             SuperclassIndex;
++    int                             ArchetypeIndex;
++    unsigned long long              ObjectFlags;
++    int                             SerialSize;
++    int                             DataOffset;
++    int                             Unknown28;
++    int                             Unknown2C;
++    UObject*                        Object;         // Cached once CreateExport has run.
++    int                             HashNext;
++    int                             ExportFlags;
++    TArray<int>                     GenerationsObjectCount;
++    unsigned char                   PackageGuid[0x10];
++    int                             PackageFlags;
++};
++
++static_assert(offsetof(FObjectExport, ObjectFlags) == 0x18);
++static_assert(offsetof(FObjectExport, Object) == 0x30);
++static_assert(offsetof(FObjectExport, ExportFlags) == 0x3C);
++static_assert(sizeof(FObjectExport) == 0x64);
++
++enum ELoadFlags
++{
++    LOAD_None                       = 0x00000000,
++    LOAD_SeekFree                   = 0x00000001,
++    LOAD_NoWarn                     = 0x00000002,
++    LOAD_Throw                      = 0x00000008,
++    LOAD_Verify                     = 0x00000010,
++    LOAD_AllowDll                   = 0x00000020,
++    LOAD_DisallowFiles              = 0x00000040,
++    LOAD_NoVerify                   = 0x00000080,
++    LOAD_Quiet                      = 0x00002000,
++    LOAD_FindIfFail                 = 0x00004000,
++    LOAD_MemoryReader               = 0x00008000,
++    LOAD_NoRedirects                = 0x00020000,
++};
++
 +// ========================================
 +
 +
@@ -203,7 +264,7 @@ index d2edb76..44e8f90 100644
  
  #define CONST_InvAspectRatio16x9                                 0.56249
  #define CONST_InvAspectRatio5x4                                  0.8
-@@ -262,16 +446,21 @@ public:
+@@ -262,16 +507,21 @@ public:
  	}
  
  	template<std::derived_from<UObject> T> T const* CastDirect() const requires requires { T::StaticClass(); } {
@@ -225,7 +286,7 @@ index d2edb76..44e8f90 100644
  	struct FVector TransformVectorByRotation ( struct FRotator const& SourceRotation, struct FVector const& SourceVector, unsigned long bInverse );
  	struct SFXName GetPackageName ( );
  	bool IsPendingKill ( );
-@@ -614,33 +803,35 @@ public:
+@@ -614,33 +864,35 @@ public:
  	virtual void VirtualFunction46 ( );																			// 0x7FF669E03820 (0x170)
  	virtual void VirtualFunction47 ( );																			// 0x7FF669E03820 (0x178)
  	virtual void VirtualFunction48 ( );																			// 0x7FF669E03820 (0x180)
@@ -265,7 +326,7 @@ index d2edb76..44e8f90 100644
  {
  public:
  	unsigned char                                      UnknownData00[ 0x30 ];                            		// 0x0060 (0x0030) MISSED OFFSET
-@@ -702,25 +893,32 @@ public:
+@@ -702,25 +954,32 @@ public:
  
  };
  
@@ -299,7 +360,48 @@ index d2edb76..44e8f90 100644
  public:
  	unsigned char                                      UnknownData00[ 0x10 ];                            		// 0x0060 (0x0010) MISSED OFFSET
  
-@@ -1391,25 +1589,71 @@ public:
+@@ -762,26 +1021,39 @@ public:
+ 
+ };
+ 
+ // Class Core.Linker
+ // 0x0150 (0x01B0 - 0x0060)
+ class ULinker : public UObject
+ {
+ public:
+-	unsigned char                                      UnknownData00[ 0x150 ];                           		// 0x0060 (0x0150) MISSED OFFSET
++    class UPackage*                 LinkerRoot;                         // 0x0060 (0x08) - MILAN PATCHED
++    unsigned char                   UnknownData00[0xA8];                // 0x0068 (0xA8) - MILAN PATCHED
++    TArray<SFXName>                 NameMap;                            // 0x0110 (0x10) - MILAN PATCHED
++    TArray<FObjectImport>           ImportMap;                          // 0x0120 (0x10) - MILAN PATCHED
++    TArray<FObjectExport>           ExportMap;                          // 0x0130 (0x10) - MILAN PATCHED
++    unsigned char                   UnknownData01[0x58];                // 0x0140 (0x58) - MILAN PATCHED
++    FString                         Filename;                           // 0x0198 (0x10) - MILAN PATCHED
++    unsigned long long              ContextFlags;                       // 0x01A8 (0x08) - MILAN PATCHED
+ 
+ private:
+ 	static UClass* pClassPointer;
+ 
+ public:
+ 	static UClass* StaticClass();
+ 
+ };
+ 
++static_assert(offsetof(ULinker, LinkerRoot) == 0x60);
++static_assert(offsetof(ULinker, ExportMap) == 0x130);
++static_assert(offsetof(ULinker, Filename) == 0x198);
++static_assert(offsetof(ULinker, ContextFlags) == 0x1A8);
++static_assert(sizeof(ULinker) == 0x1B0);
++
+ // Class Core.LinkerSave
+ // 0x00F0 (0x02A0 - 0x01B0)
+ class ULinkerSave : public ULinker
+ {
+ public:
+ 	unsigned char                                      UnknownData00[ 0xF0 ];                            		// 0x01B0 (0x00F0) MISSED OFFSET
+ 
+ private:
+@@ -1391,25 +1663,71 @@ public:
      DWORD                           ClassCastFlags;                     // 0x0104 (0x04) - NOT AUTO-GENERATED PROPERTY 
      DWORD                           ClassUnique;                        // 0x0108 (0x04) - NOT AUTO-GENERATED PROPERTY 
      UClass*                         ClassWithin;                        // 0x010C (0x08) - NOT AUTO-GENERATED PROPERTY 

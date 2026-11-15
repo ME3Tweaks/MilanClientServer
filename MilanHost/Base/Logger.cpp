@@ -2,7 +2,9 @@
 #include <array>
 #include <cstring>
 #include <cwchar>
+#include <io.h>
 #include <limits>
+#include <share.h>
 #include <string>
 #include <locale.h>
 
@@ -248,17 +250,56 @@ bool FileLoggerOutput::Initialized() const noexcept
 
 FileLoggerOutput::FileLoggerOutput(std::string_view const OutputPath, bool const bAppend)
 {
-    // Created file writes wide strings as utf-8, but only accepts wide strings.
-    OutputFile = fopen(OutputPath.data(), !bAppend ? "w,ccs=UTF-8" : "a,ccs=UTF-8");
+    // Keep the same file open while checking its age and restarting it.
+
+    OutputFile = _fsopen(OutputPath.data(), bAppend ? "a+,ccs=UTF-8" : "w,ccs=UTF-8", _SH_DENYWR);
 
     if (OutputFile == nullptr)
     {
         ::game::string ErrorText{};
-        ErrorText += "FileLoggerOutput - std::fopen failed: ";
+        ErrorText += "FileLoggerOutput - _fsopen failed: ";
         ErrorText += std::strerror(errno);
 
         ::OutputDebugStringA(ErrorText.c_str());
+        return;
     }
+
+    if (bAppend)
+    {
+        constexpr ULONGLONG MaxAgeTicks = 3ULL * 24 * 60 * 60 * 10'000'000; // FILETIME uses 100 ns ticks, cause pain
+        int const Descriptor = _fileno(OutputFile);
+        auto const FileHandle = reinterpret_cast<HANDLE>(_get_osfhandle(Descriptor));
+        FILETIME Now{};
+        ::GetSystemTimeAsFileTime(&Now);
+        FILETIME Created{};
+        if (::GetFileTime(FileHandle, &Created, nullptr, nullptr))
+        {
+            ULONGLONG const NowTicks = (static_cast<ULONGLONG>(Now.dwHighDateTime) << 32) | Now.dwLowDateTime;
+            ULONGLONG const CreatedTicks = (static_cast<ULONGLONG>(Created.dwHighDateTime) << 32) | Created.dwLowDateTime;
+            if (CreatedTicks != 0 && NowTicks >= CreatedTicks && NowTicks - CreatedTicks >= MaxAgeTicks)
+            {
+                // Advance the creation time first so a metadata failure preserves the old log.
+                if (!::SetFileTime(FileHandle, &Now, nullptr, nullptr))
+                {
+                    // Failed to update timestamp
+                }
+                else if (_chsize_s(Descriptor, 0) == 0)
+                {
+                    // Truncation removes byte order mark, so we need to keep it
+                    std::fputwc(L'\uFEFF', OutputFile);
+                }
+                else
+                {
+                    // Couldn't truncate log!
+                    ::SetFileTime(FileHandle, &Created, nullptr, nullptr);
+                }
+            }
+        }
+    }
+
+    // Add session start marker to delineate sessions
+    std::fputws(L"--- session start ---\n", OutputFile);
+    Flush();
 }
 
 FileLoggerOutput::~FileLoggerOutput() noexcept
@@ -273,7 +314,7 @@ FileLoggerOutput::~FileLoggerOutput() noexcept
 void FileLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Severity, SFXName const Category,
     char const* const Data, size_t const Size, float const Seconds, FormatStyleA const& Style)
 {
-    if (Data != nullptr && Size != 0)
+    if (OutputFile != nullptr && Data != nullptr && Size != 0)
     {
         assert(Size < 8192);
 
@@ -298,7 +339,8 @@ void FileLoggerOutput::AcceptAnsi(CodePlaceA const& Place, ESeverity const Sever
 void FileLoggerOutput::AcceptUnicode(CodePlaceW const& Place, ESeverity const Severity, SFXName const Category,
     wchar_t const* const Data, size_t const Size, float const Seconds, FormatStyleW const& Style)
 {
-    _fwprintf_l(OutputFile, L"[%07.3f] [%s %S] %s\n", s_sinkLocale, Seconds, Style.SevToken, Category.GetName(), Data);
+    if (OutputFile != nullptr)
+        _fwprintf_l(OutputFile, L"[%07.3f] [%s %S] %s\n", s_sinkLocale, Seconds, Style.SevToken, Category.GetName(), Data);
     MILAN_UNUSED_5(Place, Severity, Category, Size, Seconds);
 }
 

@@ -59,13 +59,12 @@ public:
 /**
  * Provides an interface for declaratively hooking an @c UFunction by caching its pointer looked up by full name.
  * 
- * @warning     This @em will slow down execution to a crawl if the function cannot be found.
- *              Prefer good old string comparison for speculatively hooking @ref UFunction calls.
  */
 class FunctionStructIntercept
 {
     UStruct*            TargetNode{ nullptr };
     wchar_t const*      TargetFullName{ nullptr };
+    UINT                MissedObjectCount{ 0 };     // GObjObjects count at the last failed lookup
 
     // Can't use ::game::vector here because it would pre-allocate
     // in dynamic initializer, i.e. before we have the GMalloc pointer.
@@ -76,6 +75,7 @@ public:
     FunctionStructIntercept();
     bool Applies(UStruct* Node, wchar_t const* FullName);
 
+    static void RetryMissing();
     static void InvalidateRegistered();
     static void CleanupRegistered();
 };

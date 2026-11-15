@@ -3,21 +3,35 @@
 #include "Base/IOUtils.hpp"
 #include "Base/Logger.hpp"
 #include "Components/CCommands.hpp"
+#ifndef _FINAL_RELEASE
+#include "Components/CDesync.hpp"
+#endif
 #include "Components/CGlobals.hpp"
 #ifdef WITH_IMGUI
+#include <imgui.h>
 #include "Components/CImgui.hpp"
+#include "Components/CChat.hpp"
 #endif
+#include "Components/CMatchmaking.hpp"
 #include "Components/COutput.hpp"
+#ifndef _FINAL_RELEASE
 #include "Components/CProfilers.hpp"
+#endif
 #include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
 #include "Engine/ConsoleAutoComplete.hpp"
 #include "Engine/ExtObject.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
+#include "Engine/LinkerPatcher.hpp"
+#include "Engine/LoadGate.hpp"
+#include "Engine/ConsolePipe.hpp"
+#include "Engine/MenuScenes.hpp"
+#include "Engine/TransparentRender.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfStream.hpp"
 #include "Online/SFXOnlineHijacks.hpp"
+#include "Online/TeamBetrayal.hpp"
 #include "Shell/CmdArgs.hpp"
 #include "Shell/Entry.hpp"
 #include "Version/SharedVersion.h"
@@ -109,6 +123,8 @@ void BioRequestExit_hook(UBOOL const bForce, INT const ExitCode, INT const Unuse
 
 t_UUIString_StringSize* UUIString_StringSize = nullptr;
 t_UCanvas_WrappedPrint* UCanvas_WrappedPrint = nullptr;
+t_UWorld_FlushLevelStreaming* UWorld_FlushLevelStreaming = nullptr;
+void** GStreamingManager = nullptr;
 
 
 // ! UFunction methods.
@@ -134,16 +150,104 @@ UBOOL UGameEngine_Exec_hook(UGameEngine* const Context, WCHAR const* const Comma
 t_UGameEngine_LoadMap* UGameEngine_LoadMap_orig = nullptr;
 UBOOL UGameEngine_LoadMap_hook(UGameEngine* const Context, FURL* const Url, UPendingLevel* const Level, FString* const Error)
 {
+    bool bTravelToLobby = false;
+    // -skiptomp: Just go to lobby
+    static bool s_skipToLobby = CmdArgs::Contain(L"-skiptomp");
+    if (s_skipToLobby && ::_wcsicmp(*Url->Map, L"EntryMenu") == 0)
+    {
+        s_skipToLobby = false;
+        bTravelToLobby = true;
+    }
+
+    // EntryMenu is shown as one of the live menu scenes.
+    if (!bTravelToLobby)
+    {
+        MenuScenes::RedirectEntryMenu(Url);
+    }
+
     MILAN_TRACEW(ELOG_EngineHooks, L"UGameEngine::LoadMap: Url = %s...", *Url->Map);
     NETPROF(CaptureLevelStart(Url));
 
     auto const Result = (*UGameEngine_LoadMap_orig)(Context, Url, Level, Error);
     if (!Result) MILAN_ERRORW(ELOG_EngineHooks, L"UGameEngine::LoadMap failed: %s", *(*Error));
 
-    // Refreshes exec-function/map completions for the new level (e.g. DLC-added commands).
-    if (Result) ConsoleAutoComplete::RebuildForCurrentLevel();
+    // Force load screen to stay up while level finishes up loading
+    if (Result && !bTravelToLobby && MenuScenes::IsMainMenuMap(*Url->Map))
+    {
+        MenuScenes::FinishLoading();
+    }
 
+    if (Result && bTravelToLobby)
+    {
+        TypedObjectIterator<APlayerController, true, false> Iter{};
+        if (Iter)
+        {
+            FString const LobbyUrl = FString::Printf(L"%s?origin=MainMenu", *Context->GetDefaultLobbyMap());
+            MILAN_INFOW(ELOG_EngineHooks, L"-skiptomp: travelling to %s", *LobbyUrl);
+            constexpr unsigned char k_travelAbsolute = 0;
+            (*Iter)->eventClientTravel(LobbyUrl, k_travelAbsolute, FALSE, FGuid{});
+        }
+        else
+        {
+            MILAN_WARNW(ELOG_EngineHooks, L"-skiptomp: no player controller to travel with");
+        }
+    }
+
+    // Refreshes exec-function/map completions for the new level (e.g. DLC-added commands).
+    if (Result)
+    {
+        ConsoleAutoComplete::RebuildForCurrentLevel();
+    }
+
+    if (Result)
+    {
+        FunctionStructIntercept::RetryMissing();
+    }
     return Result;
+}
+
+// 11/04/2026 - Move window setting code to standalone
+// and only update once viewport is visible
+static void UpdateWindowTitle()
+{
+    static bool s_done = false;
+    if (s_done)
+    {
+        // Already done.
+        return;
+    }
+
+    for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
+    {
+        auto const Viewport = (*Iter)->Viewport;
+        if (Viewport == nullptr)
+        {
+            // No viewport
+            break;
+        }
+
+        // Should move these to SDK in V3
+        auto const Window = reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
+        auto const Name = reinterpret_cast<FString*>(reinterpret_cast<unsigned char*>(Viewport) + 0xD4);
+
+        MILAN_TRACEW(ELOG_Startup, L"Updating title for %s, viewport at %p", *(*Iter)->StaticName(), Viewport);
+
+#ifndef _FINAL_RELEASE
+        // Additional information in the title bar for debugging.
+        if (CmdArgs::Contain(L"-setfunnytitle"))
+        {
+            *Name = FString::Printf(L"Project Milan (INST = %d, PID = %d)", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
+        }
+        else
+#endif
+        {
+            // Shipping title
+            *Name = FString::Printf(L"Legendary Edition Multiplayer");
+        }
+        DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
+
+        s_done = true;
+    }
 }
 
 t_UGameEngine_Tick* UGameEngine_Tick_orig = nullptr;
@@ -152,6 +256,80 @@ void UGameEngine_Tick_hook(UGameEngine* const Context, float const Delta)
     //MILAN_TRACEW(L"(UGameEngine::Tick): Delta=%f", Delta);
     NETPROF(CaptureFrameStart(Delta));
     (*UGameEngine_Tick_orig)(Context, Delta);
+    UpdateWindowTitle();
+    COMPONENT(CMatchmaking).On_GameEngineTick(Delta);
+#ifndef _FINAL_RELEASE
+    COMPONENT(CDesync).On_GameEngineTick(Delta);
+    ConsolePipe::Pump();
+#endif
+}
+
+
+// ! Package loading and linker methods.
+// ========================================
+
+t_LoadPackage* LoadPackage_orig = nullptr;
+UPackage* LoadPackage_hook(UObject* const Outer, WCHAR const* const Filename, INT const Flags)
+{
+    // Installed before anything else in attach; parks this thread until attach has finished.
+    LoadGate::Wait(Filename);
+
+    // Only reachable with -noloadgate or a timed-out gate: nothing (logger included) is set up yet.
+    if (!LoadGate::IsOpen())
+        return (*LoadPackage_orig)(Outer, Filename, Flags);
+
+    LinkerPatcher::EnsureConfigLoaded();
+
+    UPackage* const Result = (*LoadPackage_orig)(Outer, Filename, Flags);
+
+    if (!ConsoleAutoComplete::TryInstall())
+    {
+        MILAN_WARNW(ELOG_EngineHooks, L"Engine.Console class not available after LoadPackage('%s'); retrying after next package load", Filename);
+    }
+
+    return Result;
+}
+
+t_FPackageFileCache_FindPackageFile* FPackageFileCache_FindPackageFile_orig = nullptr;
+UBOOL FPackageFileCache_FindPackageFile_hook(void* const Context, WCHAR const* const InName, FGuid* const Guid,
+    FString* const OutFileName, WCHAR const* const Language, UBOOL const Unknown)
+{
+    UBOOL const Result = (*FPackageFileCache_FindPackageFile_orig)(Context, InName, Guid, OutFileName, Language, Unknown);
+    if (Result) return Result;
+
+    // Patch packages live outside PCConsoleTOC.bin, so the original lookup can never find them.
+    return LinkerPatcher::ResolvePatchPackageFile(InName, OutFileName) ? TRUE : FALSE;
+}
+
+t_ULinkerLoad_CreateExport* ULinkerLoad_CreateExport_orig = nullptr;
+UObject* ULinkerLoad_CreateExport_hook(ULinkerLoad* const Context, INT const Index)
+{
+    return LinkerPatcher::CreateExport(Context, Index);
+}
+
+t_ULinkerLoad_FinalizeCreation* ULinkerLoad_FinalizeCreation_orig = nullptr;
+INT ULinkerLoad_FinalizeCreation_hook(ULinkerLoad* const Context)
+{
+    return LinkerPatcher::FinalizeCreation(Context);
+}
+
+t_UObject_EndLoad* UObject_EndLoad_orig = nullptr;
+void UObject_EndLoad_hook()
+{
+    LinkerPatcher::EndLoad();
+}
+
+t_UObject_StaticFindObject* UObject_StaticFindObject_orig = nullptr;
+UObject* UObject_StaticFindObject_hook(UClass* const ObjectClass, UObject* const InObjectPackage, WCHAR const* const OrigInName, UBOOL const bExactClass)
+{
+    return LinkerPatcher::StaticFindObject(ObjectClass, InObjectPackage, OrigInName, bExactClass);
+}
+
+t_UObject_StaticLoadObject* UObject_StaticLoadObject_orig = nullptr;
+UObject* UObject_StaticLoadObject_hook(UClass* const ObjectClass, UObject* const InOuter, WCHAR const* const InName, WCHAR const* const Filename,
+    INT const LoadFlags, UPackageMap* const Sandbox, UBOOL const bAllowObjectReconciliation)
+{
+    return LinkerPatcher::StaticLoadObject(ObjectClass, InOuter, InName, Filename, LoadFlags, Sandbox, bAllowObjectReconciliation);
 }
 
 
@@ -247,6 +425,7 @@ void UObject_ProcessDelegate_hook(UObject* const Context, SFXName const Delegate
     (*UObject_ProcessDelegate_orig)(Context, DelegateName, Delegate, Parms, Result);
 }
 
+// ProcessEvent runs for pretty much every unrealscript call
 t_UObject_ProcessEvent* UObject_ProcessEvent_orig = nullptr;
 void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function, void* const Parms, void* const Result)
 {
@@ -275,16 +454,40 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
         SFXOnlineHijacks::InstallComponentBlazeGame();
         SFXOnlineHijacks::InstallComponentBlazeLogin();
         SFXOnlineHijacks::InstallComponentBlazeHub();
+        SFXOnlineHijacks::InstallComponentUnrealPlayer();
         s_sfxOnlineInitialized = true;
 
         MILAN_INFOW(ELOG_EngineHooks, L"Installed SFXOnlineFoundation hijacks in %3.2f ms", HijackTimer.GetMilliseconds());
     }
 
-    //if (IsFunctionWithinDerivedClass(Function, L"SFXOnlineComponentImageManager"))
-    //    MILAN_TRACEW(ELOG_DevelUtils, L"%S: %s", __func__, *Function->GetFullName());
+#ifndef _FINAL_RELEASE
+    if (COMPONENT(CDesync).On_UObject_ProcessEvent(Context, Function, Parms))
+    {
+        return;
+    }
+#endif
 
+    if (TeamBetrayal::OnProcessEvent(Context, Function, Parms))
+    {
+        return;
+    }
+
+    // Log why the engine is about to drop a game connection (PMT_ConnectionFailure or PMT_SocketFailure).
+    static SFXName const k_setProgressMessage{ L"SetProgressMessage", 0 };
+    if (Function->Name == k_setProgressMessage && Context->IsA(UGameViewportClient::StaticClass()))
+    {
+        auto const* const Params = static_cast<UGameViewportClient_eventSetProgressMessage_Parms const*>(Parms);
+        if (Params->MessageType >= 4) {
+            MILAN_WARNW(ELOG_EngineHooks, L"connection failure: \"%s\" / \"%s\"", Params->Title.Length() > 0 ? Params->Title.Chars() : L"", Params->Message.Length() > 0 ? Params->Message.Chars() : L"");
+        }
+    }
+
+#ifndef _FINAL_RELEASE
     COMPONENT(CProfilers).On_UObject_ProcessEvent(Context, Function, Parms, Result);
     COMPONENT(CRenderdoc).On_UObject_ProcessEvent(Context, Function, Parms, Result);
+#endif
+
+    TransparentRender::OnProcessEvent(Function);
 
     (*UObject_ProcessEvent_orig)(Context, Function, Parms, Result);
 
@@ -328,13 +531,24 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
 #endif
 
-    //if (IsFunctionWithinDerivedClass(Stack->Node, L"SFXOnlineComponentImageManager"))
-    //    MILAN_TRACEW(ELOG_DevelUtils, L"%S: %s", __func__, *Stack->Node->GetFullName());
-
     if (!COMPONENT(CState).On_UObject_ProcessInternal_Pre(Context, Stack, Result))
     {
         bCallOriginal = false;
     }
+    if (!COMPONENT(CMatchmaking).On_ScriptCall(Stack->Node))
+    {
+        bCallOriginal = false;
+    }
+    if (!TeamBetrayal::OnScriptCall(Context, Stack))
+    {
+        bCallOriginal = false;
+    }
+#ifdef WITH_IMGUI
+    if (!COMPONENT(CChat).On_UObject_ProcessInternal_Pre(Context, Stack, Result))
+    {
+        bCallOriginal = false;
+    }
+#endif
 
     if (bCallOriginal)
     {
@@ -342,69 +556,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
         COMPONENT(CState).On_UObject_ProcessInternal_Post(Context, Stack, Result);
     }
 
-#ifndef _FINAL_RELEASE
-
-    // Utilities for speeding up multiplayer launch.
-
-    static bool s_skipMainMenuChecked = false;
-    static bool s_skipMainMenu = false;
-
-    if (!s_skipMainMenuChecked)
-    {
-        s_skipMainMenuChecked = true;
-        s_skipMainMenu = CmdArgs::Contain(L"-skiptomp");
-    }
-
-    if (s_skipMainMenu)
-    {
-        static bool s_checkMainMenuSplash = true;
-        static FunctionNamedIntercept s_checkMainMenuIntercept{};
-
-        if (s_checkMainMenuSplash && s_checkMainMenuIntercept
-            .Applies(Stack->Node, L"SFXGame", L"BioSeqAct_ShouldShowSplashSequence", L"Activated"))
-        {
-            s_checkMainMenuSplash = false;
-
-            auto* const Action = Context->CastDirect<UBioSeqAct_ShouldShowSplashSequence>();
-            Action->GetWorldInfo()->Game->ShowSplashScreen = FALSE;
-            Action->OutputLinks(0).bHasImpulse = FALSE;
-            Action->OutputLinks(1).bHasImpulse = TRUE;
-        }
-
-        static bool s_checkMainMenuLobbyFlow = true;
-        static FunctionNamedIntercept s_checkMainMenuLobbyFlowIntercept{};
-
-        if (s_checkMainMenuLobbyFlow && s_checkMainMenuLobbyFlowIntercept
-            .Applies(Stack->Node, L"SFXGameContentLiveKismet", L"BioSeqAct_ShowMainMenu", L"Activated"))
-        {
-            s_checkMainMenuLobbyFlow = false;
-            for (TypedObjectIterator<USFXGUI_MainMenu_RTT, false, false> Iter{}; Iter; ++Iter)
-                (*Iter)->eventStartMultiplayerFlow();
-        }
-    }
-
-    // Additional information in the title bar for debugging.
-
-    static bool s_updateWindow = true;
-    if (s_updateWindow)
-    {
-        for (TypedObjectIterator<UGameViewportClient, true, false> Iter{}; Iter; ++Iter)
-        {
-            auto const Viewport = (*Iter)->Viewport;
-            if (Viewport == nullptr) break;
-
-            auto const Window = reinterpret_cast<HWND*>(reinterpret_cast<unsigned char*>(Viewport) + 0xC4);
-            auto const Name = reinterpret_cast<FString*>(reinterpret_cast<unsigned char*>(Viewport) + 0xD4);
-
-            MILAN_TRACEW(ELOG_Startup, L"Updating title for %s, viewport at %p", *(*Iter)->StaticName(), Viewport);
-
-            *Name = FString::Printf(L"Project Milan (INST = %d, PID = %d)", GetGameInstanceOrdinal(), ::GetCurrentProcessId());
-            DefWindowProcW(*Window, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(Name->Chars()));
-
-            s_updateWindow = false;
-        }
-    }
-#endif
+    // -skiptomp is handled in UGameEngine_LoadMap_hook.
 }
 
 t_UObject_SkipFunction* UObject_SkipFunction = nullptr;
@@ -417,6 +569,30 @@ t_USFXEngine_UpdateDynamicLoadMappingFindHash* USFXEngine_UpdateDynamicLoadMappi
 int USFXEngine_UpdateDynamicLoadMappingFindHash_hook(USFXEngine* const Context, int const ObjectNetID)
 {
     return (*USFXEngine_UpdateDynamicLoadMappingFindHash_orig)(Context, ObjectNetID);
+}
+
+// UGameEngine::Browse loads this map for ?closed and ?failed (the "disconnect" command, a lost
+// or failed connection)
+t_USFXEngine_GetDisconnectFallbackMap* USFXEngine_GetDisconnectFallbackMap_orig = nullptr;
+FString* USFXEngine_GetDisconnectFallbackMap_hook(USFXEngine* const Context, FString* const Result)
+{
+    (*USFXEngine_GetDisconnectFallbackMap_orig)(Context, Result);
+
+    UWorld* const World = (GWorld != nullptr) ? *GWorld : nullptr;
+    if (World == nullptr || World->Outer == nullptr || Result->StartsWith(*World->Outer->GetName(), true))
+    {
+        return Result;
+    }
+    // A menu scene stands in for EntryMenu, so falling back to EntryMenu from one is still the local map.
+    if (MenuScenes::IsMainMenuMap(*World->Outer->GetName()) && MenuScenes::IsMainMenuMap(**Result))
+    {
+        return Result;
+    }
+
+    FString LobbyMap = Context->GetDefaultLobbyMap();
+    MILAN_DEBUGW(ELOG_EngineHooks, L"disconnect fallback map: %s instead of %s", *LobbyMap, **Result);
+    *Result = std::move(LobbyMap);
+    return Result;
 }
 
 
@@ -449,17 +625,20 @@ AActor* UWorld_SpawnActor_hook(
         MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: Class is null or not an actor", s_errorCounter);
     }
 
-    static constexpr std::uint32_t k_classFlagAbstract = 0x00000001;
-    static constexpr std::uint32_t k_classFlagDeprecated = 0x02000000;
-    if (!!(Class->ClassFlags & k_classFlagAbstract) || !!(Class->ClassFlags & k_classFlagDeprecated))  [[unlikely]]
+    if (Class != nullptr)
     {
-        MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: Class is abstract or deprecated", s_errorCounter);
-    }
+        static constexpr std::uint32_t k_classFlagAbstract = 0x00000001;
+        static constexpr std::uint32_t k_classFlagDeprecated = 0x02000000;
+        if (!!(Class->ClassFlags & k_classFlagAbstract) || !!(Class->ClassFlags & k_classFlagDeprecated)) [[unlikely]]
+        {
+            MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: Class is abstract or deprecated", s_errorCounter);
+        }
 
-    AActor* const Default = Class->ClassDefaultObject ? Class->ClassDefaultObject->Cast<AActor>() : nullptr;
-    if (ActorUtils::GlobalBegunPlay() && Default != nullptr && (Default->bStatic || Default->bNoDelete)) [[unlikely]]
-    {
-        MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: CDO is bStatic or bNoDelete and GWorld has begun play", s_errorCounter);
+        AActor* const Default = Class->ClassDefaultObject ? Class->ClassDefaultObject->Cast<AActor>() : nullptr;
+        if (ActorUtils::GlobalBegunPlay() && Default != nullptr && (Default->bStatic || Default->bNoDelete)) [[unlikely]]
+        {
+            MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: CDO is bStatic or bNoDelete and GWorld has begun play", s_errorCounter);
+        }
     }
 
     if (Template != nullptr && Template->Class != Class)  [[unlikely]]
@@ -509,6 +688,193 @@ void UWorld_Tick_hook(UWorld* const Context, int const Unknown, float const Delt
 {
     (*UWorld_Tick_orig)(Context, Unknown, Delta);
     COMPONENT(CState).On_UWorld_Tick(Context, Unknown, Delta);
+}
+
+
+// ! Game socket I/O (all builds: matchmaking shares the UE3 socket).
+// ========================================
+
+t_FSocketWin_SendTo* FSocketWin_SendTo_orig = nullptr;
+UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, SOCKADDR_IN* Destination)
+{
+    UINT const Ret = (*FSocketWin_SendTo_orig)(Context, Data, Count, Sent, Destination);
+    if (Count > 0)
+    {
+        // This would be too verbose even for ELOG_NetHooksTrace.
+
+        //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Destination->sin_addr), ntohs(Destination->sin_port));
+        //MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::SendTo: type=%d, desc=%s, count=%d, sent=%d, dest=%s", Context->Type, *Context->Description, Count, *Sent, *Remote);
+
+#ifndef _FINAL_RELEASE
+        NETPROF(CaptureSocketCall(Destination, true, *Sent * 8));
+#else
+        MILAN_UNUSED_2(Context, Destination);
+#endif
+    }
+    return Ret;
+}
+
+t_FSocketWin_RecvFrom* FSocketWin_RecvFrom_orig = nullptr;
+UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read, SOCKADDR_IN* Source)
+{
+    // Matchmaking datagrams share the game socket. Consume them here and read the next
+    // datagram, so UE3 only ever sees its own traffic. The last call's result (and its
+    // Winsock error, e.g. WSAEWOULDBLOCK) is what UE3 observes, as without the hook.
+    for (int Consumed = 0; ; ++Consumed)
+    {
+        if (Consumed == 256)
+        {
+            // Yield to the frame instead of draining an unbounded flood.
+            *Read = -1;
+            ::WSASetLastError(WSAEWOULDBLOCK);
+            return FALSE;
+        }
+
+        UINT const Ret = (*FSocketWin_RecvFrom_orig)(Context, Buffer, Max, Read, Source);
+        if (Ret && *Read > 0 && COMPONENT(CMatchmaking).On_ReceivedDatagram(Context, Buffer, *Read, Source))
+            continue;
+
+        if (*Read > 0)
+        {
+            // This would be too verbose even for ELOG_NetHooksTrace.
+
+            //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Source->sin_addr), ntohs(Source->sin_port));
+            //MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::RecvFrom: type=%d, desc=%s, read=%d, source=%s", Context->Type, *Context->Description, *Read, *Remote);
+
+#ifndef _FINAL_RELEASE
+            NETPROF(CaptureSocketCall(Source, false, *Read * 8));
+#endif
+        }
+        return Ret;
+    }
+}
+
+// Flag indicating package is still async loading
+constexpr unsigned long long k_rfAsyncLoading = 0x0000040000000000ull;
+
+t_UObject_IsAsyncLoading* UObject_IsAsyncLoading = nullptr;
+t_appGetLanguageExt* appGetLanguageExt = nullptr;
+
+// UObject::IsAsyncLoading: Is an async load in progress?
+static bool IsAsyncLoading()
+{
+    return UObject_IsAsyncLoading != nullptr && (*UObject_IsAsyncLoading)();
+}
+
+// Fix for join GUID issues
+// Make the game wait for packages to load before actually checking the GUID
+t_Net_VerifyPackageInfo* Net_VerifyPackageInfo_orig = nullptr;
+void* Net_VerifyPackageInfo_hook(void* const Context, FPackageInfo* const Info)
+{
+    if (Info != nullptr)
+    {
+        // Walk the object list: StaticFindObject skips packages that are still async loading.
+        constexpr unsigned long long k_rfUnreachable = 0x0000000200000000ull;
+        UPackage* Existing = nullptr;
+        for (TypedObjectIterator<UPackage, false, false> Iter{}; Iter; ++Iter)
+        {
+            UPackage* const Package = *Iter;
+            if (Package->Outer == nullptr && (Package->ObjectFlags & k_rfUnreachable) == 0 && Package->Name == Info->PackageName)
+            {
+                Existing = Package;
+                break;
+            }
+        }
+
+        FString const Name = Info->PackageName.ToString();
+        // A package with a zero GUID (UPackage +0x6C) hasn't been read from its file yet.
+        FGuid const* const Guid = Existing != nullptr ? reinterpret_cast<FGuid const*>(reinterpret_cast<std::uint8_t const*>(Existing) + 0x6C) : nullptr;
+        if (Guid != nullptr && Guid->A == 0 && Guid->B == 0 && Guid->C == 0 && Guid->D == 0)
+        {
+            if ((Existing->ObjectFlags & k_rfAsyncLoading) != 0 || IsAsyncLoading())
+            {
+                static SFXName s_lastWaited{};
+                if (!(s_lastWaited == Info->PackageName))
+                {
+                    s_lastWaited = Info->PackageName;
+                    MILAN_DEBUGW(ELOG_NetHooks, L"package %s the host uses is still loading; checking it again next tick", *Name);
+                }
+                return nullptr;
+            }
+
+            // Nothing is loading it, so load it now.
+            MILAN_INFOW(ELOG_NetHooks, L"package %s the host uses was never loaded here; loading it now", *Name);
+            (*LoadPackage_orig)(nullptr, *Name, 0);
+        }
+    }
+
+    void* const Result = (*Net_VerifyPackageInfo_orig)(Context, Info);
+
+    // The engine disconnects on a mismatch; say which GUIDs differed.
+    UPackage* const Local = Info != nullptr ? Info->Parent : nullptr;
+    FGuid const* const LocalGuid = Local != nullptr ? reinterpret_cast<FGuid const*>(reinterpret_cast<std::uint8_t const*>(Local) + 0x6C) : nullptr;
+    if (LocalGuid != nullptr && !(*LocalGuid == Info->Guid))
+    {
+        MILAN_WARNW(ELOG_NetHooks, L"package %s: host guid %s, local guid %s, local flags 0x%llX", *Info->PackageName.ToString(),
+            *Info->Guid.ToString(), *LocalGuid->ToString(), static_cast<unsigned long long>(Local->ObjectFlags));
+    }
+    return Result;
+}
+
+// Fix for spawning half-loaded MP pawns
+// Seek free status check only checks for object it is looking for is marked loaded,
+// it doesn't care about its dependencies, so a seek free load could access dependencies
+// that aren't available yet
+t_SFXEngine_SeekFreeLoadStatus* SFXEngine_SeekFreeLoadStatus_orig = nullptr;
+UObject* SFXEngine_SeekFreeLoadStatus_hook(void* const Context, INT const MappingIndex, UClass* const ObjectClass, BYTE* const OutStatus)
+{
+    constexpr BYTE k_asyncLoadInProgress = 2; // EAsyncLoadStatus
+    constexpr BYTE k_asyncLoadComplete = 3;
+    constexpr unsigned long long k_rfNeedLoad = 0x0000020000000000ull;
+    constexpr unsigned long long k_rfNeedPostLoad = 0x0100000000000000ull;
+    constexpr unsigned long long k_rfMidLoad = k_rfAsyncLoading | k_rfNeedLoad | k_rfNeedPostLoad;
+
+    UObject* const Result = (*SFXEngine_SeekFreeLoadStatus_orig)(Context, MappingIndex, ObjectClass, OutStatus);
+    if (Result == nullptr || OutStatus == nullptr || *OutStatus != k_asyncLoadComplete)
+    {
+        return Result;
+    }
+
+    // Are we mid load? If so, we need to wait for the load to finish before returning the object.
+    bool const bMidLoad = (Result->ObjectFlags & k_rfMidLoad) != 0 || (Result->Class != nullptr && (Result->Class->ObjectFlags & k_rfMidLoad) != 0);
+    if (!bMidLoad || !IsAsyncLoading())
+    {
+        return Result;
+    }
+
+    static UObject* s_lastWaited = nullptr;
+    if (s_lastWaited != Result)
+    {
+        s_lastWaited = Result;
+        //MILAN_DEBUGW(ELOG_EngineHooks, L"seek-free object %s is still async loading", *Result->GetFullName());
+    }
+
+    *OutStatus = k_asyncLoadInProgress;
+    return nullptr;
+}
+
+
+t_UNetConnection_Close* UNetConnection_Close_orig = nullptr;
+void UNetConnection_Close_hook(UNetConnection* const Context)
+{
+#ifndef _FINAL_RELEASE
+    if (Context->Driver != nullptr && Context->ConnectionState != USOCK_Closed)
+    {
+        FString RemoteAddress{};
+
+        auto* const TcpipConnection = Context->Cast<UTcpipConnection>();
+        if (TcpipConnection != nullptr)
+        {
+            auto const& Address = TcpipConnection->Address;
+            RemoteAddress = FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
+        }
+
+        MILAN_TRACEW(ELOG_NetHooks, L"UNetConnection::Close, remote = %s", *RemoteAddress);
+        NETPROF(CaptureSessionEvent(Context, L"CLOSE", L""));
+    }
+#endif
+
+    (*UNetConnection_Close_orig)(Context);
 }
 
 
@@ -596,27 +962,6 @@ int UNetConnection_ClientSupportsLevel_hook(UNetConnection* const Context, UObje
     }
 
     return Return;
-}
-
-t_UNetConnection_Close* UNetConnection_Close_orig = nullptr;
-void UNetConnection_Close_hook(UNetConnection* const Context)
-{
-    if (Context->Driver != nullptr && Context->ConnectionState != USOCK_Closed)
-    {
-        FString RemoteAddress{};
-
-        auto* const TcpipConnection = Context->Cast<UTcpipConnection>();
-        if (TcpipConnection != nullptr)
-        {
-            auto const& Address = TcpipConnection->Address;
-            RemoteAddress = FString::Printf(L"%S:%hu", inet_ntoa(Address.sin_addr), ntohs(Address.sin_port));
-        }
-
-        MILAN_TRACEW(ELOG_NetHooks, L"UNetConnection::Close, remote = %s", *RemoteAddress);
-        NETPROF(CaptureSessionEvent(Context, L"CLOSE", L""));
-    }
-
-    (*UNetConnection_Close_orig)(Context);
 }
 
 t_UNetConnection_CreateChannel* UNetConnection_CreateChannel_orig = nullptr;
@@ -899,22 +1244,6 @@ UINT GlobalDynamicBuildVersion_hook()
     return Version;
 }
 
-t_FSocketWin_SendTo* FSocketWin_SendTo_orig = nullptr;
-UINT FSocketWin_SendTo_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent, SOCKADDR_IN* Destination)
-{
-    UINT const Ret = (*FSocketWin_SendTo_orig)(Context, Data, Count, Sent, Destination);
-    if (Count > 0)
-    {
-        // This would be too verbose even for ELOG_NetHooksTrace.
-
-        //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Destination->sin_addr), ntohs(Destination->sin_port));
-        //MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::SendTo: type=%d, desc=%s, count=%d, sent=%d, dest=%s", Context->Type, *Context->Description, Count, *Sent, *Remote);
-
-        NETPROF(CaptureSocketCall(Destination, true, *Sent * 8));
-    }
-    return Ret;
-}
-
 t_FSocketWin_Send* FSocketWin_Send_orig = nullptr;
 UINT FSocketWin_Send_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent)
 {
@@ -923,22 +1252,6 @@ UINT FSocketWin_Send_hook(FSocket* Context, BYTE* Data, INT Count, INT* Sent)
     {
         // This remains uncommented because I haven't managed to trigger a call to this function yet...
         MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::Send: type=%d, desc=%s, count=%d, sent=%d", Context->Type, *Context->Description, Count, *Sent);
-    }
-    return Ret;
-}
-
-t_FSocketWin_RecvFrom* FSocketWin_RecvFrom_orig = nullptr;
-UINT FSocketWin_RecvFrom_hook(FSocket* Context, BYTE* Buffer, INT Max, INT* Read, SOCKADDR_IN* Source)
-{
-    UINT const Ret = (*FSocketWin_RecvFrom_orig)(Context, Buffer, Max, Read, Source);
-    if (*Read > 0)
-    {
-        // This would be too verbose even for ELOG_NetHooksTrace.
-
-        //auto const Remote = FString::Printf(L"%S:%hu", inet_ntoa(Source->sin_addr), ntohs(Source->sin_port));
-        //MILAN_TRACEW(ELOG_NetHooksTrace, L"FSocketWin::RecvFrom: type=%d, desc=%s, read=%d, source=%s", Context->Type, *Context->Description, *Read, *Remote);
-
-        NETPROF(CaptureSocketCall(Source, false, *Read * 8));
     }
     return Ret;
 }

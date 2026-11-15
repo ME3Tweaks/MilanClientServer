@@ -25,6 +25,7 @@
 
 #include <cstdio>
 #include <cwctype>
+#include <new>
 #include <utility>
 
 #include "Base/Logger.hpp"
@@ -32,6 +33,11 @@
 #include "Engine/ExtObject.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
+
+
+#ifndef ENABLE_AUTOCOMPLETE_LOGGING
+#define ENABLE_AUTOCOMPLETE_LOGGING 0
+#endif
 
 
 namespace ConsoleAutoComplete
@@ -50,14 +56,27 @@ namespace ConsoleAutoComplete
         return Out;
     }
 
-    /** Recursively frees the C++-side trie nodes we allocate ourselves; mirrors ~FAutoCompleteNode from the original engine. */
+    // Must allocate thorugh GMalloc or app may crash on level transition
+    static FAutoCompleteNode* NewNode()
+    {
+        void* const Memory = (*GMalloc)->Malloc(static_cast<DWORD>(sizeof(FAutoCompleteNode)), UN_DEFAULT_ALIGNMENT);
+        return ::new (Memory) FAutoCompleteNode{};
+    }
+
+    static void DeleteNode(FAutoCompleteNode* const Node)
+    {
+        Node->~FAutoCompleteNode();
+        (*GMalloc)->Free(Node);
+    }
+
+    /** Recursively frees what we allocate ourselves; mirrors ~FAutoCompleteNode from the original engine */
     static void FreeNodeChildren(FAutoCompleteNode& Node)
     {
         for (void* const Child : Node.ChildNodes)
         {
             auto* const ChildNode = static_cast<FAutoCompleteNode*>(Child);
             FreeNodeChildren(*ChildNode);
-            delete ChildNode;
+            DeleteNode(ChildNode);
         }
         Node.ChildNodes.Clear();
         Node.ChildNodes.Shrink();
@@ -85,7 +104,7 @@ namespace ConsoleAutoComplete
 
             if (Found == nullptr)
             {
-                Found = new FAutoCompleteNode{};
+                Found = NewNode();
                 Found->IndexChar = Char;
                 Found->AutoCompleteListIndices.Add(ListIndex);
                 Node->ChildNodes.Add(static_cast<void*>(Found));
@@ -95,12 +114,16 @@ namespace ConsoleAutoComplete
         }
     }
 
-    /** Logs via WARN (survives RELEASE, unlike INFO/TRACE) and flushes immediately, so the trail
-     *  survives even if the very next line hangs or crashes. Temporary - for diagnosing the map-load hang. */
     static void LogAndFlush(wchar_t const* const Message)
     {
+        MILAN_UNUSED(Message);
+
+    #if defined(ENABLE_AUTOCOMPLETE_LOGGING) && ENABLE_AUTOCOMPLETE_LOGGING
+
         MILAN_WARNW(ELOG_EngineHooks, L"[ConsoleAutoComplete] %s", Message);
         if (gp_mainLogger != nullptr) gp_mainLogger->Flush();
+
+    #endif
     }
 
     static void RebuildAutoCompleteList(UConsole* const Console, bool const bForce)
@@ -212,7 +235,7 @@ namespace ConsoleAutoComplete
 
         Console->bIsRuntimeAutoCompleteUpToDate = 1;
 
-        MILAN_WARNW(ELOG_EngineHooks, L"[ConsoleAutoComplete] rebuilt: %d manual, %d exec, %d map, %d total",
+        MILAN_TRACEW(ELOG_EngineHooks, L"[ConsoleAutoComplete] rebuilt: %d manual, %d exec, %d map, %d total",
             Console->ManualAutoCompleteList.Count(), ExecCount, Console->MapPathsForAutoComplete.Count(), Console->AutoCompleteList.Count());
         if (gp_mainLogger != nullptr) gp_mainLogger->Flush();
     }
@@ -234,14 +257,23 @@ namespace ConsoleAutoComplete
     // ! Public interface.
     // ========================================
 
-    void Install()
+    bool TryInstall()
     {
+        static bool s_installed = false;
+        if (s_installed) return true;
+
         UClass* const ConsoleClass = HijackUtils::FindClass(SFXName(L"Console", 0));
-        MILAN_CHECKW(ConsoleClass != nullptr, L"failed to find Console class");
+        if (ConsoleClass == nullptr) return false;
 
-        INSTALL_HIJACK(ConsoleClass, BuildRuntimeAutoCompleteList);
+        UFunction* const Target = HijackUtils::FindClassMethod(ConsoleClass, SFXName(L"BuildRuntimeAutoCompleteList", 0));
+        if (Target == nullptr) return false;
 
-        MILAN_INFOW(ELOG_EngineHooks, L"installed console auto-complete hijack");
+        HijackUtils::InstallFunction(Target, BuildRuntimeAutoCompleteList_Hook,
+            reinterpret_cast<void**>(&BuildRuntimeAutoCompleteList_Original));
+        s_installed = true;
+
+        MILAN_INFOW(ELOG_EngineHooks, L"installed Engine.Console auto-complete hijack after package load");
+        return true;
     }
 
     void RebuildForCurrentLevel()

@@ -17,12 +17,16 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Base/LoggingCategories.inl
   ${PROJ_FOLDER}/Base/Streams.cpp
   ${PROJ_FOLDER}/Base/Streams.hpp
+  ${PROJ_FOLDER}/Components/CChat.cpp
+  ${PROJ_FOLDER}/Components/CChat.hpp
   ${PROJ_FOLDER}/Components/CCommands.cpp
   ${PROJ_FOLDER}/Components/CCommands.hpp
   ${PROJ_FOLDER}/Components/CGlobals.cpp
   ${PROJ_FOLDER}/Components/CGlobals.hpp
-  #${PROJ_FOLDER}/Components/CImgui.cpp
-  #${PROJ_FOLDER}/Components/CImgui.hpp
+  ${PROJ_FOLDER}/Components/CDesync.cpp
+  ${PROJ_FOLDER}/Components/CDesync.hpp
+  ${PROJ_FOLDER}/Components/CMatchmaking.cpp
+  ${PROJ_FOLDER}/Components/CMatchmaking.hpp
   ${PROJ_FOLDER}/Components/CNetworkProfiler.cpp
   ${PROJ_FOLDER}/Components/CNetworkProfiler.hpp
   ${PROJ_FOLDER}/Components/COutput.cpp
@@ -31,6 +35,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Components/CProfilers.hpp
   ${PROJ_FOLDER}/Components/CRenderdoc.cpp
   ${PROJ_FOLDER}/Components/CRenderdoc.hpp
+  ${PROJ_FOLDER}/Components/CScreenshots.cpp
+  ${PROJ_FOLDER}/Components/CScreenshots.hpp
   ${PROJ_FOLDER}/Components/CState.cpp
   ${PROJ_FOLDER}/Components/CState.hpp
   ${PROJ_FOLDER}/Components/CConstants.cpp
@@ -40,14 +46,32 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Containers/vector.hpp
   ${PROJ_FOLDER}/Engine/Canvas.cpp
   ${PROJ_FOLDER}/Engine/Canvas.hpp
+  ${PROJ_FOLDER}/Engine/BinkUploadPatch.cpp
+  ${PROJ_FOLDER}/Engine/BinkUploadPatch.hpp
   ${PROJ_FOLDER}/Engine/ConsoleAutoComplete.cpp
   ${PROJ_FOLDER}/Engine/ConsoleAutoComplete.hpp
+  ${PROJ_FOLDER}/Engine/DLCConfigReload.cpp
+  ${PROJ_FOLDER}/Engine/DLCConfigReload.hpp
   ${PROJ_FOLDER}/Engine/ExtObject.cpp
   ${PROJ_FOLDER}/Engine/ExtObject.hpp
   ${PROJ_FOLDER}/Engine/Hooks.cpp
   ${PROJ_FOLDER}/Engine/Hooks.hpp
+  ${PROJ_FOLDER}/Engine/InputPromptFix.cpp
+  ${PROJ_FOLDER}/Engine/InputPromptFix.hpp
+  ${PROJ_FOLDER}/Engine/InputPromptPolicy.hpp
+  ${PROJ_FOLDER}/Engine/PcBindingPolicy.hpp
   ${PROJ_FOLDER}/Engine/Intercept.cpp
   ${PROJ_FOLDER}/Engine/Intercept.hpp
+  ${PROJ_FOLDER}/Engine/LinkerPatcher.cpp
+  ${PROJ_FOLDER}/Engine/LinkerPatcher.hpp
+  ${PROJ_FOLDER}/Engine/LoadGate.cpp
+  ${PROJ_FOLDER}/Engine/LoadGate.hpp
+  ${PROJ_FOLDER}/Engine/ConsolePipe.cpp
+  ${PROJ_FOLDER}/Engine/ConsolePipe.hpp
+  ${PROJ_FOLDER}/Engine/MenuScenes.cpp
+  ${PROJ_FOLDER}/Engine/MenuScenes.hpp
+  ${PROJ_FOLDER}/Engine/TransparentRender.cpp
+  ${PROJ_FOLDER}/Engine/TransparentRender.hpp
   ${PROJ_FOLDER}/Misc/GuidCacheUtils.cpp
   ${PROJ_FOLDER}/Misc/GuidCacheUtils.hpp
   ${PROJ_FOLDER}/NetProf/NetProfDecls.hpp
@@ -55,13 +79,30 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/NetProf/NetProfHandlers.cpp
   ${PROJ_FOLDER}/NetProf/NetProfStream.cpp
   ${PROJ_FOLDER}/NetProf/NetProfStream.hpp
+  ${PROJ_FOLDER}/Online/AchievementGuard.cpp
+  ${PROJ_FOLDER}/Online/AchievementGuard.hpp
+  ${PROJ_FOLDER}/Online/ChallengeStorage.cpp
+  ${PROJ_FOLDER}/Online/ChallengeStorage.hpp
+  ${PROJ_FOLDER}/Online/MatchmakingNet.cpp
+  ${PROJ_FOLDER}/Online/MatchmakingNet.hpp
+  ${PROJ_FOLDER}/Online/ModVersion.hpp
+  ${PROJ_FOLDER}/Online/LocalPlayerIds.hpp
   ${PROJ_FOLDER}/Online/MPProfile.cpp
   ${PROJ_FOLDER}/Online/MPProfile.hpp
+  ${PROJ_FOLDER}/Online/Rendezvous.cpp
+  ${PROJ_FOLDER}/Online/Rendezvous.hpp
   ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeGame.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeHub.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeLogin.cpp
+  ${PROJ_FOLDER}/Online/SFXOnlineComponentUnrealPlayer.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineHijacks.cpp
   ${PROJ_FOLDER}/Online/SFXOnlineHijacks.hpp
+  ${PROJ_FOLDER}/Online/TeamBetrayal.cpp
+  ${PROJ_FOLDER}/Online/TeamBetrayal.hpp
+  ${PROJ_FOLDER}/Online/TeamBetrayalPolicy.hpp
+  ${PROJ_FOLDER}/Online/TeamChat.cpp
+  ${PROJ_FOLDER}/Online/TeamChat.hpp
+  ${PROJ_FOLDER}/Public/LmpLobby.h
   ${PROJ_FOLDER}/Shell/ClientConfig.cpp
   ${PROJ_FOLDER}/Shell/ClientConfig.hpp
   ${PROJ_FOLDER}/Shell/CmdArgs.cpp
@@ -76,10 +117,31 @@ set (PROJ_SOURCES
 
 set (PROJ_LINKS
   LESDK-LE3
-  ImGui renderdoc-api tomlplusplus Zydis
+  fpng nlohmann-json renderdoc-api tomlplusplus Zydis
   d3d11.lib dxgi.lib dxguid.lib
-  Ws2_32.lib
+  Ws2_32.lib Winhttp.lib Bcrypt.lib Iphlpapi.lib Shell32.lib
 )
+
+set (PROJ_DEFINITIONS
+  # ...
+)
+
+if (MILAN_ENABLE_IMGUI)
+  list (APPEND PROJ_SOURCES
+    ${PROJ_FOLDER}/Components/CImgui.cpp
+    ${PROJ_FOLDER}/Components/CImgui.hpp
+    ${PROJ_FOLDER}/Engine/ImGuiInputHooks.cpp
+    ${PROJ_FOLDER}/Engine/ImGuiInputHooks.hpp
+  )
+
+  list (APPEND PROJ_LINKS
+    ImGui
+  )
+
+  list (APPEND PROJ_DEFINITIONS
+    WITH_IMGUI
+  )
+endif ()
 
 add_library (${PROJ_TARGET} SHARED ${PROJ_SOURCES})
 source_group (TREE "${PROJ_FOLDER}" FILES ${PROJ_SOURCES})
@@ -87,11 +149,15 @@ source_group (TREE "${PROJ_FOLDER}" FILES ${PROJ_SOURCES})
 set_target_properties (${PROJ_TARGET} PROPERTIES SUFFIX ".asi")
 set_property (DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJ_TARGET})
 
-target_compile_definitions (${PROJ_TARGET} PUBLIC ${MILAN_COMPILE_DEFINITIONS})
+target_compile_definitions (${PROJ_TARGET} PUBLIC ${MILAN_COMPILE_DEFINITIONS} ${PROJ_DEFINITIONS})
 target_compile_options (${PROJ_TARGET} PUBLIC $<$<COMPILE_LANGUAGE:CXX>:${MILAN_COMPILE_OPTIONS}>)
 target_include_directories (${PROJ_TARGET} PUBLIC ${PROJ_FOLDER})
 target_link_options (${PROJ_TARGET} PUBLIC ${MILAN_LINK_OPTIONS})
 target_link_libraries (${PROJ_TARGET} PUBLIC ${PROJ_LINKS})
+
+# Uses Winsock 2, WinHTTP, and IP Helper headers, which clash with the Winsock 1
+# declarations that the SDK precompiled header pulls in through <Windows.h>.
+set_source_files_properties (${PROJ_FOLDER}/Online/MatchmakingNet.cpp PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
 mln_organize_pchs (${PROJ_TARGET})
 

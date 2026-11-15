@@ -8,10 +8,14 @@ _CG_LOGCAT(Teardown)                // Generic-purpose MilanHost termination mes
 
 _CG_LOGCAT(Client)                  // Passthrough from ECSM.
 _CG_LOGCAT(EngineHooks)             // Basic Unreal Engine routine hooks.
+_CG_LOGCAT(LinkerPatcher)           // Linker-level object redirects from BioGame/LinkerPatches.
+_CG_LOGCAT(DLCConfig)               // Reloading DLC Default_<DLC>.bin config at runtime.
 _CG_LOGCAT(DevelUtils)              // Auxiliary development utilities.
 _CG_LOGCAT(MultiProfile)            // Persistent multiplayer profiler action.
 _CG_LOGCAT(NetHooks)                // Unreal networking layer hooks and injections.
 _CG_LOGCAT(NetHooksTrace)           // VERY VERBOSE Unreal networking layer hooks and injections.
 _CG_LOGCAT(NetHooksRepl)            // VERY VERBOSE Unreal networking layer hooks and injections specific to replication.
 _CG_LOGCAT(NetProf)                 // Milan Network Profiler.
+_CG_LOGCAT(Desync)                  // Replication desync snapshots (non-final builds).
+_CG_LOGCAT(Matchmaking)             // MilanServer client, endpoint discovery, and peer probes.
 _CG_LOGCAT(SFXOnline)               // SFXOnlineFoundation and friends.

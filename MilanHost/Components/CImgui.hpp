@@ -23,10 +23,13 @@ public:
     bool Initialize(::LESDK::Initializer& Context);
     void Terminate(::LESDK::Initializer& Context);
 
-    /** Executes some code when WndProc hook is triggered. */
+    /** Executes some code when the engine's WndProc hook is triggered. */
     bool On_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
     /** Executes some code when SwapChainPresent hook is triggered. */
     bool On_SwapChainPresent(IDXGISwapChain* pChain, UINT SyncInterval, UINT Flags);
+
+    /** Checks if any registered interface is rendering and intercepting window input. */
+    bool IsCapturingInput() const;
 
     /** Retrieves a cached @c IDXGISwapChain::Present pointer. */
     t_IDXGISwapChain_Present* GetSwapChainPresent() const;
@@ -35,14 +38,14 @@ public:
     class IInterface : public NonCopyable
     {
     public:
-        virtual ~IInterface() noexcept = default;
+        virtual ~IInterface() = default;
 
         /** Unique name which can be used to locate this instance. */
-        virtual SFXName GetName() const noexcept = 0;
+        virtual SFXName GetName() const = 0;
         /** Checks if this interface should be rendering. */
-        virtual bool IsRendering() const noexcept = 0;
+        virtual bool IsRendering() const = 0;
         /** Checks if this interface should be receiving window events. */
-        virtual bool IsIntercepting() const noexcept = 0;
+        virtual bool IsIntercepting() const = 0;
 
         /** Callback invoked in the WndProc hook. */
         virtual void OnWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) = 0;
@@ -51,7 +54,7 @@ public:
     };
 
     /** Type for passing ownership of an interface to this component. */
-    using InterfacePtr_t = std::unique_ptr<IInterface>;
+    using InterfacePtr_t = std::shared_ptr<IInterface>;
 
     /** Adds an ImGui-based user interaction to this component. */
     void RegisterInterface(InterfacePtr_t Interface);
@@ -85,7 +88,7 @@ private:
     ID3D11RenderTargetView*         mp_d3d11RenderTargetView{ nullptr };
     t_IDXGISwapChain_Present*       mp_dxgiSwapChainPresent{ nullptr };
     game::vector<InterfacePtr_t>    m_activeInterfaces{};
-    HWND                            m_activeWindow{};
+    HWND                            m_imguiWindow{};
 };
 
 static_assert(ComponentType<CImgui>);
@@ -98,14 +101,17 @@ static_assert(ComponentType<CImgui>);
 class DemoInterface final : public CImgui::IInterface
 {
 public:
-    ~DemoInterface() noexcept override = default;
 
-    SFXName GetName() const noexcept override { return SFXName(L"im-debug", 0); }
-    bool IsRendering() const noexcept { return mb_active; }
-    bool IsIntercepting() const noexcept { return true; }
+    virtual ~DemoInterface() override = default;
 
-    void OnWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-    void OnRender();
+    virtual SFXName GetName() const override;
+    virtual bool IsRendering() const override;
+    virtual bool IsIntercepting() const override;
+
+    virtual void OnWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) override;
+    virtual void OnRender() override;
+
+private:
 
     bool mb_active{ false };
 };

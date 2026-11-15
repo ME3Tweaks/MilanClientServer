@@ -1,0 +1,55 @@
+diff --git a/Tests/Utilities.hpp b/Tests/Utilities.hpp
+index faf6686..56202be 100644
+--- a/Tests/Utilities.hpp
++++ b/Tests/Utilities.hpp
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <type_traits>
++#include <utility>
+ 
+ 
+ struct Counters final {
+@@ -42,3 +43,42 @@ struct Movable final {
+ 
+ static_assert(std::is_move_constructible_v<Movable>);
+ static_assert(std::is_move_assignable_v<Movable>);
++
++// Copyable/Movable above never read `this`'s own prior state in their assignment operators, so
++// they can't catch a container that assigns into freshly allocated, unconstructed memory instead
++// of placement-constructing into it - the destination's garbage bits just get overwritten and
++// nothing bad happens to look at. SelfOwning frees its own current heap block first, exactly like
++// FString::operator=() does (FString::Reset() frees whatever pointer is already sitting in
++// `this`), which is what actually crashes in practice: freeing a garbage pointer read out of
++// never-constructed memory.
++struct SelfOwning final {
++    int* Data{ nullptr };
++    int Value{ 0 };
++
++    SelfOwning() = default;
++    explicit SelfOwning(int const InValue) : Data{ new int(InValue) }, Value{ InValue } {}
++    ~SelfOwning() noexcept { delete Data; Data = nullptr; }
++
++    SelfOwning(SelfOwning const& Other) : Data{ Other.Data ? new int(*Other.Data) : nullptr }, Value{ Other.Value } {}
++    SelfOwning& operator=(SelfOwning const& Other) {
++        if (this != &Other) {
++            delete Data;
++            Data = Other.Data ? new int(*Other.Data) : nullptr;
++            Value = Other.Value;
++        }
++        return *this;
++    }
++
++    SelfOwning(SelfOwning&& Other) noexcept : Data{ std::exchange(Other.Data, nullptr) }, Value{ Other.Value } {}
++    SelfOwning& operator=(SelfOwning&& Other) noexcept {
++        if (this != &Other) {
++            delete Data;
++            Data = std::exchange(Other.Data, nullptr);
++            Value = Other.Value;
++        }
++        return *this;
++    }
++};
++
++static_assert(std::is_copy_constructible_v<SelfOwning>);
++static_assert(std::is_move_constructible_v<SelfOwning>);
