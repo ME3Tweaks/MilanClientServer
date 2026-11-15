@@ -10,6 +10,7 @@
 #ifdef WITH_IMGUI
 #include <imgui.h>
 #include "Components/CImgui.hpp"
+#include "Components/CChat.hpp"
 #endif
 #include "Components/CMatchmaking.hpp"
 #include "Components/COutput.hpp"
@@ -459,21 +460,18 @@ void UObject_ProcessEvent_hook(UObject* const Context, UFunction* const Function
         MILAN_INFOW(ELOG_EngineHooks, L"Installed SFXOnlineFoundation hijacks in %3.2f ms", HijackTimer.GetMilliseconds());
     }
 
-    // Investigation of image loading code
-    //if (IsFunctionWithinDerivedClass(Function, L"SFXOnlineComponentImageManager"))
-    //    MILAN_TRACEW(ELOG_DevelUtils, L"%S: %s", __func__, *Function->GetFullName());
-
 #ifndef _FINAL_RELEASE
-    // Desync snapshot requests ride on ClientMessage / ServerMutate and must not reach script.
-    if (COMPONENT(CDesync).On_UObject_ProcessEvent(Context, Function, Parms)) return;
-#endif
-
-    // If betrayal code returns true then we handled it and we shouldn't run the original
-    if (TeamBetrayal::OnProcessEvent(Context, Function, Parms))
+    if (COMPONENT(CDesync).On_UObject_ProcessEvent(Context, Function, Parms))
     {
-        // Handled by Team Betrayal
         return;
     }
+#endif
+
+    if (TeamBetrayal::OnProcessEvent(Context, Function, Parms))
+    {
+        return;
+    }
+
     // Log why the engine is about to drop a game connection (PMT_ConnectionFailure or PMT_SocketFailure).
     static SFXName const k_setProgressMessage{ L"SetProgressMessage", 0 };
     if (Function->Name == k_setProgressMessage && Context->IsA(UGameViewportClient::StaticClass()))
@@ -533,9 +531,6 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
 #endif
 
-    //if (IsFunctionWithinDerivedClass(Stack->Node, L"SFXOnlineComponentImageManager"))
-    //    MILAN_TRACEW(ELOG_DevelUtils, L"%S: %s", __func__, *Stack->Node->GetFullName());
-
     if (!COMPONENT(CState).On_UObject_ProcessInternal_Pre(Context, Stack, Result))
     {
         bCallOriginal = false;
@@ -546,9 +541,15 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     }
     if (!TeamBetrayal::OnScriptCall(Context, Stack))
     {
-        // Suppress original function logic - don't want it to run
         bCallOriginal = false;
     }
+#ifdef WITH_IMGUI
+    if (!COMPONENT(CChat).On_UObject_ProcessInternal_Pre(Context, Stack, Result))
+    {
+        bCallOriginal = false;
+    }
+#endif
+
     if (bCallOriginal)
     {
         (*UObject_ProcessInternal_orig)(Context, Stack, Result);
@@ -624,17 +625,20 @@ AActor* UWorld_SpawnActor_hook(
         MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: Class is null or not an actor", s_errorCounter);
     }
 
-    static constexpr std::uint32_t k_classFlagAbstract = 0x00000001;
-    static constexpr std::uint32_t k_classFlagDeprecated = 0x02000000;
-    if (!!(Class->ClassFlags & k_classFlagAbstract) || !!(Class->ClassFlags & k_classFlagDeprecated))  [[unlikely]]
+    if (Class != nullptr)
     {
-        MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: Class is abstract or deprecated", s_errorCounter);
-    }
+        static constexpr std::uint32_t k_classFlagAbstract = 0x00000001;
+        static constexpr std::uint32_t k_classFlagDeprecated = 0x02000000;
+        if (!!(Class->ClassFlags & k_classFlagAbstract) || !!(Class->ClassFlags & k_classFlagDeprecated)) [[unlikely]]
+        {
+            MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: Class is abstract or deprecated", s_errorCounter);
+        }
 
-    AActor* const Default = Class->ClassDefaultObject ? Class->ClassDefaultObject->Cast<AActor>() : nullptr;
-    if (ActorUtils::GlobalBegunPlay() && Default != nullptr && (Default->bStatic || Default->bNoDelete)) [[unlikely]]
-    {
-        MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: CDO is bStatic or bNoDelete and GWorld has begun play", s_errorCounter);
+        AActor* const Default = Class->ClassDefaultObject ? Class->ClassDefaultObject->Cast<AActor>() : nullptr;
+        if (ActorUtils::GlobalBegunPlay() && Default != nullptr && (Default->bStatic || Default->bNoDelete)) [[unlikely]]
+        {
+            MILAN_WARNW(ELOG_EngineHooks, L"UWorld::SpawnActor [%llu] will fail: CDO is bStatic or bNoDelete and GWorld has begun play", s_errorCounter);
+        }
     }
 
     if (Template != nullptr && Template->Class != Class)  [[unlikely]]

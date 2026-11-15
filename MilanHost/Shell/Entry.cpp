@@ -16,6 +16,7 @@
 #include "Components/CGlobals.hpp"
 #ifdef WITH_IMGUI
 #include "Components/CImgui.hpp"
+#include "Components/CChat.hpp"
 #endif
 #include "Components/CMatchmaking.hpp"
 #include "Components/CNetworkProfiler.hpp"
@@ -97,6 +98,7 @@ SPI_IMPLEMENT_ATTACH
 #endif
 #ifdef WITH_IMGUI
     gp_componentContainer->Initialize<CImgui>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CChat>(*gp_sdkContext);
 #endif
     gp_componentContainer->Initialize<CState>(*gp_sdkContext);
     gp_componentContainer->Initialize<CMatchmaking>(*gp_sdkContext);
@@ -127,7 +129,7 @@ SPI_IMPLEMENT_ATTACH
     ConsolePipe::Start();
     // IMGUI CURRENTLY ONLY REGISTERED IN NON-FINAL BUILDS!!!
     #ifdef WITH_IMGUI
-        COMPONENT(CImgui).RegisterInterface(std::make_unique<DemoInterface>());
+        COMPONENT(CImgui).RegisterInterface(std::make_shared<DemoInterface>());
     #endif
 #endif
     RegisterVectoredExceptions();
@@ -185,6 +187,7 @@ void SingleDetachImpl()
     gp_componentContainer->Terminate<CMatchmaking>(*gp_sdkContext);
     gp_componentContainer->Terminate<CState>(*gp_sdkContext);
 #ifdef WITH_IMGUI
+    gp_componentContainer->Terminate<CChat>(*gp_sdkContext);
     gp_componentContainer->Terminate<CImgui>(*gp_sdkContext);
 #endif
 #ifndef _FINAL_RELEASE

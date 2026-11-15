@@ -54,7 +54,7 @@ public:
     };
 
     /** Type for passing ownership of an interface to this component. */
-    using InterfacePtr_t = std::unique_ptr<IInterface>;
+    using InterfacePtr_t = std::shared_ptr<IInterface>;
 
     /** Adds an ImGui-based user interaction to this component. */
     void RegisterInterface(InterfacePtr_t Interface);

@@ -17,6 +17,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Base/LoggingCategories.inl
   ${PROJ_FOLDER}/Base/Streams.cpp
   ${PROJ_FOLDER}/Base/Streams.hpp
+  ${PROJ_FOLDER}/Components/CChat.cpp
+  ${PROJ_FOLDER}/Components/CChat.hpp
   ${PROJ_FOLDER}/Components/CCommands.cpp
   ${PROJ_FOLDER}/Components/CCommands.hpp
   ${PROJ_FOLDER}/Components/CGlobals.cpp
@@ -98,6 +100,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Online/TeamBetrayal.cpp
   ${PROJ_FOLDER}/Online/TeamBetrayal.hpp
   ${PROJ_FOLDER}/Online/TeamBetrayalPolicy.hpp
+  ${PROJ_FOLDER}/Online/TeamChat.cpp
+  ${PROJ_FOLDER}/Online/TeamChat.hpp
   ${PROJ_FOLDER}/Public/LmpLobby.h
   ${PROJ_FOLDER}/Shell/ClientConfig.cpp
   ${PROJ_FOLDER}/Shell/ClientConfig.hpp
