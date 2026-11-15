@@ -39,8 +39,6 @@ bool ClientConfig::TryRead(std::wstring_view const InPath, game::string& OutErro
             return true;
         toml::table const Table = toml::parse_file(InPath);
 
-        ConnectHost         = MLN_CONFIG_OPT(Table, "milan.connect.host", std::string, std::string{ ConnectHost.c_str() }).c_str();
-        ConnectPort         = MLN_CONFIG_OPT(Table, "milan.connect.port", int, ConnectPort);
         ModVersion          = MLN_CONFIG_OPT(Table, "milan.game.version", std::string, std::string{}).c_str();
 
         // Older files only have url, where an empty url disabled matchmaking.

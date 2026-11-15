@@ -1,5 +1,7 @@
 #include "Online/TeamChat.hpp"
 
+#ifdef WITH_IMGUI
+
 #include <Windows.h>
 #include <cstdio>
 #include <cstring>
@@ -179,3 +181,5 @@ void TeamChat::SendInputMessage()
         (*GEngine)->Cast<USFXEngine>()->GetRealWorldInfo()->GetLocalPlayerController()->Say(Message);
     }
 }
+
+#endif

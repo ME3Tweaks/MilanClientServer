@@ -23,8 +23,6 @@ inline constexpr char const* k_defaultMatchmakerUrl = "https://vps.me3tweaks.com
  */
 struct ClientConfig final
 {
-    game::string                    ConnectHost{ "127.0.0.1" };
-    int                             ConnectPort{ 11111 };
     game::string                    MatchmakerUrl{ k_defaultMatchmakerUrl };    // What the settings below select; empty disables matchmaking.
     game::string                    ModVersion{}; // Optional [milan.game] version override; empty reads installed _metacmm.txt.
     game::vector<game::string>      LoggingSuppressed{};

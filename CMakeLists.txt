@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.27)
+cmake_minimum_required (VERSION 4.0)
 project (MilanClient VERSION 0.1.0 LANGUAGES CXX ASM_MASM)
 
 

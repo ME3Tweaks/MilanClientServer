@@ -5,12 +5,8 @@
 ##  Refer to the project's documentation to for a detailed           ##
 ##  explanation of all available configuration keys and values.      ##
 ## ================================================================= ##
-##  https://github.com/d00telemental/MilanClientServer               ##
+##  https://github.com/ME3Tweaks/MilanClientServer                   ##
 ## ================================================================= ##
-
-[milan.connect]
-host = "localhost"
-port = 11111
 
 [milan.matchmaker]
 # MilanServer base URL (optional; this is the default). An empty string disables matchmaking;
