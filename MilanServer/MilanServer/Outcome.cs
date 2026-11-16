@@ -71,7 +71,7 @@ public static class Failures
     public static readonly Failure VersionMismatch =
         new(409, "version_mismatch", "The lobby is running a different game version.");
     public static readonly Failure VersionBlocked =
-        new(403, "lmp_update_required", "This game version can no longer use matchmaking. Update Legendary Edition Multiplayer to use matchmaking services.");
+        new(403, "version_blocked", "This game version can no longer use matchmaking. Update Legendary Edition Multiplayer to use matchmaking services.");
     public static readonly Failure RevisionConflict =
         new(409, "revision_conflict", "A different state was already reported with this revision.");
 
