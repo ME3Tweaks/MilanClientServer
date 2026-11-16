@@ -3,6 +3,8 @@
 #ifdef WITH_IMGUI
 
 #include <array>
+#include <atomic>
+#include <mutex>
 #include "Base/Base.hpp"
 #include "Containers/string.hpp"
 #include "Containers/vector.hpp"
@@ -13,16 +15,23 @@ class TeamChat final : public NonCopyable
 {
 public:
 
-    bool HasActiveInput() const;
+    /** Window is open: it renders the chat and replaces the game's HUD chat. */
+    bool IsOpen() const;
+    /** Window is open and owns keyboard input (the only state where input is intercepted). */
+    bool IsFocused() const;
+
     void OnShowChat();
+    void OnDrainQueue();
+    void OnReceiveNotification();
     void OnReceiveMessage(bool bLocal, FString const& PlayerName, FString const& Text);
     void OnRender();
 
 private:
 
+    void DrainQueueInner();
     void RenderActive();
     void RenderPassive();
-    void SendInputMessage();
+    bool SendInputMessage();
 
     struct MessageRecord final
     {
@@ -34,9 +43,17 @@ private:
 
     game::vector<MessageRecord>     Messages{};
     std::array<char, 256>           InputBuffer{};
-    bool                            bScrollToBottom = true;
-    bool                            bActive = false;
-    bool                            bFocusInput = false;
+    game::vector<FString>           QueuedSentMessages{};
+    std::mutex                      QueuedSentMutex{};
+    std::mutex                      MessagesMutex{};
+    bool                            bScrollToBottom{ true };
+    bool                            bActive{ false };
+    bool                            bFocusInput{ false };
+    bool                            bLastInputActive{ false };
+    bool                            bWasActive{ false };
+    bool                            bWasFocused{ false };
+    std::atomic<bool>               bFocused{ false };
+    std::atomic<bool>               bResetInput{ false };
 };
 
 #endif

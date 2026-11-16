@@ -25,7 +25,7 @@ bool ChatInterface::IsRendering() const
 
 bool ChatInterface::IsIntercepting() const
 {
-    return m_teamChat->HasActiveInput();
+    return m_teamChat->IsFocused();
 }
 
 void ChatInterface::OnWndProc(HWND const hWnd, UINT const uMsg, WPARAM const wParam, LPARAM const lParam)
@@ -62,17 +62,11 @@ bool CChat::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* const
 {
     MILAN_UNUSED_3(Context, Stack, Result);
 
-    static FunctionNamedIntercept PlayerController_TeamMessage{};
-    if (PlayerController_TeamMessage.Applies(Stack->Node, L"SFXGameMPContent", L"SFXPlayerControllerMP", L"TeamMessage"))
+    static FunctionNamedIntercept SFXHUDMP_DisplayConsoleMessages{};
+    if (SFXHUDMP_DisplayConsoleMessages.Applies(Stack->Node, L"SFXGameMPContent", L"SFXHUDMP", L"DisplayConsoleMessages"))
     {
-        auto* const Parms = reinterpret_cast<APlayerController_eventTeamMessage_Parms*>(Stack->Locals);
-
-        if (Parms->Type.ToString() == L"Say" && Parms->PRI != nullptr)
-        {
-            bool const bLocalMessage = Parms->PRI->IsLocalPlayerPRI();
-            m_teamChat->OnReceiveMessage(bLocalMessage, Parms->PRI->PlayerName, Parms->S);
-            return false;
-        }
+        m_teamChat->OnDrainQueue();
+        return false;
     }
 
     static FunctionNamedIntercept PlayerController_BioTalk{};
@@ -83,11 +77,19 @@ bool CChat::On_UObject_ProcessInternal_Pre(UObject* const Context, FFrame* const
         return false;
     }
 
-    static FunctionNamedIntercept SFXHUDMP_DisplayConsoleMessages{};
-    if (SFXHUDMP_DisplayConsoleMessages.Applies(Stack->Node, L"SFXGameMPContent", L"SFXHUDMP", L"DisplayConsoleMessages"))
+    static FunctionNamedIntercept PlayerController_TeamMessage{};
+    if (PlayerController_TeamMessage.Applies(Stack->Node, L"SFXGameMPContent", L"SFXPlayerControllerMP", L"TeamMessage"))
     {
-        // Suppress default chat rendering.
-        return false;
+        auto* const Parms = reinterpret_cast<APlayerController_eventTeamMessage_Parms*>(Stack->Locals);
+
+        if (Parms->Type.ToString() == L"Say" && Parms->PRI != nullptr)
+        {
+            auto const Owner = Parms->PRI->Owner != nullptr ? Parms->PRI->Owner->Cast<APlayerController>() : nullptr;
+            bool const bLocalMessage = Owner != nullptr && Owner->Player != nullptr && Owner->Player->Cast<ULocalPlayer>() != nullptr;
+            m_teamChat->OnReceiveMessage(bLocalMessage, Parms->PRI->PlayerName, Parms->S);
+            m_teamChat->OnReceiveNotification();
+            return false;
+        }
     }
 
     return true;
