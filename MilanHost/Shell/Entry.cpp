@@ -19,6 +19,7 @@
 #include "Components/CChat.hpp"
 #endif
 #include "Components/CMatchmaking.hpp"
+#include "Components/CNetworkOverlay.hpp"
 #include "Components/CNetworkProfiler.hpp"
 #include "Components/COutput.hpp"
 #ifndef _FINAL_RELEASE
@@ -102,6 +103,7 @@ SPI_IMPLEMENT_ATTACH
 #endif
     gp_componentContainer->Initialize<CState>(*gp_sdkContext);
     gp_componentContainer->Initialize<CMatchmaking>(*gp_sdkContext);
+    gp_componentContainer->Initialize<CNetworkOverlay>(*gp_sdkContext);
     gp_componentContainer->Initialize<CScreenshots>(*gp_sdkContext);
 
 #ifndef _FINAL_RELEASE
@@ -184,6 +186,7 @@ void SingleDetachImpl()
 #endif
 
     gp_componentContainer->Terminate<CScreenshots>(*gp_sdkContext);
+    gp_componentContainer->Terminate<CNetworkOverlay>(*gp_sdkContext);
     gp_componentContainer->Terminate<CMatchmaking>(*gp_sdkContext);
     gp_componentContainer->Terminate<CState>(*gp_sdkContext);
 #ifdef WITH_IMGUI

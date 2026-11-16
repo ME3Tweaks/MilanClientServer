@@ -13,12 +13,13 @@
 #include "Components/CChat.hpp"
 #endif
 #include "Components/CMatchmaking.hpp"
+#include "Components/CNetworkOverlay.hpp"
 #include "Components/COutput.hpp"
 #ifndef _FINAL_RELEASE
 #include "Components/CProfilers.hpp"
 #endif
-#include "Components/CState.hpp"
 #include "Components/CRenderdoc.hpp"
+#include "Components/CState.hpp"
 #include "Engine/ConsoleAutoComplete.hpp"
 #include "Engine/ExtObject.hpp"
 #include "Engine/Hooks.hpp"
@@ -554,6 +555,7 @@ void UObject_ProcessInternal_hook(UObject* const Context, FFrame* const Stack, v
     {
         (*UObject_ProcessInternal_orig)(Context, Stack, Result);
         COMPONENT(CState).On_UObject_ProcessInternal_Post(Context, Stack, Result);
+        COMPONENT(CNetworkOverlay).On_UObject_ProcessInternal_Post(Context, Stack, Result);
     }
 
     // -skiptomp is handled in UGameEngine_LoadMap_hook.

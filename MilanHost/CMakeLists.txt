@@ -27,6 +27,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Components/CDesync.hpp
   ${PROJ_FOLDER}/Components/CMatchmaking.cpp
   ${PROJ_FOLDER}/Components/CMatchmaking.hpp
+  ${PROJ_FOLDER}/Components/CNetworkOverlay.cpp
+  ${PROJ_FOLDER}/Components/CNetworkOverlay.hpp
   ${PROJ_FOLDER}/Components/CNetworkProfiler.cpp
   ${PROJ_FOLDER}/Components/CNetworkProfiler.hpp
   ${PROJ_FOLDER}/Components/COutput.cpp
