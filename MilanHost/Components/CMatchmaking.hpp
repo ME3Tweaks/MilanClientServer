@@ -15,8 +15,9 @@
  *  If the player is already at the main menu, it transition to MP menu
  *
  * A lobby member that loses its host asks the matchmaker to check the host. If the host is
- * gone, one member opens a new listen lobby with the lobby's settings and takes the lobby
- * over, and the others join it. A match in progress regroups in that lobby.
+ * gone, one member takes the lobby over and the others join it. A match with the game's wave
+ * checkpoint is reopened and restarts its current wave, otherwise the new host opens a listen
+ * lobby with the lobby's settings.
  */
 
 #pragma once
@@ -62,6 +63,9 @@ public:
 
     /** Authority removes a lobby player; the target's ClientKickPlayer RPC leaves locally. */
     bool On_KickPlayer(USFXOnlineComponentBlazeGame* Game, FUniqueNetId const& PlayerId);
+
+    /** BlazeGame::GetPlayerCount: the players a new host restoring a match waits for, else 0. */
+    int MigrationPlayerCount() const;
 
     /**
      * Game thread. The multiplayer settings screen saved a matchmaker (empty disables

@@ -72,12 +72,14 @@ namespace
     // Tolerates a brief listen-socket gap, e.g. during servertravel; a longer gap means hosting ended.
     constexpr auto k_listenGrace = std::chrono::seconds(5);
     // Host migration: how long a member waits for the matchmaker to pick a new host, how long
-    // a new host may take to load its lobby (and the others wait for it), and how long its
-    // first report waits for UDP discovery.
+    // a new host may take to load its lobby or match (and the others wait for it), and how long
+    // its first report waits for UDP discovery.
     constexpr auto k_migrationDecisionTimeout = std::chrono::seconds(45);
     constexpr auto k_adoptWindow = std::chrono::seconds(60);
     constexpr auto k_adoptReportWait = std::chrono::seconds(3);
-    // The lobby a new host opens; origin makes it take the settings from the game settings object.
+    // How long after a host migration slots are reserved for old members to transfer
+    constexpr auto k_restoreWaitWindow = k_adoptWindow + std::chrono::seconds(30);
+    // The lobby a new host opens when it has no match to restore
     constexpr wchar_t const* k_migrationLobbyUrl = L"mplobby?listen?origin=MultiplayerMenu";
     // Player latency (see TickPlayerPing). UNetConnection::AvgLag is the round trip in seconds,
     // averaged once per StatPeriod (1 s) from packet acknowledgements, and 9999 until the first
@@ -399,6 +401,9 @@ struct MatchmakingState
     Clock::time_point               AdoptUntil{};
     Clock::time_point               AdoptReportBy{};
     std::optional<UdpTicket>        AdoptTicket{};
+    // How many players to wait for when performing host migration
+    int                             RestorePlayers{ 0 };
+    Clock::time_point               RestoreUntil{};
 
     // Joiner. Once joined, the reservation's ID and key identify it as a lobby member.
     std::string                     ReservationId{};
@@ -1785,10 +1790,47 @@ namespace
             ReportConnectionLost();
     }
 
-    // This game hosts the lobby now. It opens a listen lobby with the lobby's settings; the
-    // per-tick host work reports once that lobby listens, which completes the handoff.
+    // If a match is in progress
+    bool InMatch()
+    {
+        UEngine* const Engine = (GEngine != nullptr) ? *GEngine : nullptr;
+        AWorldInfo* const WorldInfo = Engine != nullptr ? Engine->GetCurrentWorldInfo() : nullptr;
+        return WorldInfo != nullptr && IsInstanceOf(WorldInfo->GRI, SFXName(L"SFXGRIMP", 0));
+    }
+
+    // If SFXHostMigrationMP has a mission checkpoint to restore to
+    bool HasMatchCheckpoint()
+    {
+        auto* const Engine = static_cast<USFXEngine*>(GameEngine());
+        return Engine != nullptr && Engine->eventIsReadyToBeHost();
+    }
+
+    // Builds the URL to perform the host migration mid-match
+    std::wstring MatchRestoreUrl()
+    {
+        auto* const Engine = static_cast<USFXEngine*>(GameEngine());
+        if (Engine == nullptr || !InMatch() || !HasMatchCheckpoint()) {
+            // If not in a match or no checkpoints there's nothing to restore
+            // so just return nothing.
+            return {};
+        }
+
+        // Also ignore MPLobby
+        FString const Map = Engine->eventGetHostMigrationMapName();
+        FString const LobbyMap = Engine->GetDefaultLobbyMap();
+        if (Map.Empty() || (Map.Length() == LobbyMap.Length() && Map.StartsWith(LobbyMap.Chars(), true))) {
+            // Note this check doesn't account for MPLobby_Derp if we ever make a suffixed MPLobby. That
+            // also affects the common package in config
+            return {};
+        }
+
+        // Trigger host migration
+        return std::wstring{ Map.Chars() } + L"?listen?HostMigration";
+    }
+
     void AdoptLobby(MatchmakingState& S, json const& Handoff)
     {
+        std::wstring const MatchUrl = MatchRestoreUrl();
         json const& Lobby = Handoff.at("state");
         HostedSettings Settings{};
         Settings.Known = true;
@@ -1820,13 +1862,28 @@ namespace
         S.AdoptTicket = Ticket;
         S.Hosted = Settings;
         S.AutoHost = {};
+        if (!MatchUrl.empty())
+        {
+            // Restore the seelcted map
+            if (auto const It = Lobby.find("resolvedMapId"); It != Lobby.end() && It->is_number_integer()) {
+                S.Hosted.ResolvedMapId = It->get<int>();
+            }
+            // Restore the selected enemy
+            if (auto const It = Lobby.find("resolvedEnemyId"); It != Lobby.end() && It->is_number_integer())
+            {
+                S.Hosted.ResolvedEnemyId = It->get<int>();
+            }
+            S.RestorePlayers = ExpectedPlayers;
+            S.RestoreUntil = Clock::now() + k_restoreWaitWindow;
+        }
 
-        MILAN_UNUSED(ExpectedPlayers);
-        MILAN_INFOW(ELOG_Matchmaking, L"this game is the new host of lobby %S (%d player(s) expected); opening the lobby",
-            S.LobbyId.c_str(), ExpectedPlayers);
-        if (!ApplyLobbySettings(Settings))
-            MILAN_WARNW(ELOG_Matchmaking, L"no online game settings to carry the lobby's settings over; the lobby starts with its defaults");
-        if (!RunConsoleCommand(std::wstring{ L"open " } + k_migrationLobbyUrl))
+        std::wstring const Url = MatchUrl.empty() ? std::wstring{ k_migrationLobbyUrl } : MatchUrl;
+        MILAN_INFOW(ELOG_Matchmaking, L"this game is the new host of lobby %S (%d player(s) expected) %s %s",
+            S.LobbyId.c_str(), ExpectedPlayers, MatchUrl.empty() ? L"opening the lobby" : L"restoring the match from its wave checkpoint", Url.c_str());
+        if (!ApplyLobbySettings(Settings)) {
+            MILAN_WARNW(ELOG_Matchmaking, L"no online game settings to carry the lobby's settings over - the lobby will start with its defaults");
+        }
+        if (!RunConsoleCommand(L"open " + Url))
         {
             MILAN_ERRORW(ELOG_Matchmaking, L"no local player controller to open the lobby");
             FailMigration(S, L"could not open the lobby");
@@ -1911,7 +1968,8 @@ namespace
         MILAN_INFOW(ELOG_Matchmaking, L"lost the host; asking the matchmaker to check it");
         ShowHint(Localize(Text::LostHostSearching), 10.f);
 
-        json const Report{ { "canHost", true } };
+        // Post to matchmaker that a host migration is pending so it can choose the new host
+        json const Report{ { "canHost", !InMatch() || HasMatchCheckpoint() } };
         PostHttp(S, false, L"POST", "/v1/members/" + S.ReservationId + "/host-lost", S.JoinKey, Report.dump(),
             [](MatchmakingState& State, MatchmakingNet::HttpResult const& Result)
             {
@@ -3439,6 +3497,15 @@ void CMatchmaking::CancelQuickMatch()
 std::wstring CMatchmaking::QuickMatchConnectString() const
 {
     return mp_state != nullptr ? mp_state->QuickMatchTarget : std::wstring{};
+}
+
+// SFXHostMigrationMP.IsReadyToStartMatch holds a restored match until this many players are ready
+int CMatchmaking::MigrationPlayerCount() const
+{
+    if (mp_state == nullptr || mp_state->Role != EMatchmakingRole::Host || Clock::now() >= mp_state->RestoreUntil) {
+        return 0;
+    }
+    return mp_state->RestorePlayers;
 }
 
 void CMatchmaking::Terminate(::LESDK::Initializer& Context)

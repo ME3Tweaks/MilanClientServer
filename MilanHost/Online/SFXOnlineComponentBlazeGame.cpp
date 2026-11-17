@@ -647,7 +647,8 @@ void SFXOnlineComponentBlazeGame::GetPlayerCount_Hook(USFXOnlineComponentBlazeGa
 
     NATIVE_FINISH();
 
-    *(INT*)Result = 0;  // TODO: This should probably return the number of currently registered players?..
+    // Only a new host restoring a match gets a count; SFXPawn_PlayerMP treats any count as an online game.
+    *(INT*)Result = COMPONENT(CMatchmaking).MigrationPlayerCount();
 }
 
 void SFXOnlineComponentBlazeGame::KickPlayer_Hook(USFXOnlineComponentBlazeGame* const Context, FFrame* const Stack, void* const Result)
