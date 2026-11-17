@@ -35,6 +35,8 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Components/CProfilers.hpp
   ${PROJ_FOLDER}/Components/CRenderdoc.cpp
   ${PROJ_FOLDER}/Components/CRenderdoc.hpp
+  ${PROJ_FOLDER}/Components/CRenderPerf.cpp
+  ${PROJ_FOLDER}/Components/CRenderPerf.hpp
   ${PROJ_FOLDER}/Components/CScreenshots.cpp
   ${PROJ_FOLDER}/Components/CScreenshots.hpp
   ${PROJ_FOLDER}/Components/CState.cpp
