@@ -152,6 +152,7 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
     INSTALL_HOOK_TWO(USFXEngine, GetDisconnectFallbackMap, GLOBAL_USFXENGINE_GETDISCONNECTFALLBACKMAP_PHOOK);
     INSTALL_HOOK_TWO(UWorld, SpawnActor, GLOBAL_UWORLD_SPAWNACTOR_PHOOK);
     INSTALL_HOOK_TWO(UWorld, Tick, GLOBAL_UWORLD_TICK_PHOOK);
+    INSTALL_HOOK_ONE(FDynamicBeamEmitterData_Build, GLOBAL_FDYNAMICBEAM_BUILD_PHOOK);
 }
 
 void CGlobals::InitWindowProc(::LESDK::Initializer& Context)
