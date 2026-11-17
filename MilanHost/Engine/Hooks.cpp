@@ -119,6 +119,69 @@ void BioRequestExit_hook(UBOOL const bForce, INT const ExitCode, INT const Unuse
 }
 
 
+// ! Particle beam rendering.
+// ========================================
+
+t_FDynamicBeamEmitterData_Build* FDynamicBeamEmitterData_Build_orig = nullptr;
+int FDynamicBeamEmitterData_Build_hook(void* const EmitterData, void* const Params, int const Arg3, void* const Arg4, int const Arg5)
+{
+    // This function iterates beam payload at `ParticleData + ParticleStride * i + TypeDataOffset`
+    // .
+    // A zero-length beam (Target == Source) leaves inf/negative segment data in that payload,
+    // and particle loop then indexes a float array with it (crash at RVA 0x647179).
+    // Original function skips a particle whose payload DWORD at +0x6C is zero;
+    // the same path is used when an emitter has no beam data.
+    // 
+    // This hook marks such particles as "no data" before the builder runs.
+
+    if (EmitterData != nullptr)
+    {
+        auto const Emitter = static_cast<BYTE*>(EmitterData);
+        auto const ParticleCount = *reinterpret_cast<int const*>(Emitter + 0x54);
+        auto const ParticleStride = *reinterpret_cast<int const*>(Emitter + 0x58);
+        auto const ParticleData = *reinterpret_cast<BYTE* const*>(Emitter + 0x5C);
+        auto const TypeDataOffset = *reinterpret_cast<int const*>(Emitter + 0xF8);
+
+        if (ParticleData != nullptr
+            && ParticleCount > 0 && ParticleCount <= 0x1000
+            && ParticleStride >= 0x40 && ParticleStride <= 0x10000
+            && TypeDataOffset >= 0 && TypeDataOffset + 0x70 <= ParticleStride)
+        {
+            for (int i = 0; i < ParticleCount; ++i)
+            {
+                BYTE* const Beam = ParticleData + static_cast<size_t>(ParticleStride) * i + TypeDataOffset;
+                float const* const Source = reinterpret_cast<float const*>(Beam + 0x00);
+                float const* const Target = reinterpret_cast<float const*>(Beam + 0x20);
+
+                float const dx = Target[0] - Source[0];
+                float const dy = Target[1] - Source[1];
+                float const dz = Target[2] - Source[2];
+
+                // The renderer reads [Beam+0x64] as an integer count/index,
+                // but only when the emitter's flag at +0x174 is set.
+                //
+                // On a zero-length beam the update path leaves an inf/negative value there,
+                // so reject both the zero-length case and any count that cannot be a segment index
+                // (when the count path is actually used).
+
+                auto const SegmentCount = *reinterpret_cast<int const*>(Beam + 0x64);
+                auto const bUsesCount = *reinterpret_cast<BYTE const*>(Emitter + 0x174) != 0;
+                auto const bDegenerate = ((dx * dx + dy * dy + dz * dz) < 1e-4f)
+                    || (bUsesCount && (SegmentCount < 0 || SegmentCount > 0x1000));
+
+                if (bDegenerate)
+                {
+                    MILAN_DEBUGW(L"FDynamicBeamEmitterData::Build - overriding degenerate particle");
+                    *reinterpret_cast<int*>(Beam + 0x6C) = 0;
+                }
+            }
+        }
+    }
+
+    return (*FDynamicBeamEmitterData_Build_orig)(EmitterData, Params, Arg3, Arg4, Arg5);
+}
+
+
 // ! UCanvas methods.
 // ========================================
 

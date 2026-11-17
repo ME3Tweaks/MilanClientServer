@@ -145,6 +145,18 @@
 #define GLOBAL_UWORLD_TICK_PHOOK \
     ::LESDK::Address::FromPostHook(/* 48 8B C4 F3 0F */ "11 50 ?? 55 56 57 41 54 41 55 41 56 41 57 48 8D 68 A1")
 
+// FDynamicBeamEmitterData's per-particle vertex builder.
+// LE3 11.3.2 RVA 0x642CD0
+//
+// Original function reads the beam payload at `ParticleData + ParticleStride * i + TypeDataOffset`
+// and, for a zero-length beam (Target == Source), the payload carries an inf/negative segment count
+// which the renderer uses as an array index (crash at RVA 0x647179).
+//
+// Our hook marks degenerate particles as "no data" in the payload before the builder runs,
+// so the existing skip path is taken instead.
+#define GLOBAL_FDYNAMICBEAM_BUILD_PHOOK \
+    ::LESDK::Address::FromPattern("40 55 53 56 48 8D AC 24 ?? ?? ?? ?? 48 81 EC B0 0F 00 00 48 8B 05 ?? ?? ?? ?? 48 33 C4")
+
 
 #define GLOBAL_UACTORCHANNEL_REPLICATEACTOR_PHOOK \
     ::LESDK::Address::FromPostHook(/* 40 55 53 56 57 */ "41 54 41 55 41 56 41 57 48 8D AC 24 ?? ?? ?? ?? 48 81 EC 08 02 00 00 48 C7 85 ?? ?? ?? ?? FE FF FF FF")
@@ -407,6 +419,15 @@ using t_UWorld_Tick = void(UWorld* Context, int Unknown, float Delta);
 extern t_UWorld_Tick* UWorld_Tick_orig;
 
 void UWorld_Tick_hook(UWorld* Context, int Unknown, float Delta);
+
+
+// ! Particle beam rendering.
+// ========================================
+
+using t_FDynamicBeamEmitterData_Build = int(void* EmitterData, void* Params, int Arg3, void* Arg4, int Arg5);
+extern t_FDynamicBeamEmitterData_Build* FDynamicBeamEmitterData_Build_orig;
+
+int FDynamicBeamEmitterData_Build_hook(void* EmitterData, void* Params, int Arg3, void* Arg4, int Arg5);
 
 
 // ! Game socket I/O (all builds: matchmaking shares the UE3 socket).
