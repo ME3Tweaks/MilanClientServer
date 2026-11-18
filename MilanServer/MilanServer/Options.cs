@@ -54,6 +54,7 @@ public sealed class MilanServerOptions
     public int RequestsPerMinute { get; set; } = 600;
     public int CreatesPerMinute { get; set; } = 30;
     public int InviteRedeemsPerMinute { get; set; } = 20;
+    public int InviteCodeLength { get; set; } = 10;
     public int TotalRequestsPerSecond { get; set; } = 1000;
     public int RequestBurst { get; set; } = 2000;
     public int MaxConcurrentRequests { get; set; } = 2048;
@@ -236,6 +237,11 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
         }
         if (options.RequestsPerMinute < 1 || options.CreatesPerMinute < 1 || options.InviteRedeemsPerMinute < 1)
             errors.Add("Rate limits must be at least 1 per minute.");
+        if (options.InviteCodeLength is < Secrets.MinInviteCodeLength or > Secrets.MaxInviteCodeLength)
+            errors.Add($"InviteCodeLength must be between {Secrets.MinInviteCodeLength} and {Secrets.MaxInviteCodeLength}.");
+        // New codes are drawn until one is unused, so at least half of them must stay free.
+        else if (options.MaxLobbies > Secrets.InviteCodeCount(options.InviteCodeLength) / 2)
+            errors.Add($"MaxLobbies must be at most {Secrets.InviteCodeCount(options.InviteCodeLength) / 2} with {options.InviteCodeLength}-character invite codes.");
         if (options.TotalRequestsPerSecond < 1 || options.RequestBurst < 1
             || options.MaxConcurrentRequests < 1 || options.MaxConcurrentRequestsPerAddress < 1
             || options.MaxConcurrentConnections < 1 || options.DiscoveryPacketsPerSecond < 1

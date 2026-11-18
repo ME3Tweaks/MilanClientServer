@@ -130,6 +130,33 @@ public sealed class ReservationTests : StoreTestBase
     }
 
     [Fact]
+    public void Invite_UsesTheConfiguredLength()
+    {
+        Options.InviteCodeLength = 5;
+        CreateLobbyResponse lobby = Host();
+
+        Assert.Equal(5, lobby.InviteCode.Length);
+        Assert.DoesNotContain('-', lobby.InviteCode);
+        Assert.True(Store.RedeemInvite(new RedeemInviteRequest(lobby.InviteCode.ToLowerInvariant(), Version), JoinerIp).IsSuccess);
+        Assert.Equal(Failures.InviteNotFound,
+            Store.RedeemInvite(new RedeemInviteRequest(lobby.InviteCode + "00000", Version), JoinerIp).Failure);
+    }
+
+    [Theory]
+    [InlineData(2, 10_000, false)]
+    [InlineData(3, 10_000, true)]
+    [InlineData(3, 16_384, true)]
+    [InlineData(3, 16_385, false)]
+    [InlineData(10, 10_000, true)]
+    [InlineData(11, 10_000, false)]
+    public void InviteCodeLength_IsValidated(int length, int maxLobbies, bool valid)
+    {
+        MilanServerOptions options = new() { InviteCodeLength = length, MaxLobbies = maxLobbies };
+
+        Assert.Equal(valid, new MilanServerOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Fact]
     public void Reservation_EnforcesPerAddressLimit()
     {
         Options.MaxReservationsPerAddress = 1;

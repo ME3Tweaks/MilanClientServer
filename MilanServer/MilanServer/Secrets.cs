@@ -7,12 +7,13 @@ namespace MilanServer;
 
 // Accountless capabilities. Host, search, and join keys are 256-bit bearer secrets;
 // the server keeps only their SHA-256 hashes. Invite codes are shorter so players
-// can type them, and rely on rate limiting plus a 50-bit space against guessing.
+// can type them, and rely on rate limiting plus 5 bits per character against guessing.
 internal static class Secrets
 {
     // Crockford base32: no I, L, O, or U.
     const string InviteAlphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-    public const int InviteCodeLength = 10;
+    public const int MinInviteCodeLength = 3;
+    public const int MaxInviteCodeLength = 10;
 
     public static string NewId() => Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(16));
     public static bool IsId(string? id) => id is { Length: 22 }
@@ -44,18 +45,38 @@ internal static class Secrets
         return CryptographicOperations.FixedTimeEquals(expectedHash, Hash(presentedKey));
     }
 
-    // Returns the canonical 10-character form; display it with FormatInviteCode.
-    public static string NewInviteCode() => RandomNumberGenerator.GetString(InviteAlphabet, InviteCodeLength);
+    /// <summary>
+    /// Generates a new random invite code with the given length
+    /// </summary>
+    /// <param name="length"></param>
+    /// <returns></returns>
+    public static string NewInviteCode(int length) => RandomNumberGenerator.GetString(InviteAlphabet, length);
 
-    public static string FormatInviteCode(string code) => $"{code[..5]}-{code[5..]}";
+    public static long InviteCodeCount(int length) => 1L << (5 * length);
 
-    public static bool TryNormalizeInviteCode(string? input, out string code)
+    /// <summary>
+    /// Formats an invite code to make it easier to read
+    /// </summary>
+    /// <param name="code"></param>
+    /// <returns></returns>
+    public static string FormatInviteCode(string code)
+    {
+        if (code.Length < 6)
+        {
+            return code;
+        }
+
+        int half = (code.Length + 1) / 2;
+        return $"{code[..half]}-{code[half..]}";
+    }
+
+    public static bool TryNormalizeInviteCode(string? input, int length, out string code)
     {
         code = string.Empty;
         if (input is null || input.Length > 32)
             return false;
 
-        StringBuilder builder = new(InviteCodeLength);
+        StringBuilder builder = new(length);
         foreach (char raw in input)
         {
             if (raw is '-' or ' ')
@@ -67,13 +88,13 @@ internal static class Secrets
                 'I' or 'L' => '1',
                 var other => other,
             };
-            if (!InviteAlphabet.Contains(c) || builder.Length == InviteCodeLength)
+            if (!InviteAlphabet.Contains(c) || builder.Length == length)
                 return false;
 
             builder.Append(c);
         }
 
-        if (builder.Length != InviteCodeLength)
+        if (builder.Length != length)
             return false;
 
         code = builder.ToString();

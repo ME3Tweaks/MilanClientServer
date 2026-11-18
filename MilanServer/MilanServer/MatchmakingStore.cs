@@ -514,7 +514,7 @@ public sealed class MatchmakingStore
             return versionFailure;
         if (BlockedVersionFailure(request.GameVersion) is { } blockedFailure)
             return blockedFailure;
-        if (!Secrets.TryNormalizeInviteCode(request.InviteCode, out string code))
+        if (!Secrets.TryNormalizeInviteCode(request.InviteCode, _options.InviteCodeLength, out string code))
             return Failures.InviteNotFound;
 
         DateTimeOffset now = _time.GetUtcNow();
@@ -1804,7 +1804,7 @@ public sealed class MatchmakingStore
         string code;
         do
         {
-            code = Secrets.NewInviteCode();
+            code = Secrets.NewInviteCode(_options.InviteCodeLength);
         } while (_lobbiesByInvite.ContainsKey(code));
         return code;
     }

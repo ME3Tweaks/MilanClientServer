@@ -112,6 +112,7 @@ address, so keep them generous.
 | `RequestsPerMinute` | 600 | Requests per address |
 | `CreatesPerMinute` | 30 | Lobby and search creations per address |
 | `InviteRedeemsPerMinute` | 20 | Invite redemptions per address |
+| `InviteCodeLength` | 10 | Characters in an invite code (3-10). Shorter codes are easier to type but easier to guess, so keep them longer on a public server. `MaxLobbies` may be at most half the possible codes (16384 for 3 characters). Codes of 6 or more are shown split, as `ABCDE-FGHJK` |
 | `TotalRequestsPerSecond` | 1000 | Request rate across all addresses |
 | `RequestBurst` | 2000 | Burst allowance for `TotalRequestsPerSecond` |
 | `MaxConcurrentRequests` | 2048 | Active HTTP requests |
