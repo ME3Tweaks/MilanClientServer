@@ -111,6 +111,12 @@ namespace
         NETCONFIG_APPLY_INVALID_PASSWORD    = 4,
     };
 
+    struct MilanNetConfigBridge_JoinByCode_Parms final
+    {
+        FString Code;
+        // Todo: matchmaking server
+    };
+
     struct MilanNetConfigBridge_ApplySettings_Parms final
     {
         FString PlayerName;
@@ -217,6 +223,7 @@ namespace
         static SFXName const k_getCustomServer{ L"GetCustomServer", 0 };
         static SFXName const k_getServerPassword{ L"GetServerPassword", 0 };
         static SFXName const k_applySettings{ L"ApplySettings", 0 };
+        static SFXName const k_joinByCode{ L"JoinByCode", 0 };
 
         auto const ReturnBool = [Result](bool const bValue) { if (Result != nullptr) *static_cast<UBOOL*>(Result) = bValue ? TRUE : FALSE; };
         auto const ReturnString = [Result](FString const& Value) { if (Result != nullptr) *static_cast<FString*>(Result) = Value; };
@@ -244,6 +251,20 @@ namespace
             int const Applied = ApplyNetConfig(*reinterpret_cast<MilanNetConfigBridge_ApplySettings_Parms const*>(Stack->Locals));
             if (Result != nullptr)
                 *static_cast<int*>(Result) = Applied;
+        }
+        else if (Function == k_joinByCode)
+        {
+            // From JoinMatch dialog
+            auto const& Params = *reinterpret_cast<MilanNetConfigBridge_JoinByCode_Parms const*>(Stack->Locals);
+            CMatchmaking::EJoinCodeResult const Joined = Config == nullptr
+                // No configuration for matchmaking
+                ? CMatchmaking::EJoinCodeResult::Unavailable
+                // Queue the join
+                : COMPONENT(CMatchmaking).QueueJoinCode(ToUtf8(TrimSpaces(Params.Code)));
+            if (Result != nullptr) {
+                // Set result value
+                *static_cast<int*>(Result) = static_cast<int>(Joined);
+            }
         }
         else
             return false;

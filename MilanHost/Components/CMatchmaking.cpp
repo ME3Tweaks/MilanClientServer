@@ -3351,6 +3351,30 @@ bool CMatchmaking::IsInSession() const
     return mp_state != nullptr && (mp_state->Role == EMatchmakingRole::Joiner || !mp_state->PendingJoin.empty());
 }
 
+CMatchmaking::EJoinCodeResult CMatchmaking::QueueJoinCode(std::string Code)
+{
+    if (mp_state == nullptr) {
+        // No matchmaker configured
+        return EJoinCodeResult::Unavailable;
+    }
+
+    std::size_t const First = Code.find_first_not_of(" \t");
+    if (First == std::string::npos)
+    {
+        // Invalid code format
+        return EJoinCodeResult::InvalidCode;
+    }
+    Code = Code.substr(First, Code.find_last_not_of(" \t") - First + 1);
+    if (ValidateExternalRequest(std::nullopt, Code) != nullptr)
+    {
+        // Not a valid code
+        return EJoinCodeResult::InvalidCode;
+    }
+
+    QueueJoin(*mp_state, std::move(Code), L"join code dialog");
+    return EJoinCodeResult::Queued;
+}
+
 bool CMatchmaking::On_KickPlayer(USFXOnlineComponentBlazeGame* const Game, FUniqueNetId const& PlayerId)
 {
     UWorld* const World = CurrentWorld();

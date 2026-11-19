@@ -78,6 +78,21 @@ public:
     /** True while connected to other players or joining a lobby. */
     bool IsInSession() const;
 
+    /**
+     * QueueJoinCode results - MilanNetConfigBridge's JOIN_ constants
+     */
+    enum class EJoinCodeResult : int
+    {
+        Queued      = 0,
+        InvalidCode = 1,
+        Unavailable = 2,
+    };
+
+    /**
+     * Queues a join on the game thread with the given code
+     */
+    EJoinCodeResult QueueJoinCode(std::string Code);
+
     /** How a menu Quick Match ended. The failures map to the script's distinct error prompts. */
     enum class EQuickMatchOutcome
     {
