@@ -104,7 +104,7 @@ bool CNetworkOverlay::Initialize(::LESDK::Initializer& Context)
             return true;
         });
 
-#ifdef FINAL_RELEASE
+#ifdef _FINAL_RELEASE
     gb_netOverlayActive = false;
 #endif
 
