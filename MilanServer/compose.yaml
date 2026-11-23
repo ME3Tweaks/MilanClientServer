@@ -34,10 +34,14 @@ services:
     # network_mode: host
     # config/milan.json beside this file applies while the server runs (the message of the day,
     # the current game version). Mount the folder, not the file: editors replace the file on save.
+    # ./state is read-write: lobbies are saved there on shutdown and read back at the next start.
+    # The server runs as UID 1654, so create it first: mkdir -p state && sudo chown 1654:1654 state
     volumes:
       - ./config:/app/config:ro
+      - ./state:/app/state
     environment:
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      Milan__StateFile: "/app/state/lobbies.json"
       # Any setting from MilanServer/Options.cs can be overridden as Milan__<Name>.
       # Milan__LobbyLeaseSeconds: "60"
       # Milan__TrustedProxies__0: "10.0.0.5"   # only behind a TLS reverse proxy
