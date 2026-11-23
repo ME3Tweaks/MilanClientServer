@@ -1,39 +1,76 @@
+#include <array>
 #include <atomic>
+#include <cstdint>
 #include <cstring>
 #include <intrin.h>
-#include <array>
+#include <iterator>
 
 #include <LESDK/Headers.hpp>
 #include "Base/Logger.hpp"
+#include "Engine/Hooks.hpp"
+#include "Engine/InputGroupPolicy.hpp"
 #include "Engine/InputPromptFix.hpp"
 #include "Engine/InputPromptPolicy.hpp"
 #include "Engine/PcBindingPolicy.hpp"
 #include "Shell/CmdArgs.hpp"
 
+
+// ! Hook patterns and RVAs.
+// ========================================
+
+// Native non-UFunction binding collector. The last two parameters are parallel output arrays
+#define GLOBAL_USFXGAMEMODEMANAGER_COLLECTBINDINGS_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 80 FA 19 0F 83 */ "AD 02 00 00 48 8B C4 48 89 48 08 57")
+
+// Replaces an alias's keys in a mode, removing the key from conflicting bindings
+#define GLOBAL_USFXGAMEMODEMANAGER_REPLACEBINDINGS_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 80 FA 19 0F 83 */ "56 06 00 00 48 8B C4 55 41 54 41 55")
+
+// Loads/saves the profile's bindings
+#define GLOBAL_USFXGAMEMODEMANAGER_SERIALIZEBINDINGS_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 40 55 56 57 41 */ "54 41 55 41 56 41 57 48 8D 6C 24 C0 48 81 EC 40 01 00 00 48 C7 45 90")
+
+// BioSFHandler_PCOptions.ProcessInput during key capture when assigning a keybinding
+#define GLOBAL_UBIOSFHANDLER_PCOPTIONS_CAPTUREKEY_PHOOK \
+    ::LESDK::Address::FromPostHook(/* 48 8B C4 4C 89 */ "40 18 55 41 54 41 55 41 56 41 57 48 8D 68 B1 48 81 EC C0")
+
+// Stack FMemoryReader used for profile loads and reading its string
+#define GLOBAL_FMEMORYREADER_VTABLE_RVA         ::LESDK::Address::FromOffset(0x107FBD0)
+#define GLOBAL_FARCHIVE_SERIALIZESTRING_RVA     ::LESDK::Address::FromOffset(0x1169D0)
+#define FMEMORYREADER_VTABLE_SLOTS              29
+#define FMEMORYREADER_SERIALIZESTRING_SLOT      25
+
+// `call rel32`, used to check that the gated return addresses follow a call to the bindings collector
+#define X86_CALL_REL32_OPCODE                   0xE8
+#define X86_CALL_REL32_LENGTH                   5
+
+// DEBUG builds log at most this many prompt lookups
+#define SHARED_PROMPT_TRACE_LIMIT               64
+
+
 namespace InputPromptFix
 {
     namespace
     {
-        constexpr char k_hookName[] = "SharedInputPromptBindings";
-        constexpr std::uintptr_t k_collectBindingsRva = 0xBAC4F0;
-        constexpr char k_replaceHookName[] = "SharedPcBindingReplacement";
-        constexpr char k_profileHookName[] = "SharedPcBindingProfile";
-        constexpr std::uintptr_t k_replaceBindingsRva = 0xBB5B10;
-        constexpr std::uintptr_t k_serializeBindingsRva = 0xBB4FF0;
-        constexpr std::uintptr_t k_memoryReaderVtableRva = 0x107FBD0;
-        constexpr std::uintptr_t k_serializeStringRva = 0x1169D0;
-
-        // Native non-UFunction helper. The last two parameters are parallel output
-        // arrays; both UI callers supply fresh temporary arrays, not live bindings.
-        using CollectBindings = void(USFXGameModeManager*, BYTE, UBOOL, FString const&,
+        // Both UI callers supply fresh temporary output arrays, not live bindings
+        using t_USFXGameModeManager_CollectBindings = void(USFXGameModeManager*, BYTE, UBOOL, FString const&,
             TArray<FKeyBind>&, TArray<FString>&);
-        CollectBindings* g_original = nullptr;
-        using ReplaceBindings = void(USFXGameModeManager*, BYTE, FString const&, TArray<FKeyBind> const&);
-        using SerializeBindings = void(USFXGameModeManager*, FArchive*);
+        t_USFXGameModeManager_CollectBindings* USFXGameModeManager_CollectBindings_orig = nullptr;
+
+        using t_USFXGameModeManager_ReplaceBindings = void(USFXGameModeManager*, BYTE, FString const&, TArray<FKeyBind> const&);
+        t_USFXGameModeManager_ReplaceBindings* USFXGameModeManager_ReplaceBindings_orig = nullptr;
+
+        using t_USFXGameModeManager_SerializeBindings = void(USFXGameModeManager*, FArchive*);
+        t_USFXGameModeManager_SerializeBindings* USFXGameModeManager_SerializeBindings_orig = nullptr;
+
+        // ProcessInput(ControllerId, Key, Event, AmountDepressed, bGamepad)
+        using t_UBioSFHandler_PCOptions_CaptureKey = UBOOL(UBioSFHandler_PCOptions*, int, SFXName, BYTE, float, UBOOL);
+        t_UBioSFHandler_PCOptions_CaptureKey* UBioSFHandler_PCOptions_CaptureKey_orig = nullptr;
+
         using SerializeString = void(FArchive*, FString&);
-        ReplaceBindings* g_replaceOriginal = nullptr;
-        SerializeBindings* g_serializeOriginal = nullptr;
+
         std::uintptr_t g_moduleBase = 0;
+        void const* g_memoryReaderVtable = nullptr;
         std::atomic_uint g_traceCount{ 0 };
 
         static_assert(sizeof(FKeyBind) == 0x1C);
@@ -44,7 +81,7 @@ namespace InputPromptFix
         {
             SerializeString* ReadString;
             UBioSFHandler_PCOptions* Defaults;
-            bool LegacyRow = false;
+            bool ActionFanOut = false;
         };
         thread_local ProfileRead* g_profileRead = nullptr;
 
@@ -52,90 +89,179 @@ namespace InputPromptFix
         {
             // Physical input names are unnumbered. Ignore sentinel/invalid names.
             if (Name.Number != 0)
+            {
                 return Policy::Device::Unbound;
+            }
             SFXNameEntry const* const Entry = Name.GetEntry();
             if (Entry == nullptr)
+            {
                 return Policy::Device::Unbound;
+            }
             if (Entry->IsUnicode())
+            {
                 return Policy::ClassifyKey(std::wstring_view(Entry->WideName));
+            }
             return Policy::ClassifyKey(std::string_view(Entry->AnsiName));
         }
 
-        void ReplaceBindingsHook(USFXGameModeManager* Manager, BYTE GameMode,
+        Policy::Device ClassifyBinding(FKeyBind const& Key)
+        {
+            return ClassifyKey(Key.Name);
+        }
+
+        std::wstring_view View(FString const& Text)
+        {
+            return std::wstring_view(Text.Chars(), Text.Length());
+        }
+
+        bool SameKey(FKeyBind const& Left, FKeyBind const& Right)
+        {
+            return Left.Name == Right.Name && Left.Control == Right.Control &&
+                Left.Shift == Right.Shift && Left.Alt == Right.Alt;
+        }
+
+        // Other action group aliases keep a key they share with the target.
+        void ReplaceGroupBindings(USFXGameModeManager* Manager, BYTE GameMode, FString const& Alias, TArray<FKeyBind> const& Incoming)
+        {
+            auto const SharesIncomingKey = [&](FKeyBind const& Existing)
+            {
+                return !Existing.Command.Equals(Alias, true) && Policy::IsActionGroupAlias(View(Existing.Command)) &&
+                    std::any_of(Incoming.begin(), Incoming.end(), [&](FKeyBind const& Key) { return SameKey(Existing, Key); });
+            };
+            Policy::WithBindingsHidden(Manager->GameModes(GameMode)->Bindings, SharesIncomingKey, [&]
+            {
+                USFXGameModeManager_ReplaceBindings_orig(Manager, GameMode, Alias, Incoming);
+            });
+        }
+
+        void USFXGameModeManager_ReplaceBindings_hook(USFXGameModeManager* Manager, BYTE GameMode,
             FString const& Alias, TArray<FKeyBind> const& Incoming)
         {
-            // Skip every subordinate of a broken migrated row too (Aim also
-            // propagates to the still-PC-only command-camera alias).
-            if (Policy::RetainDefaultsForLegacyRow(g_profileRead != nullptr && g_profileRead->LegacyRow,
-                    Incoming, [](FKeyBind const& Key) { return ClassifyKey(Key.Name); }))
+            bool const ValidMode = Manager != nullptr && GameMode < Manager->GameModes.Count() && Manager->GameModes(GameMode) != nullptr;
+            if (ValidMode && Policy::IsActionGroupAlias(View(Alias)))
             {
+                ReplaceGroupBindings(Manager, GameMode, Alias, Incoming);
+                if (g_profileRead != nullptr && g_profileRead->ActionFanOut && Policy::EqualsAsciiNoCase(View(Alias), Policy::k_actionCoverRow))
+                {
+                    for (auto const Member : Policy::k_actionGroup)
+                    {
+                        if (!Policy::EqualsAsciiNoCase(Member, Policy::k_actionCoverRow))
+                        {
+                            ReplaceGroupBindings(Manager, GameMode, FString(Member.data()), Incoming);
+                        }
+                    }
+                }
                 return;
             }
-            if (Manager == nullptr || GameMode >= Manager->GameModes.Count() ||
-                Manager->GameModes(GameMode) == nullptr || !Alias.StartsWith(L"Shared_", true))
+            if (!ValidMode || !Alias.StartsWith(L"Shared_", true))
             {
-                g_replaceOriginal(Manager, GameMode, Alias, Incoming);
+                USFXGameModeManager_ReplaceBindings_orig(Manager, GameMode, Alias, Incoming);
                 return;
             }
 
             TArray<FKeyBind> PcKeys;
             for (auto const& Key : Incoming)
             {
-                auto const Device = ClassifyKey(Key.Name);
-                if (Device != Policy::Device::Gamepad)
+                if (ClassifyBinding(Key) != Policy::Device::Gamepad)
                 {
                     PcKeys.Add(Key);
                 }
             }
-            auto& Bindings = Manager->GameModes(GameMode)->Bindings;
-            Policy::WithGamepadBindingsPreserved(Bindings,
-                [](FKeyBind const& Key) { return ClassifyKey(Key.Name); },
-                [&] { g_replaceOriginal(Manager, GameMode, Alias, PcKeys); });
+            Policy::WithGamepadBindingsPreserved(Manager->GameModes(GameMode)->Bindings, ClassifyBinding, [&]
+            {
+                USFXGameModeManager_ReplaceBindings_orig(Manager, GameMode, Alias, PcKeys);
+            });
         }
 
+        // Replaces the reader's FString read while profile bindings load.
         void ReadProfileAlias(FArchive* Archive, FString& Alias)
         {
             auto& State = *g_profileRead;
             State.ReadString(Archive, Alias);
-            State.LegacyRow = false;
-            if (Archive->ArIsError || Archive->ArIsCriticalError)
+            State.ActionFanOut = false;
+            if (Archive->ArIsError || Archive->ArIsCriticalError || !Policy::EqualsAsciiNoCase(View(Alias), Policy::k_sharedAction))
             {
                 return;
             }
-            auto const Current = Policy::MigratePcAlias(std::wstring_view(Alias.Chars(), Alias.Length()));
-            if (!Current.empty())
+            // The single omnikey binding now loads into the cover row and also populates the others if not set
+            for (auto const& Row : State.Defaults->AliasMap)
             {
-                for (auto const& Row : State.Defaults->AliasMap)
+                if (Row.Alias.Equals(Policy::k_actionCoverRow.data(), true))
                 {
-                    if (Row.Alias.Equals(Current.data(), true))
-                    {
-                        Alias = FString(Current.data());
-                        State.LegacyRow = true;
-                        break;
-                    }
+                    State.ActionFanOut = true;
+                    Alias = FString(Policy::k_actionCoverRow.data());
+                    return;
                 }
             }
         }
 
-        void SerializeBindingsHook(USFXGameModeManager* Manager, FArchive* Archive)
+        // Other action group bindings may be assigned the same captured key,
+        // so it needs to be ignored when checking if it overwrites the same key
+        // This is the part that actually lets you bind multiple keys in the UI component
+        UBOOL UBioSFHandler_PCOptions_CaptureKey_hook(UBioSFHandler_PCOptions* Menu, int ControllerId, SFXName Key, BYTE Event,
+            float AmountDepressed, UBOOL bGamepad)
+        {
+            struct Hidden
+            {
+                FGuiBind* Row;
+                std::size_t Slot;
+                SFXName Name;
+            };
+            struct Restore
+            {
+                std::vector<Hidden> Saved;
+                ~Restore()
+                {
+                    for (auto const& Entry : Saved)
+                    {
+                        Entry.Row->Keys[Entry.Slot].Name = Entry.Name;
+                    }
+                }
+            } Guard;
+
+            auto const Index = Menu != nullptr ? Menu->CaptureBindIndex : -1;
+            if (Event == Policy::k_inputReleased && Index >= 0 && static_cast<UINT>(Index) < Menu->AliasMap.Count() && Policy::IsActionGroupAlias(View(Menu->AliasMap(static_cast<UINT>(Index)).Alias)))
+            {
+                static SFXName const None(L"None", 0);
+                auto const GameMode = Menu->AliasMap(static_cast<UINT>(Index)).GameMode;
+                for (UINT Row = 0; Row < Menu->AliasMap.Count(); ++Row)
+                {
+                    auto& Bind = Menu->AliasMap(Row);
+                    if (Row == static_cast<UINT>(Index) || Bind.GameMode != GameMode || !Policy::IsActionGroupAlias(View(Bind.Alias)))
+                    {
+                        // Not a group alias or this game mode
+                        continue;
+                    }
+                    for (std::size_t Slot = 0; Slot < std::size(Bind.Keys); ++Slot)
+                    {
+                        if (Bind.Keys[Slot].Name == Key)
+                        {
+
+                            Guard.Saved.push_back({ &Bind, Slot, Key });
+                            Bind.Keys[Slot].Name = None;
+                        }
+                    }
+                }
+            }
+            return UBioSFHandler_PCOptions_CaptureKey_orig(Menu, ControllerId, Key, Event, AmountDepressed, bGamepad);
+        }
+
+        void USFXGameModeManager_SerializeBindings_hook(USFXGameModeManager* Manager, FArchive* Archive)
         {
             auto* const Class = UBioSFHandler_PCOptions::StaticClass();
             auto* const Defaults = Class != nullptr && Class->ClassDefaultObject != nullptr
                 ? Class->ClassDefaultObject->Cast<UBioSFHandler_PCOptions>() : nullptr;
-            if (Archive == nullptr || !Archive->ArIsLoading || Defaults == nullptr ||
-                Archive->_vftable != reinterpret_cast<void*>(g_moduleBase + k_memoryReaderVtableRva))
+            if (Archive == nullptr || !Archive->ArIsLoading || Defaults == nullptr || Archive->_vftable != g_memoryReaderVtable)
             {
-                g_serializeOriginal(Manager, Archive);
+                USFXGameModeManager_SerializeBindings_orig(Manager, Archive);
                 return;
             }
 
-            // This stack reader has 29 virtual slots in the supported executable.
-            // Interpose only its FString read, leaving native parsing/version/error
-            // handling and the source blob intact. No global vtable is modified.
+            // Swap in a copy of this reader's vtable with only its FString read replaced
             auto** const OriginalTable = static_cast<void**>(Archive->_vftable);
-            std::array<void*, 29> Table;
+            std::array<void*, FMEMORYREADER_VTABLE_SLOTS> Table;
             std::copy_n(OriginalTable, Table.size(), Table.begin());
-            ProfileRead State{reinterpret_cast<SerializeString*>(Table[25]), Defaults};
+            ProfileRead State{ reinterpret_cast<SerializeString*>(Table[FMEMORYREADER_SERIALIZESTRING_SLOT]), Defaults };
             struct RestoreReader
             {
                 FArchive* Archive;
@@ -146,54 +272,77 @@ namespace InputPromptFix
                     Archive->_vftable = Table;
                     g_profileRead = Previous;
                 }
-            } Guard{Archive, Archive->_vftable, g_profileRead};
-            Table[25] = reinterpret_cast<void*>(&ReadProfileAlias);
+            } Guard{ Archive, Archive->_vftable, g_profileRead };
+            Table[FMEMORYREADER_SERIALIZESTRING_SLOT] = reinterpret_cast<void*>(&ReadProfileAlias);
             g_profileRead = &State;
             Archive->_vftable = Table.data();
-            g_serializeOriginal(Manager, Archive);
+            USFXGameModeManager_SerializeBindings_orig(Manager, Archive);
         }
 
-        __declspec(noinline) void CollectBindingsHook(USFXGameModeManager* Manager, BYTE GameMode,
+        __declspec(noinline) void USFXGameModeManager_CollectBindings_hook(USFXGameModeManager* Manager, BYTE GameMode,
             UBOOL Defaults, FString const& Alias, TArray<FKeyBind>& Bindings, TArray<FString>& Labels)
         {
             // Capture before calling the trampoline. These exact return sites gate
             // the change to TLK/control-token rendering and GetBoundKeyString.
-            auto const Caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
-            g_original(Manager, GameMode, Defaults, Alias, Bindings, Labels);
+            auto const CallerRva = reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - g_moduleBase;
+            USFXGameModeManager_CollectBindings_orig(Manager, GameMode, Defaults, Alias, Bindings, Labels);
 
             // PC binding pages always edit PC keys, including Reset and Save.
             // This is independent of the device currently driving UI prompts.
-            if (Policy::IsPcBindingLookup(Caller - g_moduleBase,
-                    std::wstring_view(Alias.Chars(), Alias.Length())) && Bindings.Count() == Labels.Count())
+            if (Policy::IsPcBindingLookup(CallerRva, View(Alias)) && Bindings.Count() == Labels.Count())
             {
-                Policy::KeepPcBindings(Bindings, Labels,
-                    [](FKeyBind const& Key) { return ClassifyKey(Key.Name); });
+                Policy::KeepPcBindings(Bindings, Labels, ClassifyBinding);
                 return;
             }
 
-            if (!Policy::ShouldAdjust(Caller - g_moduleBase, Defaults != 0,
-                    std::wstring_view(Alias.Chars(), Alias.Length())) ||
-                Bindings.Count() != Labels.Count() || Bindings.Empty() || Manager == nullptr ||
-                Manager->Outer == nullptr)
+            if (!Policy::IsPromptLookup(CallerRva, Defaults != 0) || Bindings.Count() != Labels.Count() ||
+                Manager == nullptr || Manager->Outer == nullptr)
+            {
                 return;
+            }
 
             auto* const PC = Manager->Outer->Cast<ABioPlayerController>();
             if (PC == nullptr || PC->PlayerInput == nullptr)
+            {
                 return;
+            }
 
             bool const UsingGamepad = PC->PlayerInput->bUsingGamepad != 0;
-            auto const Selected = Policy::SelectBinding(Bindings.Count(), UsingGamepad,
-                [&](std::size_t Index) { return ClassifyKey(Bindings(static_cast<UINT>(Index)).Name); });
+            auto const Fallback = Policy::PromptFallbackAlias(View(Alias), UsingGamepad);
+            if (!Policy::ShouldAdjust(CallerRva, Defaults != 0, View(Alias)) && Fallback.empty())
+            {
+                return;
+            }
+
+            auto const Select = [&]
+            {
+                return Policy::SelectBinding(Bindings.Count(), UsingGamepad, [&](std::size_t Index)
+                {
+                    return ClassifyBinding(Bindings(static_cast<UINT>(Index)));
+                });
+            };
+            auto Selected = Select();
+            if (Selected == Bindings.Count() && !Fallback.empty())
+            {
+                Bindings.Clear();
+                Labels.Clear();
+                USFXGameModeManager_CollectBindings_orig(Manager, GameMode, Defaults, FString(Fallback.data()), Bindings, Labels);
+                if (Bindings.Count() != Labels.Count())
+                {
+                    return;
+                }
+                Selected = Select();
+            }
 
 #if DEBUG
-            if (g_traceCount.fetch_add(1, std::memory_order_relaxed) < 64)
+            if (!Bindings.Empty() && g_traceCount.fetch_add(1, std::memory_order_relaxed) < SHARED_PROMPT_TRACE_LIMIT)
             {
                 FString const FirstKey = Bindings(0).Name.ToString();
                 FString const SelectedKey = Selected < Bindings.Count()
                     ? Bindings(static_cast<UINT>(Selected)).Name.ToString() : FString(L"(unbound)");
                 MILAN_DEBUGW(ELOG_EngineHooks,
                     L"shared prompt: %s alias=%s mode=%u device=%s first=%s selected=%s matches=%u",
-                    Caller - g_moduleBase == Policy::k_controlTokenReturnRva ? L"token" : L"GetBoundKeyString",
+                    CallerRva == GLOBAL_COLLECTBINDINGS_CONTROLTOKEN_RETURN_RVA ? L"token" : L"GetBoundKeyString",
                     Alias.Chars(), static_cast<unsigned>(GameMode), UsingGamepad ? L"gamepad" : L"keyboard/mouse",
                     FirstKey.Chars(), SelectedKey.Chars(), static_cast<unsigned>(Bindings.Count()));
             }
@@ -210,75 +359,93 @@ namespace InputPromptFix
             }
         }
 
-        bool MatchesSupportedCode()
+        // True when the instruction before ReturnRva is a `call rel32` to Target.
+        bool CallsTarget(std::uintptr_t ReturnRva, void const* Target)
         {
-            auto const* const Base = reinterpret_cast<unsigned char const*>(g_moduleBase);
-            auto const* const Dos = reinterpret_cast<IMAGE_DOS_HEADER const*>(Base);
-            auto const* const Nt = reinterpret_cast<IMAGE_NT_HEADERS64 const*>(Base + Dos->e_lfanew);
-            if (Nt->OptionalHeader.SizeOfImage <= k_memoryReaderVtableRva + 29 * sizeof(void*))
+            auto const* const Call = reinterpret_cast<unsigned char const*>(g_moduleBase + ReturnRva - X86_CALL_REL32_LENGTH);
+            if (Call[0] != X86_CALL_REL32_OPCODE)
+            {
                 return false;
+            }
+            std::int32_t Displacement;
+            std::memcpy(&Displacement, Call + 1, sizeof Displacement);
+            return reinterpret_cast<unsigned char const*>(g_moduleBase + ReturnRva) + Displacement == Target;
+        }
 
-            // Verify the collector's prologue AND both call instructions before
-            // relying on RVAs. Unknown/previously-detoured code keeps stock behavior.
-            constexpr unsigned char Prologue[] = { 0x80, 0xFA, 0x19, 0x0F, 0x83, 0xAD, 0x02, 0x00, 0x00 };
-            constexpr unsigned char GetBoundKeyCall[] = { 0xE8, 0xC7, 0xC6, 0xFE, 0xFF };
-            constexpr unsigned char ControlTokenCall[] = { 0xE8, 0xE2, 0x85, 0xF8, 0xFF };
-            constexpr unsigned char ReplacePrologue[] = { 0x80, 0xFA, 0x19, 0x0F, 0x83, 0x56, 0x06, 0x00, 0x00 };
-            constexpr unsigned char SerializePrologue[] = { 0x40, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55 };
-            constexpr unsigned char MenuCall[] = { 0xE8, 0x4A, 0x07, 0x13, 0x00 };
-            constexpr unsigned char SaveCall[] = { 0xE8, 0xB7, 0x70, 0xFF, 0xFF };
-            return std::memcmp(Base + k_collectBindingsRva, Prologue, sizeof Prologue) == 0 &&
-                std::memcmp(Base + k_replaceBindingsRva, ReplacePrologue, sizeof ReplacePrologue) == 0 &&
-                std::memcmp(Base + k_serializeBindingsRva, SerializePrologue, sizeof SerializePrologue) == 0 &&
-                std::memcmp(Base + Policy::k_pcMenuReturnRva - 5, MenuCall, sizeof MenuCall) == 0 &&
-                std::memcmp(Base + Policy::k_pcSaveReturnRva - 5, SaveCall, sizeof SaveCall) == 0 &&
-                *reinterpret_cast<std::uintptr_t const*>(Base + k_memoryReaderVtableRva + 25 * sizeof(void*)) ==
-                    g_moduleBase + k_serializeStringRva &&
-                std::memcmp(Base + Policy::k_getBoundKeyReturnRva - 5, GetBoundKeyCall, sizeof GetBoundKeyCall) == 0 &&
-                std::memcmp(Base + Policy::k_controlTokenReturnRva - 5, ControlTokenCall, sizeof ControlTokenCall) == 0;
+        // The caller gates compare return addresses, so check those call sites and the reader vtable.
+        bool MatchesCallSites(::LESDK::Initializer& Context, void const* Collector)
+        {
+            auto const* const Dos = reinterpret_cast<IMAGE_DOS_HEADER const*>(g_moduleBase);
+            auto const* const Nt = reinterpret_cast<IMAGE_NT_HEADERS64 const*>(g_moduleBase + Dos->e_lfanew);
+            auto* const* const Vtable = static_cast<void* const*>(Context.Resolve(GLOBAL_FMEMORYREADER_VTABLE_RVA));
+            if (reinterpret_cast<std::uintptr_t>(Vtable + FMEMORYREADER_VTABLE_SLOTS) > g_moduleBase + Nt->OptionalHeader.SizeOfImage)
+            {
+                return false;
+            }
+            if (!CallsTarget(GLOBAL_COLLECTBINDINGS_PCMENU_RETURN_RVA, Collector) ||
+                !CallsTarget(GLOBAL_COLLECTBINDINGS_PCSAVE_RETURN_RVA, Collector) ||
+                !CallsTarget(GLOBAL_COLLECTBINDINGS_GETBOUNDKEY_RETURN_RVA, Collector) ||
+                !CallsTarget(GLOBAL_COLLECTBINDINGS_CONTROLTOKEN_RETURN_RVA, Collector) ||
+                Vtable[FMEMORYREADER_SERIALIZESTRING_SLOT] != Context.Resolve(GLOBAL_FARCHIVE_SERIALIZESTRING_RVA))
+            {
+                return false;
+            }
+
+            g_memoryReaderVtable = Vtable;
+            return true;
         }
     }
 
     void Initialize(::LESDK::Initializer& Context)
     {
         g_moduleBase = reinterpret_cast<std::uintptr_t>(Context.ModuleBase);
-        if (g_moduleBase == 0 || !MatchesSupportedCode())
+        void* const CollectAddress = Context.Resolve(GLOBAL_USFXGAMEMODEMANAGER_COLLECTBINDINGS_PHOOK);
+        void* const ReplaceAddress = Context.Resolve(GLOBAL_USFXGAMEMODEMANAGER_REPLACEBINDINGS_PHOOK);
+        void* const SerializeAddress = Context.Resolve(GLOBAL_USFXGAMEMODEMANAGER_SERIALIZEBINDINGS_PHOOK);
+        void* const CaptureAddress = Context.Resolve(GLOBAL_UBIOSFHANDLER_PCOPTIONS_CAPTUREKEY_PHOOK);
+        if (g_moduleBase == 0 || CollectAddress == nullptr || ReplaceAddress == nullptr || SerializeAddress == nullptr ||
+            CaptureAddress == nullptr || !MatchesCallSites(Context, CollectAddress))
         {
-            MILAN_WARNW(ELOG_Startup, L"shared prompt fix: unsupported native code; hook not installed");
+            MILAN_WARNW(ELOG_Startup, L"shared input fix: unsupported native code; hooks not installed");
             return;
         }
 
-        auto* const Target = reinterpret_cast<CollectBindings*>(g_moduleBase + k_collectBindingsRva);
-        g_original = reinterpret_cast<CollectBindings*>(Context.InstallHookDeferred(
-            k_hookName, reinterpret_cast<void*>(Target), reinterpret_cast<void*>(&CollectBindingsHook)));
-        g_replaceOriginal = reinterpret_cast<ReplaceBindings*>(Context.InstallHookDeferred(
-            k_replaceHookName, reinterpret_cast<void*>(g_moduleBase + k_replaceBindingsRva),
-            reinterpret_cast<void*>(&ReplaceBindingsHook)));
-        g_serializeOriginal = reinterpret_cast<SerializeBindings*>(Context.InstallHookDeferred(
-            k_profileHookName, reinterpret_cast<void*>(g_moduleBase + k_serializeBindingsRva),
-            reinterpret_cast<void*>(&SerializeBindingsHook)));
-        if (g_original == nullptr || g_replaceOriginal == nullptr || g_serializeOriginal == nullptr)
+        // The collector goes last: it is the only hook that runs outside the menus.
+        INSTALL_HOOK_TWO_ADDR(USFXGameModeManager, ReplaceBindings, ReplaceAddress);
+        INSTALL_HOOK_TWO_ADDR(USFXGameModeManager, SerializeBindings, SerializeAddress);
+        INSTALL_HOOK_TWO_ADDR(UBioSFHandler_PCOptions, CaptureKey, CaptureAddress);
+        INSTALL_HOOK_TWO_ADDR(USFXGameModeManager, CollectBindings, CollectAddress);
+        if (USFXGameModeManager_CollectBindings_orig == nullptr || USFXGameModeManager_ReplaceBindings_orig == nullptr ||
+            USFXGameModeManager_SerializeBindings_orig == nullptr || UBioSFHandler_PCOptions_CaptureKey_orig == nullptr)
         {
             Uninstall(Context);
             MILAN_ERRORW(ELOG_Startup, L"shared input fix: failed to create binding hooks");
             return;
         }
-        Context.EnableHook(k_replaceHookName);
-        Context.EnableHook(k_profileHookName);
-        Context.EnableHook(k_hookName);
-        MILAN_INFOW(ELOG_Startup, L"shared input fix: installed prompt, PC menu/reset, and profile binding hooks");
+        MILAN_INFOW(ELOG_Startup, L"shared input fix: installed prompt, PC menu/reset/capture, and profile binding hooks");
     }
 
     void Uninstall(::LESDK::Initializer& Context)
     {
-        if (g_original != nullptr)
-            Context.UninstallHook(k_hookName);
-        if (g_serializeOriginal != nullptr)
-            Context.UninstallHook(k_profileHookName);
-        if (g_replaceOriginal != nullptr)
-            Context.UninstallHook(k_replaceHookName);
-        g_original = nullptr;
-        g_serializeOriginal = nullptr;
-        g_replaceOriginal = nullptr;
+        if (USFXGameModeManager_CollectBindings_orig != nullptr)
+        {
+            Context.UninstallHook("USFXGameModeManager::CollectBindings");
+        }
+        if (UBioSFHandler_PCOptions_CaptureKey_orig != nullptr)
+        {
+            Context.UninstallHook("UBioSFHandler_PCOptions::CaptureKey");
+        }
+        if (USFXGameModeManager_SerializeBindings_orig != nullptr)
+        {
+            Context.UninstallHook("USFXGameModeManager::SerializeBindings");
+        }
+        if (USFXGameModeManager_ReplaceBindings_orig != nullptr)
+        {
+            Context.UninstallHook("USFXGameModeManager::ReplaceBindings");
+        }
+        USFXGameModeManager_CollectBindings_orig = nullptr;
+        UBioSFHandler_PCOptions_CaptureKey_orig = nullptr;
+        USFXGameModeManager_SerializeBindings_orig = nullptr;
+        USFXGameModeManager_ReplaceBindings_orig = nullptr;
     }
 }
