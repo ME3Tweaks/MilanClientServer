@@ -2,6 +2,7 @@
 #include "Components/CImgui.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
+#include "Engine/InputActionGroup.hpp"
 #include "Engine/InputPromptFix.hpp"
 #include "Engine/DLCConfigReload.hpp"
 #include "Engine/LinkerPatcher.hpp"
@@ -46,6 +47,8 @@ void CGlobals::PostInitialize(::LESDK::Initializer& Context)
 
 void CGlobals::UninstallSomeHooks(::LESDK::Initializer& Context)
 {
+    GuiMovieGuard::Uninstall(Context);
+    InputActionGroup::Uninstall(Context);
     InputPromptFix::Uninstall(Context);
     Context.UninstallHook("UWorld::Tick");
     Context.UninstallHook("UObject::ProcessInternal");
@@ -125,6 +128,7 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
     // LoadPackage itself is installed by LoadGate::Install at the very start of attach.
 
     InputPromptFix::Initialize(Context);
+    InputActionGroup::Initialize(Context);
     // Never uninstalled, so shutdown profile saves stay blocked too.
     AchievementGuard::Initialize(Context);
     LinkerPatcher::Initialize(Context);
