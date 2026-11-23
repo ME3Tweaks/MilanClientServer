@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <string_view>
+
 #include <LESDK/Headers.hpp>
 
 #include "Base/Base.hpp"
@@ -207,12 +209,14 @@ public:
     static FString GetLoadProfilePathStatic();
     FString const& GetProfilePath() const noexcept;
 
-    // Reads MP_Profile directly if SFXSaveManagerMP.Initialize has not loaded it yet.
+    // Reads MP_Profile directly if SFXSaveManagerMP.Initialize has not loaded it yet. Sanitized, including older saved names
     static FString const& GetPlayerName();
-    // Windows account name used when the profile has no custom name
+    // Windows account name used when the profile has no custom name. Sanitized
     static FString const& GetDefaultPlayerName();
-    // The name the next Serialize writes.
+    // The name the next Serialize writes. Sanitized before it is stored
     static void SetPlayerName(FString const& Name);
+    // Applies PlayerNames::Policy::SanitizePlayerName. Empty if nothing usable is left
+    static FString SanitizePlayerName(std::wstring_view Name);
 
     static bool IsProfileLoaded();
     static void MarkProfileLoaded();

@@ -6,6 +6,7 @@
 #include "Base/IOUtils.hpp"
 #include "Online/ChallengeStorage.hpp"
 #include "Online/MPProfile.hpp"
+#include "Online/PlayerNamePolicy.hpp"
 
 // The game has no profile field for the player name, so it is cached here between load and save.
 static FString& CachedPlayerName()
@@ -274,7 +275,9 @@ FString const& MPProfile::GetPlayerName()
         ProfileSetting Setting{};
         Setting.Deserialize(ProfileStream);
         if (Setting.Id == MP_PROFILE_PLAYER_NAME_ID && Setting.DataType == PST_STRING)
-            CachedPlayerName() = Setting.CaseString;
+        {
+            CachedPlayerName() = SanitizePlayerName(Setting.CaseString);
+        }
     }
     return CachedPlayerName();
 }
@@ -288,8 +291,9 @@ FString const& MPProfile::GetDefaultPlayerName()
         bLoaded = true;
         wchar_t Buffer[256]{};
         DWORD Length = static_cast<DWORD>(std::size(Buffer));
-        if (::GetUserNameW(Buffer, &Length)) {
-            Name = FString::Printf(L"%s", Buffer);
+        if (::GetUserNameW(Buffer, &Length))
+        {
+            Name = SanitizePlayerName(Buffer);
         }
     }
     return Name;
@@ -297,8 +301,20 @@ FString const& MPProfile::GetDefaultPlayerName()
 
 void MPProfile::SetPlayerName(FString const& Name)
 {
-    CachedPlayerName() = Name;
+    CachedPlayerName() = SanitizePlayerName(Name);
     bPlayerNameLoaded = true;
+}
+
+FString MPProfile::SanitizePlayerName(std::wstring_view const Name)
+{
+    std::wstring const Clean = PlayerNames::Policy::SanitizePlayerName(Name);
+    FString Out{};
+    // FString::Append asserts on an empty range
+    if (!Clean.empty())
+    {
+        Out.Append(Clean.data(), Clean.data() + Clean.size());
+    }
+    return Out;
 }
 
 MPProfile::MPProfile(USFXEngine* const Engine)
@@ -448,7 +464,7 @@ void MPProfile::Deserialize(IInputStream& Stream)
         else if (Setting.Id == MP_PROFILE_PLAYER_NAME_ID)
         {
             MILAN_CHECKW(Setting.DataType == PST_STRING, L"");
-            CachedPlayerName() = Setting.CaseString;
+            CachedPlayerName() = SanitizePlayerName(Setting.CaseString);
         }
         else
         {

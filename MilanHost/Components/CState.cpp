@@ -140,11 +140,12 @@ namespace
             return NETCONFIG_APPLY_SAVE_FAILED;
         }
 
-        std::wstring_view const NameView = TrimSpaces(Params.PlayerName);
-        if (NameView.empty())
+        // Same rules every client applies to replicated names
+        FString const Name = MPProfile::SanitizePlayerName(Params.PlayerName);
+        if (Name.Empty())
+        {
             return NETCONFIG_APPLY_INVALID_NAME;
-        FString Name{};
-        Name.Append(NameView.data(), NameView.data() + NameView.size());
+        }
 
         ClientConfig Next = *gp_clientConfig;
         std::string const Url = ToUtf8(TrimSpaces(Params.CustomServer));
