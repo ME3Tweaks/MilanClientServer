@@ -129,6 +129,28 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
     }
 
     [Fact]
+    public async Task Search_ExpandedLobbies_ComesFromTheBody_AndIsOptional()
+    {
+        // Its own server, so lobbies from the other tests cannot match.
+        using WebApplicationFactory<Program> server = _factory.WithWebHostBuilder(_ => { });
+        HttpClient client = server.CreateClient();
+        HttpResponseMessage created = await client.PostAsJsonAsync("/v1/lobbies",
+            new CreateLobbyRequest(Version, State() with { MaxPlayers = 8 }), Ct);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        HttpResponseMessage excluded = await client.PostAsJsonAsync("/v1/searches",
+            new SearchRequest { GameVersion = Version, ExpandedLobbies = false }, Ct);
+        Assert.Equal(SearchState.Searching, (await excluded.Content.ReadFromJsonAsync<CreateSearchResponse>(Ct))!.Status.State);
+
+        // The body a game from before the field sends still gets the expanded lobby.
+        string legacyBody = $$"""{"gameVersion":"{{Version}}","mapId":-1,"enemyModeId":127,"difficultyId":127,"widen":true}""";
+        HttpResponseMessage legacy = await client.PostAsync("/v1/searches",
+            new StringContent(legacyBody, Encoding.UTF8, "application/json"), Ct);
+        Assert.Equal(HttpStatusCode.Created, legacy.StatusCode);
+        Assert.Equal(SearchState.Matched, (await legacy.Content.ReadFromJsonAsync<CreateSearchResponse>(Ct))!.Status.State);
+    }
+
+    [Fact]
     public async Task MemberRoutes_ReportPollAndLeave()
     {
         HttpClient client = _factory.CreateClient();

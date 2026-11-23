@@ -24,6 +24,7 @@ public sealed class StatsTests : StoreTestBase
         Assert.Equal(1, stats.Searching);
         Assert.Equal(2, stats.PublicLobbies);
         Assert.Equal(1, stats.OpenLobbies);
+        Assert.Equal(0, stats.OpenExpandedLobbies);
         Assert.Null(stats.Idle);
         Assert.Null(stats.Online);
 
@@ -63,6 +64,23 @@ public sealed class StatsTests : StoreTestBase
         IReadOnlyDictionary<int, int> sizes = Store.GetStats().Details!.LobbiesByPlayers!;
 
         Assert.Equal([KeyValuePair.Create(2, 1), KeyValuePair.Create(4, 2)], sizes.ToArray());
+    }
+
+    [Fact]
+    public void Stats_SplitOpenLobbiesBySize()
+    {
+        Host(State(players: 2), Address(11));
+        Host(State(players: 3, maxPlayers: 8), Address(12));
+        Host(State(players: 5, maxPlayers: 6, phase: MatchPhase.InProgress, wave: 2), Address(13));
+        // Full or private: open to no search.
+        Host(State(players: 4), Address(14));
+        Host(State(players: 8, maxPlayers: 8), Address(15));
+        Host(State(isPrivate: true, players: 1, maxPlayers: 8), Address(16));
+
+        ServerStats stats = Store.GetStats();
+
+        Assert.Equal(1, stats.OpenLobbies);
+        Assert.Equal(2, stats.OpenExpandedLobbies);
     }
 
     [Fact]

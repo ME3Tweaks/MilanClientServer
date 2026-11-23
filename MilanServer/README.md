@@ -88,6 +88,9 @@ command-line arguments override the file.
 | `MapWidenSeconds` | 30 | Search widens to any map after this |
 | `EnemyWidenSeconds` | 60 | Search widens to any enemy after this |
 | `InProgressAfterSeconds` | 10 | Delay before matches in progress are offered, when open lobbies exist |
+| `PreferredPartySize` | 4 | Quick match fills lobbies up to this many players first (0 turns this off) |
+| `PartySizeWidenSeconds` | 15 | Delay before lobbies past `PreferredPartySize` are offered (none with `expandedLobbies: true`) |
+| `MaxSearchLobbySize` | 8 | Lobbies with more slots than this are invite-only (0 means no limit) |
 | `SearchPollMilliseconds` | 2000 | Search poll interval suggested to clients (at least 100) |
 | `LongPollSeconds` | 25 | Longest a long poll waits (1-120) |
 | `HostChallengeSeconds` | 5 | Time a host has to answer once a member reports it lost |
@@ -154,6 +157,13 @@ your server should cache the results of this periodically.
 | `Stats:MaxPresence` | 100000 | Presence reports kept in total |
 | `Stats:MaxPresencePerAddress` | 16 | Presence reports kept per address |
 
+### Restarts
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `StateFile` | empty | File lobbies are saved to on a normal shutdown and restored from at startup, relative to the server's folder. Empty turns it off |
+| `StateMaxAgeSeconds` | 120 | A state file older than this at startup is ignored (1-3600) |
+
 ### Other environment variables
 
 | Variable | Purpose |
@@ -209,7 +219,9 @@ docker compose up -d --build
 
 The image listens on TCP 5080 and UDP 5081, runs as a non-root user with no shell (use
 `docker logs`), and takes any `Milan__<Setting>` environment variable. `compose.yaml`
-mounts `./config` for `milan.json`. `docker build --pull --target test .` runs the tests.
+mounts `./config` for `milan.json` and `./state` for `StateFile`. Create `./state` for the
+container's user first: `mkdir -p state && sudo chown 1654:1654 state`.
+`docker build --pull --target test .` runs the tests.
 
 The server must see each player's real address and UDP port:
 

@@ -73,7 +73,8 @@ public abstract class StoreTestBase
         int difficulty = GameSettingIds.AnyDifficulty,
         bool widen = true,
         IPAddress? from = null,
-        string[]? exclude = null)
+        string[]? exclude = null,
+        bool? expanded = null)
     {
         SearchRequest request = new()
         {
@@ -83,6 +84,7 @@ public abstract class StoreTestBase
             DifficultyId = difficulty,
             Widen = widen,
             ExcludeLobbyIds = exclude,
+            ExpandedLobbies = expanded,
         };
         Outcome<CreateSearchResponse> outcome = Store.CreateSearch(request, from ?? JoinerIp);
         Assert.Null(outcome.Failure);

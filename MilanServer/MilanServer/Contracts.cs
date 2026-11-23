@@ -154,6 +154,10 @@ public sealed record SearchRequest
     public int DifficultyId { get; init; } = GameSettingIds.AnyDifficulty;
     public bool Widen { get; init; } = true;
     public IReadOnlyList<string>? ExcludeLobbyIds { get; init; }
+    /// <summary>
+    /// If player has elected to matchmake into expanded lobbies
+    /// </summary>
+    public bool? ExpandedLobbies { get; init; }
 }
 
 // ExpectedGameVersion is Milan:ExpectedGameVersion when the search's version differs from it,
@@ -285,8 +289,10 @@ public sealed record ServerStats
     public required int Players { get; init; }
     public required int Searching { get; init; }
     public required int PublicLobbies { get; init; }
-    // Public, joinable, and with a free slot: what a search can match.
+    // Public, joinable, and with a free slot (4 slots or less)
     public required int OpenLobbies { get; init; }
+    // Public, joinable, and with a free slot (5+ slots)
+    public required int OpenExpandedLobbies { get; init; }
     public int? Idle { get; init; }
     public int? Online { get; init; }
     public StatsDetails? Details { get; init; }

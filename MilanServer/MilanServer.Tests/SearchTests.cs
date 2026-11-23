@@ -298,6 +298,85 @@ public sealed class SearchTests : StoreTestBase
     }
 
     [Fact]
+    public void ExpandedLobbiesOff_NeverMatchesAnExpandedLobby()
+    {
+        Host(State(players: 2, maxPlayers: 8));
+        Host(State(players: 1, maxPlayers: 5), from: OtherJoinerIp);
+
+        // Not after widening, not past party size, and not before the search runs out.
+        CreateSearchResponse search = StartSearch(expanded: false);
+        Assert.Equal(SearchState.Searching, search.Status.State);
+        Advance(Options.EnemyWidenSeconds);
+        SearchStatus widened = Poll(search);
+        Assert.Equal((SearchState.Searching, SearchStage.AnyMapAndEnemy), (widened.State, widened.Stage));
+        Advance(Options.SearchSeconds - Options.EnemyWidenSeconds);
+        Assert.Equal(SearchState.NoMatch, Poll(search).State);
+    }
+
+    [Fact]
+    public void ExpandedLobbiesOff_MatchesAFourSlotLobby()
+    {
+        // The expanded lobby has waited longest and would stay under party size.
+        Host(State(players: 1, maxPlayers: 8));
+        Advance(5);
+        CreateLobbyResponse standard = Host(State(players: 3, maxPlayers: 4), from: OtherJoinerIp);
+
+        Assert.Equal(standard.LobbyId, StartSearch(expanded: false).Status.Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void ExpandedLobbiesOff_AnOpenExpandedLobbyDoesNotDelayMatchesInProgress()
+    {
+        CreateLobbyResponse match = Host(State(phase: MatchPhase.InProgress, wave: 2));
+        Host(State(maxPlayers: 6), from: OtherJoinerIp);
+
+        Assert.Equal(match.LobbyId, StartSearch(expanded: false).Status.Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void ExpandedLobbiesOff_LobbyResizedPastFourDropsOut()
+    {
+        CreateLobbyResponse lobby = Host(State(map: 7));
+        CreateSearchResponse search = StartSearch(map: 5, widen: false, expanded: false);
+        Assert.Equal(SearchState.Searching, search.Status.State);
+
+        Report(lobby, State(2, map: 5, maxPlayers: 6));
+        Assert.Equal(SearchState.Searching, Poll(search).State);
+
+        Report(lobby, State(3, map: 5, maxPlayers: 4));
+        Assert.Equal(SearchState.Matched, Poll(search).State);
+    }
+
+    [Fact]
+    public void ExpandedLobbiesOn_SkipsThePartySizeWait()
+    {
+        CreateLobbyResponse oversized = Host(State(players: 4, maxPlayers: 8));
+
+        Assert.Equal(oversized.LobbyId, StartSearch(expanded: true).Status.Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void ExpandedLobbiesOn_StillFillsLobbiesUnderPartySizeFirst()
+    {
+        CreateLobbyResponse oversized = Host(State(players: 4, maxPlayers: 8));
+        Advance(5);
+        CreateLobbyResponse normal = Host(State(players: 2), from: OtherJoinerIp);
+
+        Assert.Equal(normal.LobbyId, StartSearch(expanded: true).Status.Reservation?.Lobby.LobbyId);
+        // With the normal lobby gone, the next opted-in player gets the oversized one at once.
+        Assert.Null(Store.DeleteLobby(normal.LobbyId, normal.HostKey));
+        Assert.Equal(oversized.LobbyId, StartSearch(from: OtherJoinerIp, expanded: true).Status.Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void ExpandedLobby_StillTakesInvites()
+    {
+        CreateLobbyResponse lobby = Host(State(players: 2, maxPlayers: 8));
+
+        Assert.Null(Redeem(lobby).Failure);
+    }
+
+    [Fact]
     public void ExcludedLobbies_AreSkipped()
     {
         CreateLobbyResponse failed = Host();

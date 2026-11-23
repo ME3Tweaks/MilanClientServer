@@ -14,6 +14,7 @@ public sealed class MatchmakingStore
     const int MaxLanAddresses = 4;
     const int MaxExcludedLobbies = 16;
     const int MaxWaveNumber = 10_000;
+    const int StandardLobbySize = 4;
     const int MaxTrackedPerRecord = 64;
     const int MaxTrackedAddresses = 50_000;
     static readonly TimeSpan SearchRetention = TimeSpan.FromSeconds(60);
@@ -365,9 +366,10 @@ public sealed class MatchmakingStore
             string current = _notice?.ExpectedGameVersion ?? _options.ExpectedGameVersion;
             string? expectedVersion = current.Length > 0 && current != request.GameVersion ? current : null;
             _logger.LogInformation(
-                "Search {SearchId} started: game version {GameVersion}{VersionNote}, map {MapId}, enemy {EnemyModeId}, difficulty {DifficultyId}, widen {Widen}; matches in progress {InProgress}.",
+                "Search {SearchId} started: game version {GameVersion}{VersionNote}, map {MapId}, enemy {EnemyModeId}, difficulty {DifficultyId}, widen {Widen}, expanded lobbies {ExpandedLobbies}; matches in progress {InProgress}.",
                 search.Id, request.GameVersion, expectedVersion is null ? "" : $" (server expects {expectedVersion})",
                 request.MapId, request.EnemyModeId, request.DifficultyId, request.Widen,
+                request.ExpandedLobbies switch { true => "included", false => "excluded", null => "not sent" },
                 search.InProgressFrom == now ? "allowed now (no open lobby)" : $"allowed after {_options.InProgressAfterSeconds} s (lobbies open)");
 
             Outcome<SearchStatus> status = EvaluateSearchLocked(search, now);
@@ -457,7 +459,7 @@ public sealed class MatchmakingStore
         if (pastPartySize && !search.PastPartySize)
         {
             search.PastPartySize = true;
-            if (_options.PreferredPartySize > 0 && search.CreatedAt != now)
+            if (_options.PreferredPartySize > 0 && search.CreatedAt != now && search.Request.ExpandedLobbies != true)
             {
                 _logger.LogInformation("Search {SearchId} widened past party size {PartySize}.", search.Id, _options.PreferredPartySize);
             }
@@ -522,7 +524,8 @@ public sealed class MatchmakingStore
 
     // Whether this player could ever be matched to the lobby, before the map and enemy
     // filters that widen. Private lobbies never appear in search, extraction is
-    // invite-only, difficulty never widens, and a lobby changing hosts waits for its own.
+    // invite-only, difficulty never widens, a lobby changing hosts waits for its own,
+    // and expanded lobbies need the player's consent.
     bool IsOpenTo(Lobby lobby, Search search, DateTimeOffset now)
     {
         LobbySnapshot state = lobby.State;
@@ -532,6 +535,7 @@ public sealed class MatchmakingStore
             && !state.IsPrivate
             && state.Joinable
             && IsSearchableSize(state)
+            && (request.ExpandedLobbies != false || !IsExpanded(state))
             && state.Phase is (MatchPhase.Lobby or MatchPhase.InProgress)
             && (request.DifficultyId == GameSettingIds.AnyDifficulty || state.DifficultyId == request.DifficultyId)
             && lobby.GameVersion == request.GameVersion
@@ -549,7 +553,8 @@ public sealed class MatchmakingStore
             return false;
         }
 
-        if (!search.PastPartySize && PartyOverflow(lobby, now) > 0)
+        // A player who asked for expanded lobbies does not wait for them. Ranking still fills smaller lobbies first
+        if (!search.PastPartySize && request.ExpandedLobbies != true && PartyOverflow(lobby, now) > 0)
         {
             return false;
         }
@@ -594,6 +599,8 @@ public sealed class MatchmakingStore
 
     // Lobbies with more slots than MaxSearchLobbySize are reachable by invite only.
     bool IsSearchableSize(LobbySnapshot state) => _options.MaxSearchLobbySize == 0 || state.MaxPlayers <= _options.MaxSearchLobbySize;
+
+    static bool IsExpanded(LobbySnapshot state) => state.MaxPlayers > StandardLobbySize;
 
     // How far past PreferredPartySize one more joiner would take the lobby
     int PartyOverflow(Lobby lobby, DateTimeOffset now)
@@ -1759,7 +1766,7 @@ public sealed class MatchmakingStore
     ServerStats BuildStatsLocked(DateTimeOffset now)
     {
         int lobbies = 0, players = 0, capacity = 0;
-        int publicLobbies = 0, friendsLobbies = 0, privateLobbies = 0, openLobbies = 0;
+        int publicLobbies = 0, friendsLobbies = 0, privateLobbies = 0, openLobbies = 0, openExpandedLobbies = 0;
         int waiting = 0, inProgress = 0, migrations = 0, suspect = 0, unreachable = 0;
         Dictionary<string, int> versions = new(StringComparer.Ordinal);
         Dictionary<int, int> sizes = [];
@@ -1785,7 +1792,14 @@ public sealed class MatchmakingStore
                 // What a search can match, whatever it asks for (IsOpenTo).
                 if (state.Joinable && lobby.Migration is null && IsSearchableSize(state) && Occupancy(lobby, now) < state.MaxPlayers)
                 {
-                    openLobbies++;
+                    if (IsExpanded(state))
+                    {
+                        openExpandedLobbies++;
+                    }
+                    else
+                    {
+                        openLobbies++;
+                    }
                 }
             }
             else if (state.MemberInvites)
@@ -1871,6 +1885,7 @@ public sealed class MatchmakingStore
             Searching = searching,
             PublicLobbies = publicLobbies,
             OpenLobbies = openLobbies,
+            OpenExpandedLobbies = openExpandedLobbies,
             Idle = idle,
             Online = idle is null ? null : players + searching + idle,
             Details = details,
