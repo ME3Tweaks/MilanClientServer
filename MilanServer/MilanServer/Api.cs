@@ -50,9 +50,21 @@ public static class Api
         {
             MilanServerOptions o = options.Value;
             (string? latest, bool? outdated, NoticeText? text) = notice.For(gameVersion, language);
-            return new ServerInfo(ProtocolVersion, o.HeartbeatSeconds, o.LobbyLeaseSeconds,
-                o.ReservationSeconds, o.SearchSeconds, o.MaxPlayersCeiling, o.LongPollSeconds, discovery.Port,
-                o.Stats.Presence ? o.Stats.PresenceSeconds : 0, latest, outdated, text);
+            return new ServerInfo
+            {
+                ProtocolVersion = ProtocolVersion,
+                HeartbeatSeconds = o.HeartbeatSeconds,
+                LobbyLeaseSeconds = o.LobbyLeaseSeconds,
+                ReservationSeconds = o.ReservationSeconds,
+                SearchSeconds = o.SearchSeconds,
+                MaxPlayersCeiling = o.MaxPlayersCeiling,
+                LongPollSeconds = o.LongPollSeconds,
+                UdpPort = discovery.Port,
+                PresenceSeconds = o.Stats.Presence ? o.Stats.PresenceSeconds : 0,
+                LatestGameVersion = latest,
+                Outdated = outdated,
+                Notice = text,
+            };
         });
 
         // Counts for a dashboard or a "players online" display
@@ -62,15 +74,25 @@ public static class Api
             MilanStatsOptions o = options.Value.Stats;
             string? token = BearerToken(http);
             if (token is not null)
+            {
                 http.Response.Headers.CacheControl = "no-store";
+            }
+
             if (token is not null && !http.Request.IsHttps)
+            {
                 return Error(Failures.HttpsRequired);
+            }
+
             if (token is not null && !IsStatsToken(o.Token, token))
+            {
                 return Error(Failures.StatsTokenInvalid);
+            }
 
             StatsAccess access = token is not null ? StatsAccess.Full : o.Public;
             if (access == StatsAccess.None)
+            {
                 return Error(Failures.StatsUnavailable);
+            }
 
             ServerStats stats = store.GetStats();
             // A shared cache may keep what anyone can see

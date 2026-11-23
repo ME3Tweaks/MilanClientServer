@@ -10,7 +10,7 @@ public sealed class BlockedVersionTests : StoreTestBase
         Block(Version);
 
         Assert.Equal(Failures.VersionBlocked, Store.CreateLobby(new CreateLobbyRequest(Version, State()), HostIp).Failure);
-        Assert.Equal(Failures.VersionBlocked, Store.CreateSearch(new SearchRequest(Version), JoinerIp).Failure);
+        Assert.Equal(Failures.VersionBlocked, Store.CreateSearch(new SearchRequest { GameVersion = Version }, JoinerIp).Failure);
         Assert.Equal(Failures.VersionBlocked, Store.RedeemInvite(new RedeemInviteRequest("ABCD-EFGH", Version), JoinerIp).Failure);
         Assert.Equal(3, Store.GetStats().Details!.Totals.BlockedVersionRequests);
     }
@@ -32,7 +32,7 @@ public sealed class BlockedVersionTests : StoreTestBase
 
         Block(Version);
         Report(lobby, State(2));
-        Assert.Equal(Failures.VersionBlocked, Store.CreateSearch(new SearchRequest(Version), JoinerIp).Failure);
+        Assert.Equal(Failures.VersionBlocked, Store.CreateSearch(new SearchRequest { GameVersion = Version }, JoinerIp).Failure);
 
         Block();
         Assert.Equal(lobby.LobbyId, StartSearch().Status.Reservation?.Lobby.LobbyId);

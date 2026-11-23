@@ -43,7 +43,9 @@ public static class DiscoveryPacket
     {
         request = default;
         if (!HasHeader(packet, RequestLength, TypeBindingRequest) || packet[32..48].ContainsAnyExcept((byte)0))
+        {
             return false;
+        }
 
         request = new BindingRequest(
             BinaryPrimitives.ReadUInt128BigEndian(packet[8..24]),
@@ -143,7 +145,10 @@ public sealed class UdpDiscoveryService(
         {
             _socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
             if (OperatingSystem.IsWindows())
+            {
                 _socket.IOControl(SIO_UDP_CONNRESET, [0, 0, 0, 0], null);
+            }
+
             _socket.Bind(new IPEndPoint(IPAddress.Any, options.Value.UdpPort));
             endpoint.Port = ((IPEndPoint)_socket.LocalEndPoint!).Port;
             logger.LogInformation("UDP endpoint discovery listening on port {Port}.", endpoint.Port);
@@ -155,7 +160,9 @@ public sealed class UdpDiscoveryService(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (_socket is null)
+        {
             return;
+        }
 
         byte[] receiveBuffer = new byte[2048];
         byte[] sendBuffer = new byte[DiscoveryPacket.ResponseLength];
@@ -181,7 +188,9 @@ public sealed class UdpDiscoveryService(
             int length = store.HandleDiscovery(receiveBuffer.AsSpan(0, received.ReceivedBytes),
                 (IPEndPoint)received.RemoteEndPoint, sendBuffer);
             if (length == 0)
+            {
                 continue;
+            }
 
             try
             {

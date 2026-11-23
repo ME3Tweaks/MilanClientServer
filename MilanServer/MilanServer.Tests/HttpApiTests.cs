@@ -39,15 +39,34 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
 
     static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    static LobbySnapshot State(long revision = 1, bool isPrivate = false) =>
-        new(revision, isPrivate, true, 5, 3, 2, 1, 4, MatchPhase.Lobby, 0, 7777, ["192.168.1.20"]);
+    static LobbySnapshot State(long revision = 1, bool isPrivate = false)
+    {
+        return new LobbySnapshot
+        {
+            Revision = revision,
+            IsPrivate = isPrivate,
+            Joinable = true,
+            MapId = 5,
+            EnemyModeId = 3,
+            DifficultyId = 2,
+            PlayerCount = 1,
+            MaxPlayers = 4,
+            Phase = MatchPhase.Lobby,
+            WaveNumber = 0,
+            GamePort = 7777,
+            LanAddresses = ["192.168.1.20"],
+        };
+    }
 
     static HttpRequestMessage Authorized(HttpMethod method, string uri, string key, object? body = null)
     {
         HttpRequestMessage request = new(method, uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
         if (body is not null)
+        {
             request.Content = JsonContent.Create(body);
+        }
+
         return request;
     }
 
@@ -62,7 +81,7 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
 
         // Private: not found by search until the host reports it public.
         HttpResponseMessage searchCreated = await client.PostAsJsonAsync("/v1/searches",
-            new SearchRequest(Version, ExcludeLobbyIds: null), Ct);
+            new SearchRequest { GameVersion = Version, ExcludeLobbyIds = null }, Ct);
         CreateSearchResponse search = (await searchCreated.Content.ReadFromJsonAsync<CreateSearchResponse>(Ct))!;
         Assert.Equal(SearchState.Searching, search.Status.State);
 
@@ -177,7 +196,18 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
     {
         ServerInfo info = (await _factory.CreateClient().GetFromJsonAsync<ServerInfo>("/v1/info", Ct))!;
 
-        Assert.Equal(new ServerInfo(Api.ProtocolVersion, 20, 60, 30, 120, 16, 25, info.UdpPort), info);
+        ServerInfo expected = new()
+        {
+            ProtocolVersion = Api.ProtocolVersion,
+            HeartbeatSeconds = 20,
+            LobbyLeaseSeconds = 60,
+            ReservationSeconds = 30,
+            SearchSeconds = 120,
+            MaxPlayersCeiling = 16,
+            LongPollSeconds = 25,
+            UdpPort = info.UdpPort,
+        };
+        Assert.Equal(expected, info);
         Assert.NotEqual(0, info.UdpPort);
     }
 
@@ -257,6 +287,8 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
         ServerStats full = (await fullResponse.Content.ReadFromJsonAsync<ServerStats>(Ct))!;
         Assert.Equal(1, full.Details?.Lobbies);
         Assert.Equal(1, full.Details?.Totals.LobbiesCreated);
+        Assert.Equal(1, full.Details?.LobbiesByPlayers?[1]);
+        Assert.Equal(new LobbySizeFill(1, 1, 4, 25), full.Details?.PublicFillBySize?[4]);
 
         using HttpRequestMessage wrongToken = new(HttpMethod.Get, "/v1/stats");
         wrongToken.Headers.Authorization = new("Bearer", "not-the-statistics-token");
@@ -268,6 +300,45 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
     }
 
     [Fact]
+    public async Task Restart_KeepsLobbies_ThroughTheStateFile()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "milan-http-restart-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(folder, "lobbies.json");
+        try
+        {
+            CreateLobbyResponse lobby;
+            // Stopping the first server writes the file.
+            using (WebApplicationFactory<Program> first = _factory.WithWebHostBuilder(builder => builder.UseSetting("Milan:StateFile", path)))
+            {
+                HttpResponseMessage created = await first.CreateClient().PostAsJsonAsync("/v1/lobbies", new CreateLobbyRequest(Version, State()), Ct);
+                lobby = (await created.Content.ReadFromJsonAsync<CreateLobbyResponse>(Ct))!;
+            }
+            Assert.True(File.Exists(path));
+
+            using WebApplicationFactory<Program> second = _factory.WithWebHostBuilder(builder => builder.UseSetting("Milan:StateFile", path));
+            HttpClient client = second.CreateClient();
+            HttpResponseMessage reported = await client.SendAsync(
+                Authorized(HttpMethod.Put, $"/v1/lobbies/{lobby.LobbyId}/state", lobby.HostKey, State(2)), Ct);
+            Assert.Equal(HttpStatusCode.OK, reported.StatusCode);
+            Assert.False(File.Exists(path));
+
+            // Once the lobbies are saved, the API refuses requests until the next start.
+            second.Services.GetRequiredService<MatchmakingStore>().StopForRestart();
+            HttpResponseMessage refused = await client.GetAsync("/v1/info", Ct);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, refused.StatusCode);
+            Assert.Equal("server_restarting", (await refused.Content.ReadFromJsonAsync<ServerError>(Ct))?.Code);
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/healthz", Ct)).StatusCode);
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task CreateRequests_AreRateLimited()
     {
         using WebApplicationFactory<Program> limited = _factory.WithWebHostBuilder(
@@ -276,11 +347,11 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
 
         for (int i = 0; i < 2; i++)
         {
-            HttpResponseMessage allowed = await client.PostAsJsonAsync("/v1/searches", new SearchRequest(Version), Ct);
+            HttpResponseMessage allowed = await client.PostAsJsonAsync("/v1/searches", new SearchRequest { GameVersion = Version }, Ct);
             Assert.Equal(HttpStatusCode.Created, allowed.StatusCode);
         }
 
-        HttpResponseMessage rejected = await client.PostAsJsonAsync("/v1/searches", new SearchRequest(Version), Ct);
+        HttpResponseMessage rejected = await client.PostAsJsonAsync("/v1/searches", new SearchRequest { GameVersion = Version }, Ct);
         Assert.Equal(HttpStatusCode.TooManyRequests, rejected.StatusCode);
         Assert.Equal("rate_limited", (await rejected.Content.ReadFromJsonAsync<ServerError>(Ct))?.Code);
     }
@@ -298,11 +369,11 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, missing.StatusCode);
         Assert.Equal("access_key_invalid", (await missing.Content.ReadFromJsonAsync<ServerError>(Ct))?.Code);
 
-        using HttpRequestMessage wrong = new(HttpMethod.Post, "/v1/searches") { Content = JsonContent.Create(new SearchRequest(Version)) };
+        using HttpRequestMessage wrong = new(HttpMethod.Post, "/v1/searches") { Content = JsonContent.Create(new SearchRequest { GameVersion = Version }) };
         wrong.Headers.Add(Api.AccessKeyHeader, "not-the-key");
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.SendAsync(wrong, Ct)).StatusCode);
 
-        using HttpRequestMessage right = new(HttpMethod.Post, "/v1/searches") { Content = JsonContent.Create(new SearchRequest(Version)) };
+        using HttpRequestMessage right = new(HttpMethod.Post, "/v1/searches") { Content = JsonContent.Create(new SearchRequest { GameVersion = Version }) };
         right.Headers.Add(Api.AccessKeyHeader, Key);
         Assert.Equal(HttpStatusCode.Created, (await client.SendAsync(right, Ct)).StatusCode);
 
@@ -316,7 +387,7 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
         using WebApplicationFactory<Program> expecting = _factory.WithWebHostBuilder(builder => builder
             .UseSetting("Milan:ExpectedGameVersion", "milan-2.0.0"));
         HttpClient client = expecting.CreateClient();
-        HttpResponseMessage created = await client.PostAsJsonAsync("/v1/searches", new SearchRequest(Version), Ct);
+        HttpResponseMessage created = await client.PostAsJsonAsync("/v1/searches", new SearchRequest { GameVersion = Version }, Ct);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         using System.Text.Json.JsonDocument body = System.Text.Json.JsonDocument.Parse(await created.Content.ReadAsStringAsync(Ct));
         Assert.Equal("milan-2.0.0", body.RootElement.GetProperty("expectedGameVersion").GetString());
@@ -330,7 +401,7 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
             .UseSetting("Milan:BlockedGameVersions:0", Version));
         HttpClient client = blocking.CreateClient();
 
-        HttpResponseMessage search = await client.PostAsJsonAsync("/v1/searches", new SearchRequest(Version), Ct);
+        HttpResponseMessage search = await client.PostAsJsonAsync("/v1/searches", new SearchRequest { GameVersion = Version }, Ct);
         Assert.Equal(HttpStatusCode.Forbidden, search.StatusCode);
         Assert.Equal("version_blocked", (await search.Content.ReadFromJsonAsync<ServerError>(Ct))?.Code);
         HttpResponseMessage host = await client.PostAsJsonAsync("/v1/lobbies", new CreateLobbyRequest(Version, State()), Ct);
@@ -339,7 +410,7 @@ public sealed class HttpApiTests : IClassFixture<MilanFactory>
         ServerInfo info = (await client.GetFromJsonAsync<ServerInfo>($"/v1/info?gameVersion={Version}", Ct))!;
         Assert.True(info.Outdated);
         Assert.Equal(HttpStatusCode.Created,
-            (await client.PostAsJsonAsync("/v1/searches", new SearchRequest("milan-2.0.0"), Ct)).StatusCode);
+            (await client.PostAsJsonAsync("/v1/searches", new SearchRequest { GameVersion = "milan-2.0.0" }, Ct)).StatusCode);
     }
 
     [Fact]

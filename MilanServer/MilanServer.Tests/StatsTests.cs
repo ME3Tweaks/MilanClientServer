@@ -38,7 +38,47 @@ public sealed class StatsTests : StoreTestBase
         Assert.Equal(10, details.PeakPlayers);
         Assert.Equal(4, details.PeakLobbies);
         Assert.Equal(new Dictionary<string, int> { [Version] = 4 }, details.GameVersions);
-        Assert.Equal(new StatsTotals(4, 0, 1, 0, 1, 0, 0, 0, 0), details.Totals);
+        StatsTotals expected = new()
+        {
+            LobbiesCreated = 4,
+            LobbiesExpired = 0,
+            SearchesStarted = 1,
+            SearchesMatched = 0,
+            InvitesRedeemed = 1,
+            JoinsCompleted = 0,
+            HostMigrationsStarted = 0,
+            HostMigrationsCompleted = 0,
+            HostMigrationsFailed = 0,
+        };
+        Assert.Equal(expected, details.Totals);
+    }
+
+    [Fact]
+    public void Stats_CountLobbiesByPlayers()
+    {
+        Host(State(players: 4), Address(11));
+        Host(State(players: 2), Address(12));
+        Host(State(isPrivate: true, players: 4, phase: MatchPhase.InProgress), Address(13));
+
+        IReadOnlyDictionary<int, int> sizes = Store.GetStats().Details!.LobbiesByPlayers!;
+
+        Assert.Equal([KeyValuePair.Create(2, 1), KeyValuePair.Create(4, 2)], sizes.ToArray());
+    }
+
+    [Fact]
+    public void Stats_PublicFillBySize()
+    {
+        Host(State(players: 4), Address(11));
+        Host(State(players: 3, phase: MatchPhase.InProgress, wave: 2), Address(12));
+        Host(State(players: 3, maxPlayers: 8), Address(13));
+        // Private lobbies are left out.
+        Host(State(isPrivate: true, players: 1, maxPlayers: 8), Address(14));
+
+        IReadOnlyDictionary<int, LobbySizeFill> fill = Store.GetStats().Details!.PublicFillBySize!;
+
+        Assert.Equal([4, 8], fill.Keys.ToArray());
+        Assert.Equal(new LobbySizeFill(2, 7, 8, 87.5), fill[4]);
+        Assert.Equal(new LobbySizeFill(1, 3, 8, 37.5), fill[8]);
     }
 
     [Fact]
@@ -132,7 +172,10 @@ public sealed class StatsTests : StoreTestBase
         Options.Stats.MaxPresence = 3;
 
         for (int i = 0; i < 5; i++)
+        {
             Assert.Null(Store.ReportPresence($"same-address-id-{i:D2}", JoinerIp));
+        }
+
         Assert.Equal(2, Store.GetStats().Idle);
 
         Assert.Null(Store.ReportPresence("other-address-id-0", OtherJoinerIp));

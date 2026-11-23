@@ -46,6 +46,7 @@ builder.Services.AddSingleton(liveConfig);
 builder.Services.AddSingleton<ServerNotice>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<MatchmakingStore>();
+builder.Services.AddSingleton<StoreStateFile>();
 builder.Services.AddSingleton<RequestBudget>();
 builder.Services.AddHostedService<ExpirySweeper>();
 builder.Services.AddSingleton<DiscoveryEndpoint>();
@@ -73,7 +74,9 @@ builder.Services.AddOptions<ForwardedHeadersOptions>()
     {
         forwarded.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
         foreach (string proxy in milan.Value.TrustedProxies)
+        {
             ProxyTrust.Add(forwarded, proxy);
+        }
     });
 
 builder.Services.AddRateLimiter(_ => { });
@@ -102,7 +105,10 @@ builder.Services.AddOptions<RateLimiterOptions>()
             HttpResponse response = context.HttpContext.Response;
             response.StatusCode = StatusCodes.Status429TooManyRequests;
             if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out TimeSpan retryAfter))
+            {
                 response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+            }
+
             await response.WriteAsJsonAsync(new ServerError("rate_limited", "Too many requests. Retry after a short delay."),
                 MilanJsonContext.Default.ServerError, cancellationToken: cancellationToken);
         };
@@ -112,6 +118,18 @@ WebApplication app = builder.Build();
 
 app.UseUntrustedProxyWarning();
 app.UseForwardedHeaders();
+MatchmakingStore matchmaking = app.Services.GetRequiredService<MatchmakingStore>();
+app.Use(async (http, next) =>
+{
+    // The lobbies were saved for the next start, so nothing may change them now. Clients retry.
+    if (matchmaking.IsStopped && http.Request.Path.StartsWithSegments("/v1") && !http.Request.Path.StartsWithSegments("/v1/stats"))
+    {
+        http.Response.Headers.RetryAfter = "5";
+        await Api.Error(Failures.ServerRestarting).ExecuteAsync(http);
+        return;
+    }
+    await next(http);
+});
 app.Use(async (http, next) =>
 {
     try
@@ -129,7 +147,10 @@ app.Use(async (http, next) =>
 {
     // Prevent storing capabilities in HTTP caches; stats supplies its own cache policy.
     if (http.Request.Path.StartsWithSegments("/v1") && http.Request.Path != "/v1/stats")
+    {
         http.Response.Headers.CacheControl = "no-store";
+    }
+
     RequestBudget budget = http.RequestServices.GetRequiredService<RequestBudget>();
     string source = NetworkAddresses.AccountingKey(http.Connection.RemoteIpAddress);
     bool longPoll = http.GetEndpoint()?.Metadata.GetMetadata<LongPollEndpoint>() is not null;
@@ -154,6 +175,11 @@ app.Logger.LogInformation("Milan control protocol {Protocol}; server password {P
 // Created now, log the current game version and notice, and log edits too
 app.Services.GetRequiredService<ServerNotice>();
 
+// Before the sweeper and listeners start. Saving at ApplicationStopping runs before the web server stops.
+StoreStateFile stateFile = app.Services.GetRequiredService<StoreStateFile>();
+stateFile.Restore();
+app.Lifetime.ApplicationStopping.Register(stateFile.Save);
+
 app.Run();
 
 public partial class Program;
@@ -166,7 +192,9 @@ sealed class ExpirySweeper(MatchmakingStore store, TimeProvider time) : Backgrou
         try
         {
             while (await timer.WaitForNextTickAsync(stoppingToken))
+            {
                 store.Sweep();
+            }
         }
         catch (OperationCanceledException)
         {

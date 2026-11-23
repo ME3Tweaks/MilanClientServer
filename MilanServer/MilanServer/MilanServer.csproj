@@ -4,6 +4,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Applies MilanServer/.editorconfig style rules (braces) to every build. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <InvariantGlobalization>true</InvariantGlobalization>
     <!-- Keeps the container image small. Also turns on the trim analyzers for every build. -->
     <PublishTrimmed>true</PublishTrimmed>

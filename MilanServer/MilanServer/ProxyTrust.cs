@@ -17,9 +17,13 @@ internal static class ProxyTrust
     public static void Add(ForwardedHeadersOptions forwarded, string entry)
     {
         if (IPAddress.TryParse(entry, out IPAddress? address))
+        {
             forwarded.KnownProxies.Add(address);
+        }
         else
+        {
             forwarded.KnownIPNetworks.Add(IPNetwork.Parse(entry));
+        }
     }
 
     // A reverse proxy missing from TrustedProxies makes its HTTPS requests look like plain HTTP

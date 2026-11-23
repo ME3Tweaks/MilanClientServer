@@ -162,7 +162,10 @@ public sealed class ReachabilityTests : StoreTestBase
     {
         CreateLobbyResponse lobby = Host();
         for (int n = 1; n <= 4; n++)
+        {
             FailBySearch(lobby, Player(n));
+        }
+
         Assert.Equal(LobbyReachability.Unreachable, Check(lobby).Reachability);
         Assert.Equal(1, Store.GetStats().Details!.UnreachableLobbies);
 
@@ -179,7 +182,9 @@ public sealed class ReachabilityTests : StoreTestBase
         CreateLobbyResponse a = Host();
         List<CreateLobbyResponse> lobbies = [a];
         for (int n = 1; n < Options.Reachability.JoinerFailureLimit; n++)
+        {
             lobbies.Add(Host(from: Player(50 + n)));
+        }
 
         // One player fails on JoinerFailureLimit lobbies in turn.
         List<string> excluded = [];

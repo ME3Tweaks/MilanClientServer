@@ -40,7 +40,9 @@ internal static class Secrets
     public static bool Matches(byte[] expectedHash, string? presentedKey)
     {
         if (string.IsNullOrEmpty(presentedKey))
+        {
             return false;
+        }
 
         return CryptographicOperations.FixedTimeEquals(expectedHash, Hash(presentedKey));
     }
@@ -70,17 +72,22 @@ internal static class Secrets
         return $"{code[..half]}-{code[half..]}";
     }
 
-    public static bool TryNormalizeInviteCode(string? input, int length, out string code)
+    // Accepts any valid length, so codes kept across a restart work after InviteCodeLength changes.
+    public static bool TryNormalizeInviteCode(string? input, out string code)
     {
         code = string.Empty;
         if (input is null || input.Length > 32)
+        {
             return false;
+        }
 
-        StringBuilder builder = new(length);
+        StringBuilder builder = new(MaxInviteCodeLength);
         foreach (char raw in input)
         {
             if (raw is '-' or ' ')
+            {
                 continue;
+            }
 
             char c = char.ToUpperInvariant(raw) switch
             {
@@ -88,14 +95,18 @@ internal static class Secrets
                 'I' or 'L' => '1',
                 var other => other,
             };
-            if (!InviteAlphabet.Contains(c) || builder.Length == length)
+            if (!InviteAlphabet.Contains(c) || builder.Length == MaxInviteCodeLength)
+            {
                 return false;
+            }
 
             builder.Append(c);
         }
 
-        if (builder.Length != length)
+        if (builder.Length < MinInviteCodeLength)
+        {
             return false;
+        }
 
         code = builder.ToString();
         return true;

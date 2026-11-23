@@ -34,8 +34,24 @@ public abstract class StoreTestBase
         MatchPhase phase = MatchPhase.Lobby,
         int wave = 0,
         int port = 7777,
-        string[]? lan = null) =>
-        new(revision, isPrivate, joinable, map, enemy, difficulty, players, maxPlayers, phase, wave, port, lan);
+        string[]? lan = null)
+    {
+        return new LobbySnapshot
+        {
+            Revision = revision,
+            IsPrivate = isPrivate,
+            Joinable = joinable,
+            MapId = map,
+            EnemyModeId = enemy,
+            DifficultyId = difficulty,
+            PlayerCount = players,
+            MaxPlayers = maxPlayers,
+            Phase = phase,
+            WaveNumber = wave,
+            GamePort = port,
+            LanAddresses = lan,
+        };
+    }
 
     protected CreateLobbyResponse Host(LobbySnapshot? state = null, IPAddress? from = null, string version = Version)
     {
@@ -59,8 +75,16 @@ public abstract class StoreTestBase
         IPAddress? from = null,
         string[]? exclude = null)
     {
-        Outcome<CreateSearchResponse> outcome = Store.CreateSearch(
-            new SearchRequest(Version, map, enemy, difficulty, widen, exclude), from ?? JoinerIp);
+        SearchRequest request = new()
+        {
+            GameVersion = Version,
+            MapId = map,
+            EnemyModeId = enemy,
+            DifficultyId = difficulty,
+            Widen = widen,
+            ExcludeLobbyIds = exclude,
+        };
+        Outcome<CreateSearchResponse> outcome = Store.CreateSearch(request, from ?? JoinerIp);
         Assert.Null(outcome.Failure);
         return outcome.Value;
     }

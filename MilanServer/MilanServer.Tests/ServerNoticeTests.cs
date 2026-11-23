@@ -10,7 +10,10 @@ public sealed class ServerNoticeTests
         MilanLiveOptions options = new() { ExpectedGameVersion = expected };
         options.Notice.Id = id;
         foreach ((string language, string text) in texts)
+        {
             options.Notice.Text[language] = text;
+        }
+
         return options;
     }
 

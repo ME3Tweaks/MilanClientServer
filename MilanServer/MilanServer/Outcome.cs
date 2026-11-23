@@ -78,4 +78,5 @@ public static class Failures
     public static readonly Failure AddressLimit =
         new(429, "address_limit", "Too many active lobbies, searches, or reservations from this network address.");
     public static readonly Failure ServerFull = new(503, "server_full", "The server has reached its lobby or search limit.");
+    public static readonly Failure ServerRestarting = new(503, "server_restarting", "The server is restarting. Retry shortly.");
 }

@@ -143,7 +143,10 @@ public sealed class SecurityTests : StoreTestBase
         DiscoveryPacket.WriteRequest(packet, id, 1, secret);
         packet[^1] ^= 1;
         for (int i = 0; i < 2; i++)
+        {
             Assert.Equal(0, Store.HandleDiscovery(packet, new IPEndPoint(HostIp, 4000), response));
+        }
+
         DiscoveryPacket.WriteRequest(packet, id, 1, secret);
         Assert.Equal(0, Store.HandleDiscovery(packet, new IPEndPoint(HostIp, 4000), response));
         Assert.Equal(DiscoveryPacket.ResponseLength, Store.HandleDiscovery(packet, new IPEndPoint(JoinerIp, 4000), response));
@@ -185,19 +188,25 @@ public sealed class SecurityTests : StoreTestBase
     public void ModVersion_IsAnExactMatchForSearchAndInvites()
     {
         CreateLobbyResponse lobby = Host(version: "project-milan-1.2.3");
-        Outcome<CreateSearchResponse> search = Store.CreateSearch(new SearchRequest("project-milan-1.2.4"), JoinerIp);
+        Outcome<CreateSearchResponse> search = Store.CreateSearch(new SearchRequest { GameVersion = "project-milan-1.2.4" }, JoinerIp);
         Assert.Equal(SearchState.Searching, search.Value.Status.State);
         Assert.Equal(Failures.VersionMismatch, Redeem(lobby, version: "project-milan-1.2.4").Failure);
-        Assert.Equal(SearchState.Matched, Store.CreateSearch(new SearchRequest("project-milan-1.2.3"), OtherJoinerIp).Value.Status.State);
+        Assert.Equal(SearchState.Matched, Store.CreateSearch(new SearchRequest { GameVersion = "project-milan-1.2.3" }, OtherJoinerIp).Value.Status.State);
     }
 
     [Fact]
     public void Exclusions_CannotRetainLargeAttackerControlledStrings()
     {
-        Assert.Equal("invalid_request", Store.CreateSearch(new SearchRequest(Version,
-            ExcludeLobbyIds: [new string('a', 15000)]), JoinerIp).Failure?.Code);
-        Assert.Equal("invalid_request", Store.CreateSearch(new SearchRequest(Version,
-            ExcludeLobbyIds: [null!]), JoinerIp).Failure?.Code);
+        Assert.Equal("invalid_request", Store.CreateSearch(new SearchRequest
+        {
+            GameVersion = Version,
+            ExcludeLobbyIds = [new string('a', 15000)],
+        }, JoinerIp).Failure?.Code);
+        Assert.Equal("invalid_request", Store.CreateSearch(new SearchRequest
+        {
+            GameVersion = Version,
+            ExcludeLobbyIds = [null!],
+        }, JoinerIp).Failure?.Code);
     }
 }
 
@@ -248,7 +257,9 @@ public sealed class TransportSecurityTests : IClassFixture<MilanFactory>
         {
             b.UseSetting("Milan:AccessKey", "party-password");
             if (trusted is not null)
+            {
                 b.UseSetting("Milan:TrustedProxies:0", trusted);
+            }
         });
         _ = keyed.CreateClient();
         var response = await SendForwarded(keyed, source);
@@ -263,7 +274,10 @@ public sealed class TransportSecurityTests : IClassFixture<MilanFactory>
             .UseSetting("Milan:TrustedProxies:0", "10.0.0.0/8").ConfigureLogging(l => l.AddProvider(logs)));
         _ = logged.CreateClient();
         foreach (string source in new[] { "127.0.0.1", "10.1.2.3", "::ffff:172.18.0.1", "172.18.0.1" })
+        {
             await SendForwarded(logged, source);
+        }
+
         string warning = Assert.Single(logs.Messages, m => m.Contains("TrustedProxies"));
         Assert.Contains("Milan__TrustedProxies__0=172.18.0.1 ", warning);
     }
@@ -299,7 +313,9 @@ public sealed class TransportSecurityTests : IClassFixture<MilanFactory>
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
             if (IsEnabled(logLevel))
+            {
                 Messages.Enqueue(formatter(state, exception));
+            }
         }
         public void Dispose() { }
     }
@@ -320,7 +336,20 @@ public sealed class TransportSecurityTests : IClassFixture<MilanFactory>
     {
         using WebApplicationFactory<Program> limited = _factory.WithWebHostBuilder(b => b.UseSetting("Milan:MaxConcurrentRequests", "1"));
         using HttpClient client = limited.CreateClient();
-        LobbySnapshot state = new(1, false, true, 5, 3, 2, 1, 4, MatchPhase.Lobby, 0, 7777);
+        LobbySnapshot state = new LobbySnapshot
+        {
+            Revision = 1,
+            IsPrivate = false,
+            Joinable = true,
+            MapId = 5,
+            EnemyModeId = 3,
+            DifficultyId = 2,
+            PlayerCount = 1,
+            MaxPlayers = 4,
+            Phase = MatchPhase.Lobby,
+            WaveNumber = 0,
+            GamePort = 7777,
+        };
         using var created = await client.PostAsJsonAsync("/v1/lobbies", new CreateLobbyRequest("security-test", state), TestContext.Current.CancellationToken);
         Assert.Equal("no-store", created.Headers.CacheControl?.ToString());
         CreateLobbyResponse lobby = (await created.Content.ReadFromJsonAsync<CreateLobbyResponse>(TestContext.Current.CancellationToken))!;
@@ -351,7 +380,10 @@ public sealed class TransportSecurityTests : IClassFixture<MilanFactory>
         {
             using var available = await client.GetAsync("/v1/info", timeout.Token);
             if (available.StatusCode == HttpStatusCode.OK)
+            {
                 break;
+            }
+
             await Task.Delay(20, timeout.Token);
         }
     }
@@ -362,7 +394,20 @@ public sealed class TransportSecurityTests : IClassFixture<MilanFactory>
         using WebApplicationFactory<Program> limited = _factory.WithWebHostBuilder(b => b
             .UseSetting("Milan:MaxConcurrentRequests", "2").UseSetting("Milan:MaxConcurrentLongPolls", "1"));
         using HttpClient client = limited.CreateClient();
-        LobbySnapshot state = new(1, false, true, 5, 3, 2, 1, 4, MatchPhase.Lobby, 0, 7777);
+        LobbySnapshot state = new LobbySnapshot
+        {
+            Revision = 1,
+            IsPrivate = false,
+            Joinable = true,
+            MapId = 5,
+            EnemyModeId = 3,
+            DifficultyId = 2,
+            PlayerCount = 1,
+            MaxPlayers = 4,
+            Phase = MatchPhase.Lobby,
+            WaveNumber = 0,
+            GamePort = 7777,
+        };
         async Task<CreateLobbyResponse> Create() => (await (await client.PostAsJsonAsync("/v1/lobbies",
             new CreateLobbyRequest("poll-test", state), TestContext.Current.CancellationToken))
             .Content.ReadFromJsonAsync<CreateLobbyResponse>(TestContext.Current.CancellationToken))!;

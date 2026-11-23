@@ -22,7 +22,9 @@ internal static class NetworkAddresses
     {
         IPAddress? normalized = Normalize(address);
         if (normalized is null)
+        {
             return "unknown";
+        }
 
         if (normalized.AddressFamily == AddressFamily.InterNetworkV6)
         {
@@ -53,7 +55,9 @@ internal static class NetworkAddresses
             || (b[0] == 192 && b[1] == 168)
             || (b[0] == 100 && (b[1] & 0xC0) == 64); // 100.64/10: CGNAT shared space and overlay VPNs.
         if (!isLan)
+        {
             return false;
+        }
 
         address = parsed;
         return true;

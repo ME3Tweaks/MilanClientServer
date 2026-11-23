@@ -37,6 +37,9 @@ public sealed class MatchmakingStore
     readonly HashSet<string> _activePolls = new(StringComparer.Ordinal);
     readonly DiscoveryWorkBudget _discoveryWork;
     long _nextLobbySequence;
+    // Cancelled by StopForRestart, which releases waiting long-polls
+    readonly CancellationTokenSource _stopping = new();
+    volatile bool _stopped;
 
     /// <summary>
     /// IP -> joiner information
@@ -79,13 +82,24 @@ public sealed class MatchmakingStore
     public Outcome<CreateLobbyResponse> CreateLobby(CreateLobbyRequest request, IPAddress? source)
     {
         if (ValidateGameVersion(request.GameVersion) is { } versionFailure)
+        {
             return versionFailure;
+        }
+
         if (BlockedVersionFailure(request.GameVersion) is { } blockedFailure)
+        {
             return blockedFailure;
+        }
+
         if (ValidateSnapshot(request.State, out LobbySnapshot state) is { } stateFailure)
+        {
             return stateFailure;
+        }
+
         if (state.MemberIds!.Count != 0)
+        {
             return Failures.Invalid("A new lobby cannot have admitted reservation IDs.");
+        }
 
         DateTimeOffset now = _time.GetUtcNow();
         string sourceKey = NetworkAddresses.AccountingKey(source);
@@ -99,10 +113,14 @@ public sealed class MatchmakingStore
             {
                 SweepLocked(now);
                 if (_lobbies.Count >= _options.MaxLobbies)
+                {
                     return Failures.ServerFull;
+                }
             }
             if (_lobbies.Values.Count(l => l.SourceKey == sourceKey && l.ExpiresAt > now) >= _options.MaxLobbiesPerAddress)
+            {
                 return Failures.AddressLimit;
+            }
 
             lobby = new Lobby
             {
@@ -129,38 +147,59 @@ public sealed class MatchmakingStore
             lobby.Id, state.IsPrivate ? "private" : "public", state.Phase, state.Joinable ? "joinable" : "not joinable",
             state.PlayerCount, state.MaxPlayers, request.GameVersion);
 
-        return new CreateLobbyResponse(lobby.Id, hostKey, Secrets.FormatInviteCode(lobby.InviteCode),
-            state.Revision, lobby.ExpiresAt, _options.HeartbeatSeconds, udpTicket);
+        return new CreateLobbyResponse
+        {
+            LobbyId = lobby.Id,
+            HostKey = hostKey,
+            InviteCode = Secrets.FormatInviteCode(lobby.InviteCode),
+            Revision = state.Revision,
+            ExpiresAt = lobby.ExpiresAt,
+            HeartbeatSeconds = _options.HeartbeatSeconds,
+            UdpTicket = udpTicket,
+        };
     }
 
     // Both prompt setting changes and the periodic heartbeat use this full-state report.
     public Outcome<LobbyStateResponse> ReportLobbyState(string lobbyId, string? hostKey, LobbySnapshot snapshot, IPAddress? source)
     {
         if (ValidateSnapshot(snapshot, out LobbySnapshot state) is { } stateFailure)
+        {
             return stateFailure;
+        }
 
         DateTimeOffset now = _time.GetUtcNow();
         lock (_lock)
         {
-            if (!TryGetHostLobby(lobbyId, hostKey, now, true, out Lobby? lobby, out Failure failure))
+            if (!TryGetHostLobby(lobbyId, hostKey, now, arrived: true, out Lobby? lobby, out Failure failure))
+            {
                 return failure;
+            }
 
             // Tooling may omit the roster to leave it unchanged. An explicit [] revokes
             // all members; protocol-2 game clients always report their complete roster.
             if (snapshot.MemberIds is null)
+            {
                 state = state with { MemberIds = lobby.State.MemberIds };
+            }
 
             bool stale = state.Revision < lobby.State.Revision;
             if (state.Revision == lobby.State.Revision && !SameContent(state, lobby.State))
+            {
                 return Failures.RevisionConflict;
+            }
 
             if (!stale)
             {
                 if (!SameContent(state, lobby.State))
+                {
                     SignalLocked(lobby);
+                }
                 // Back in the lobby after a match: it queues behind lobbies already waiting.
                 if (state.Phase == MatchPhase.Lobby && lobby.State.Phase != MatchPhase.Lobby)
+                {
                     lobby.WaitingSince = now;
+                }
+
                 if (state.Phase != lobby.State.Phase || state.Joinable != lobby.State.Joinable || state.IsPrivate != lobby.State.IsPrivate)
                 {
                     _logger.LogInformation("Lobby {LobbyId} is now {Phase}, {Joinable}, {Privacy} ({Players}/{MaxPlayers}).",
@@ -203,13 +242,18 @@ public sealed class MatchmakingStore
         DateTimeOffset now = _time.GetUtcNow();
         lock (_lock)
         {
-            if (!TryGetHostLobby(lobbyId, hostKey, now, false, out Lobby? lobby, out Failure failure))
+            if (!TryGetHostLobby(lobbyId, hostKey, now, arrived: false, out Lobby? lobby, out Failure failure))
+            {
                 return failure;
+            }
 
             if (PossibleReporters(lobby) > 0)
             {
                 if (lobby.Migration is null)
+                {
                     StartCheckLocked(lobby, now);
+                }
+
                 DeclareHostLostLocked(lobby, now, "left");
                 AdvanceMigrationLocked(lobby, now);
                 return null;
@@ -227,8 +271,10 @@ public sealed class MatchmakingStore
         DateTimeOffset now = _time.GetUtcNow();
         lock (_lock)
         {
-            if (!TryGetHostLobby(lobbyId, hostKey, now, true, out Lobby? lobby, out Failure failure))
+            if (!TryGetHostLobby(lobbyId, hostKey, now, arrived: true, out Lobby? lobby, out Failure failure))
+            {
                 return failure;
+            }
 
             _lobbiesByInvite.Remove(lobby.InviteCode);
             lobby.InviteCode = NewUniqueInviteCode();
@@ -244,15 +290,29 @@ public sealed class MatchmakingStore
     public Outcome<CreateSearchResponse> CreateSearch(SearchRequest request, IPAddress? source)
     {
         if (ValidateGameVersion(request.GameVersion) is { } versionFailure)
+        {
             return versionFailure;
+        }
+
         if (BlockedVersionFailure(request.GameVersion) is { } blockedFailure)
+        {
             return blockedFailure;
+        }
+
         if (request.MapId < GameSettingIds.AnyMap || request.EnemyModeId < 0 || request.DifficultyId < 0)
+        {
             return Failures.Invalid("Search filters must be a setting ID or the matching Any sentinel.");
+        }
+
         if (request.ExcludeLobbyIds is { Count: > MaxExcludedLobbies })
+        {
             return Failures.Invalid($"At most {MaxExcludedLobbies} lobbies may be excluded.");
+        }
+
         if (request.ExcludeLobbyIds?.Any(id => !Secrets.IsId(id)) == true)
+        {
             return Failures.Invalid("Excluded lobby IDs must be valid 22-character lobby IDs.");
+        }
 
         DateTimeOffset now = _time.GetUtcNow();
         string sourceKey = NetworkAddresses.AccountingKey(source);
@@ -264,7 +324,9 @@ public sealed class MatchmakingStore
             {
                 SweepLocked(now);
                 if (_searches.Count >= _options.MaxSearches)
+                {
                     return Failures.ServerFull;
+                }
             }
             if (_searches.Values.Count(s => s.SourceKey == sourceKey && s.State == SearchState.Searching)
                 >= _options.MaxSearchesPerAddress)
@@ -324,7 +386,9 @@ public sealed class MatchmakingStore
         lock (_lock)
         {
             if (!TryGetSearch(searchId, searchKey, now, out Search? search))
+            {
                 return Failures.SearchNotFound;
+            }
 
             return EvaluateSearchLocked(search, now);
         }
@@ -338,7 +402,9 @@ public sealed class MatchmakingStore
         lock (_lock)
         {
             if (!TryGetSearch(searchId, searchKey, now, out Search? search))
+            {
                 return Failures.SearchNotFound;
+            }
 
             _searches.Remove(search.Id);
             if (search.Reservation is { } reservation && _reservations.ContainsKey(reservation.Id))
@@ -359,14 +425,19 @@ public sealed class MatchmakingStore
     public static SearchStage StageAt(TimeSpan elapsed, bool widen, MilanServerOptions options)
     {
         if (!widen || elapsed < TimeSpan.FromSeconds(options.MapWidenSeconds))
+        {
             return SearchStage.Exact;
+        }
+
         return elapsed < TimeSpan.FromSeconds(options.EnemyWidenSeconds) ? SearchStage.AnyMap : SearchStage.AnyMapAndEnemy;
     }
 
     Outcome<SearchStatus> EvaluateSearchLocked(Search search, DateTimeOffset now)
     {
         if (search.State != SearchState.Searching)
+        {
             return search.Result!;
+        }
 
         SearchStage stage = StageAt(now - search.CreatedAt, search.Request.Widen, _options);
         if (now >= search.Deadline)
@@ -382,21 +453,33 @@ public sealed class MatchmakingStore
             search.Stage = stage;
             _logger.LogInformation("Search {SearchId} widened to {Stage}.", search.Id, stage);
         }
+        bool pastPartySize = now - search.CreatedAt >= TimeSpan.FromSeconds(_options.PartySizeWidenSeconds);
+        if (pastPartySize && !search.PastPartySize)
+        {
+            search.PastPartySize = true;
+            if (_options.PreferredPartySize > 0 && search.CreatedAt != now)
+            {
+                _logger.LogInformation("Search {SearchId} widened past party size {PartySize}.", search.Id, _options.PreferredPartySize);
+            }
+        }
 
         Lobby? best = null;
         LobbyReachability bestReachability = LobbyReachability.Unknown;
-        (int, int, int, int, int, DateTimeOffset, long) bestRank = default;
+        (int, int, int, int, int, int, DateTimeOffset, long) bestRank = default;
         foreach (Lobby lobby in _lobbies.Values)
         {
             if (!IsSearchCandidate(lobby, search, stage, now))
+            {
                 continue;
+            }
+
             LobbyReachability reachability = ReachabilityOf(lobby, now, out _);
             if (!AcceptsSearchJoiner(lobby, reachability, now))
             {
                 continue;
             }
 
-            (int, int, int, int, int, DateTimeOffset, long) rank = Rank(lobby, search.Request, reachability);
+            (int, int, int, int, int, int, DateTimeOffset, long) rank = Rank(lobby, search.Request, reachability, now);
             if (best is null || rank.CompareTo(bestRank) < 0)
             {
                 best = lobby;
@@ -406,12 +489,21 @@ public sealed class MatchmakingStore
         }
 
         if (best is null)
+        {
             return new SearchStatus(SearchState.Searching, stage, search.Deadline, _options.SearchPollMilliseconds);
+        }
 
         if (CountReservationsFrom(search.SourceKey, now) >= _options.MaxReservationsPerAddress)
+        {
             return Failures.AddressLimit;
+        }
 
-        JoinReservation reservation = CreateReservationLocked(best, search.SourceKey, search.PublicAddress, now, out Reservation record);
+        JoinReservation reservation = CreateReservationLocked(new NewReservation
+        {
+            Lobby = best,
+            SourceKey = search.SourceKey,
+            JoinerPublicAddress = search.PublicAddress,
+        }, now, out Reservation record);
         search.Reservation = record;
         search.State = SearchState.Matched;
         search.Result = new SearchStatus(SearchState.Matched, stage, reservation.ExpiresAt, 0, reservation);
@@ -439,6 +531,7 @@ public sealed class MatchmakingStore
             && lobby.Migration is null
             && !state.IsPrivate
             && state.Joinable
+            && IsSearchableSize(state)
             && state.Phase is (MatchPhase.Lobby or MatchPhase.InProgress)
             && (request.DifficultyId == GameSettingIds.AnyDifficulty || state.DifficultyId == request.DifficultyId)
             && lobby.GameVersion == request.GameVersion
@@ -452,7 +545,14 @@ public sealed class MatchmakingStore
         SearchRequest request = search.Request;
 
         if (!IsOpenTo(lobby, search, now) || (state.Phase == MatchPhase.InProgress && now < search.InProgressFrom))
+        {
             return false;
+        }
+
+        if (!search.PastPartySize && PartyOverflow(lobby, now) > 0)
+        {
+            return false;
+        }
 
         // Filters compare the selected setting, so a Random map lobby never satisfies a
         // specific map, and Random Faction or Coalition match by mode ID rather than the
@@ -463,17 +563,23 @@ public sealed class MatchmakingStore
         return mapMatches && enemyMatches;
     }
 
-    // Lower sorts first: lobbies players could not connect to last, then lobbies before matches
-    // in progress, closer matches to the player's original filters, a lobby someone has joined
-    // before one nobody has, earlier waves, and then the lobby that has waited longest
-    (int, int, int, int, int, DateTimeOffset, long) Rank(Lobby lobby, SearchRequest request, LobbyReachability reachability)
+    // Lower sorts first: lobbies players could not connect to last, then lobbies the joiner would
+    // push past PreferredPartySize (further past sorts later), lobbies before matches in progress, closer matches to the
+    // player's original filters, a lobby someone has joined before one nobody has, earlier waves,
+    // and then the lobby that has waited longest
+    (int Demoted, int PartyOverflow, int InProgress, int NegativeSpecificity, int Unproven, int Wave, DateTimeOffset WaitingSince, long Sequence) Rank(Lobby lobby, SearchRequest request, LobbyReachability reachability, DateTimeOffset now)
     {
         LobbySnapshot state = lobby.State;
         int specificity = 0;
         if (request.MapId != GameSettingIds.AnyMap && state.MapId == request.MapId)
+        {
             specificity++;
+        }
+
         if (request.EnemyModeId != GameSettingIds.AnyEnemy && state.EnemyModeId == request.EnemyModeId)
+        {
             specificity++;
+        }
 
         bool enabled = _options.Reachability.Enabled;
         int demoted = !enabled ? 0 : reachability switch
@@ -483,7 +589,17 @@ public sealed class MatchmakingStore
             _ => 0,
         };
         int unproven = enabled && reachability != LobbyReachability.Proven ? 1 : 0;
-        return (demoted, state.Phase == MatchPhase.Lobby ? 0 : 1, -specificity, unproven, state.WaveNumber, lobby.WaitingSince, lobby.Sequence);
+        return (demoted, PartyOverflow(lobby, now), state.Phase == MatchPhase.Lobby ? 0 : 1, -specificity, unproven, state.WaveNumber, lobby.WaitingSince, lobby.Sequence);
+    }
+
+    // Lobbies with more slots than MaxSearchLobbySize are reachable by invite only.
+    bool IsSearchableSize(LobbySnapshot state) => _options.MaxSearchLobbySize == 0 || state.MaxPlayers <= _options.MaxSearchLobbySize;
+
+    // How far past PreferredPartySize one more joiner would take the lobby
+    int PartyOverflow(Lobby lobby, DateTimeOffset now)
+    {
+        int partySize = _options.PreferredPartySize;
+        return partySize > 0 ? Math.Max(0, Occupancy(lobby, now) + 1 - partySize) : 0;
     }
 
     // A lobby nobody from another network has joined takes one quick-match joiner at a time, so a
@@ -511,11 +627,19 @@ public sealed class MatchmakingStore
     public Outcome<JoinReservation> RedeemInvite(RedeemInviteRequest request, IPAddress? source)
     {
         if (ValidateGameVersion(request.GameVersion) is { } versionFailure)
+        {
             return versionFailure;
+        }
+
         if (BlockedVersionFailure(request.GameVersion) is { } blockedFailure)
+        {
             return blockedFailure;
-        if (!Secrets.TryNormalizeInviteCode(request.InviteCode, _options.InviteCodeLength, out string code))
+        }
+
+        if (!Secrets.TryNormalizeInviteCode(request.InviteCode, out string code))
+        {
             return Failures.InviteNotFound;
+        }
 
         DateTimeOffset now = _time.GetUtcNow();
         string sourceKey = NetworkAddresses.AccountingKey(source);
@@ -524,21 +648,38 @@ public sealed class MatchmakingStore
         lock (_lock)
         {
             if (!_lobbiesByInvite.TryGetValue(code, out Lobby? lobby) || !IsLive(lobby, now))
+            {
                 return Failures.InviteNotFound;
+            }
 
             LobbySnapshot state = lobby.State;
             if (lobby.GameVersion != request.GameVersion)
+            {
                 return Failures.VersionMismatch;
+            }
             // Invites work for private lobbies and during extraction, but not while the
             // lobby is changing hosts.
             if (!state.Joinable || state.Phase == MatchPhase.Complete || lobby.Migration is not null)
+            {
                 return Failures.LobbyNotJoinable;
-            if (Occupancy(lobby, now) >= state.MaxPlayers)
-                return Failures.LobbyFull;
-            if (CountReservationsFrom(sourceKey, now) >= _options.MaxReservationsPerAddress)
-                return Failures.AddressLimit;
+            }
 
-            reservation = CreateReservationLocked(lobby, sourceKey, NetworkAddresses.PublicIPv4(source), now, out _);
+            if (Occupancy(lobby, now) >= state.MaxPlayers)
+            {
+                return Failures.LobbyFull;
+            }
+
+            if (CountReservationsFrom(sourceKey, now) >= _options.MaxReservationsPerAddress)
+            {
+                return Failures.AddressLimit;
+            }
+
+            reservation = CreateReservationLocked(new NewReservation
+            {
+                Lobby = lobby,
+                SourceKey = sourceKey,
+                JoinerPublicAddress = NetworkAddresses.PublicIPv4(source),
+            }, now, out _);
             _invitesRedeemed++;
         }
 
@@ -554,7 +695,9 @@ public sealed class MatchmakingStore
         lock (_lock)
         {
             if (!TryGetReservation(reservationId, joinKey, now, out Reservation? reservation))
+            {
                 return TryGetActiveMember(reservationId, joinKey, now, out _) ? null : Failures.ReservationNotFound;
+            }
 
             if (reservation.JoinedAt is null)
             {
@@ -568,15 +711,22 @@ public sealed class MatchmakingStore
     public Failure? ReportJoinerCandidates(string reservationId, string? joinKey, JoinerCandidatesRequest request)
     {
         if (request.GamePort is < 1 or > 65535)
+        {
             return Failures.Invalid("GamePort must be between 1 and 65535.");
+        }
+
         if (ValidateLanAddresses(request.LanAddresses, out List<string> lanAddresses) is { } lanFailure)
+        {
             return lanFailure;
+        }
 
         DateTimeOffset now = _time.GetUtcNow();
         lock (_lock)
         {
             if (!TryGetReservation(reservationId, joinKey, now, out Reservation? reservation))
+            {
                 return TryGetActiveMember(reservationId, joinKey, now, out _) ? null : Failures.ReservationNotFound;
+            }
 
             if (reservation.GamePort != request.GamePort || !reservation.LanAddresses.SequenceEqual(lanAddresses))
             {
@@ -600,21 +750,32 @@ public sealed class MatchmakingStore
         Task changed;
         lock (_lock)
         {
-            if (!TryGetHostLobby(lobbyId, hostKey, _time.GetUtcNow(), true, out Lobby? lobby, out Failure failure))
+            if (!TryGetHostLobby(lobbyId, hostKey, _time.GetUtcNow(), arrived: true, out Lobby? lobby, out Failure failure))
+            {
                 return failure;
+            }
+
             if (lobby.EventVersion != after)
+            {
                 return BuildIntroductionsLocked(lobby, _time.GetUtcNow());
+            }
+
             changed = lobby.Changed.Task;
             if (!_activePolls.Add("host:" + lobbyId))
+            {
                 return Failures.PollBusy;
+            }
         }
 
         await WaitForPollAsync("host:" + lobbyId, changed, TimeSpan.FromSeconds(_options.LongPollSeconds), cancellationToken);
 
         lock (_lock)
         {
-            if (!TryGetHostLobby(lobbyId, hostKey, _time.GetUtcNow(), false, out Lobby? lobby, out Failure failure))
+            if (!TryGetHostLobby(lobbyId, hostKey, _time.GetUtcNow(), arrived: false, out Lobby? lobby, out Failure failure))
+            {
                 return failure;
+            }
+
             return BuildIntroductionsLocked(lobby, _time.GetUtcNow());
         }
     }
@@ -627,13 +788,21 @@ public sealed class MatchmakingStore
         lock (_lock)
         {
             if (!TryGetReservation(reservationId, joinKey, _time.GetUtcNow(), out Reservation? reservation))
+            {
                 return TryGetActiveMember(reservationId, joinKey, _time.GetUtcNow(), out Member? confirmed)
                     ? BuildConfirmedReservationStatus(confirmed) : Failures.ReservationNotFound;
+            }
+
             if (reservation.Lobby.EventVersion != after)
+            {
                 return BuildReservationStatusLocked(reservation);
+            }
+
             changed = reservation.Lobby.Changed.Task;
             if (!_activePolls.Add("reservation:" + reservationId))
+            {
                 return Failures.PollBusy;
+            }
         }
 
         await WaitForPollAsync("reservation:" + reservationId, changed, TimeSpan.FromSeconds(_options.LongPollSeconds), cancellationToken);
@@ -641,19 +810,27 @@ public sealed class MatchmakingStore
         lock (_lock)
         {
             if (!TryGetReservation(reservationId, joinKey, _time.GetUtcNow(), out Reservation? reservation))
+            {
                 return TryGetActiveMember(reservationId, joinKey, _time.GetUtcNow(), out Member? confirmed)
                     ? BuildConfirmedReservationStatus(confirmed) : Failures.ReservationNotFound;
+            }
+
             return BuildReservationStatusLocked(reservation);
         }
     }
 
     async Task WaitForChangeAsync(Task changed, TimeSpan timeout, CancellationToken cancellationToken)
     {
+        using CancellationTokenSource wait = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopping.Token);
         try
         {
-            await changed.WaitAsync(timeout, _time, cancellationToken);
+            await changed.WaitAsync(timeout, _time, wait.Token);
         }
         catch (TimeoutException)
+        {
+        }
+        // On server shutdown, the poll answers immediately instead of holding up the web server stopping
+        catch (OperationCanceledException) when (_stopping.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
         }
     }
@@ -661,7 +838,11 @@ public sealed class MatchmakingStore
     async Task WaitForPollAsync(string key, Task changed, TimeSpan timeout, CancellationToken cancellationToken)
     {
         try { await WaitForChangeAsync(changed, timeout, cancellationToken); }
-        finally { lock (_lock) _activePolls.Remove(key); }
+        finally { lock (_lock)
+            {
+                _activePolls.Remove(key);
+            }
+        }
     }
 
     IntroductionList BuildIntroductionsLocked(Lobby lobby, DateTimeOffset now)
@@ -670,19 +851,33 @@ public sealed class MatchmakingStore
         foreach (Reservation reservation in lobby.Reservations)
         {
             if (reservation.ExpiresAt <= now)
+            {
                 continue;
+            }
 
             List<EndpointCandidate> candidates = [];
             if (reservation.ObservedEndpoint is { } observed)
+            {
                 candidates.Add(new EndpointCandidate(observed.Address.ToString(), observed.Port, CandidateKind.PublicObserved));
+            }
+
             if (reservation.GamePort is int port && CanShareLanCandidates(lobby, reservation))
             {
                 foreach (string lanAddress in reservation.LanAddresses)
+                {
                     candidates.Add(new EndpointCandidate(lanAddress, port, CandidateKind.Lan));
+                }
             }
 
-            introductions.Add(new Introduction(reservation.Id, reservation.TraversalKey, candidates,
-                SamePublicAddress(lobby, reservation), reservation.JoinedAt is not null, reservation.ExpiresAt));
+            introductions.Add(new Introduction
+            {
+                ReservationId = reservation.Id,
+                TraversalKey = reservation.TraversalKey,
+                JoinerCandidates = candidates,
+                SamePublicAddress = SamePublicAddress(lobby, reservation),
+                Joined = reservation.JoinedAt is not null,
+                ExpiresAt = reservation.ExpiresAt,
+            });
         }
         return new IntroductionList(lobby.EventVersion, introductions);
     }
@@ -712,13 +907,17 @@ public sealed class MatchmakingStore
         lock (_lock)
         {
             if (!TryGetMember(memberId, memberKey, now, out Member? member))
+            {
                 return Failures.MemberNotFound;
+            }
 
             Lobby lobby = member.Lobby;
             AdvanceMigrationLocked(lobby, now);
             // Too late: the lobby closed, or moved on without this member.
             if (lobby.Removed || (member.Outcome is null && !lobby.Members.Contains(member)))
+            {
                 return Failures.MemberNotFound;
+            }
 
             if (member.Outcome is null && member.ReportedLostAt is null)
             {
@@ -753,14 +952,22 @@ public sealed class MatchmakingStore
         {
             DateTimeOffset now = _time.GetUtcNow();
             if (!TryGetMember(memberId, memberKey, now, out Member? member))
+            {
                 return Failures.MemberNotFound;
+            }
+
             AdvanceMigrationLocked(member.Lobby, now);
             if (member.Lobby.EventVersion != after)
+            {
                 return BuildMigrationStatusLocked(member);
+            }
 
             changed = member.Lobby.Changed.Task;
             if (!_activePolls.Add("member:" + memberId))
+            {
                 return Failures.PollBusy;
+            }
+
             wait = TimeSpan.FromSeconds(_options.LongPollSeconds);
             if (member.Lobby.Migration is { } migration && migration.Stage != MigrationStage.Handoff)
             {
@@ -792,7 +999,10 @@ public sealed class MatchmakingStore
             {
                 // An early disconnect can release its own unconfirmed reservation.
                 if (!TryGetReservation(memberId, memberKey, now, out Reservation? pending))
+                {
                     return Failures.MemberNotFound;
+                }
+
                 RemoveReservationLocked(pending);
                 return null;
             }
@@ -812,11 +1022,20 @@ public sealed class MatchmakingStore
         lock (_lock)
         {
             if (!TryGetMember(memberId, memberKey, now, out Member? member))
+            {
                 return Failures.MemberNotFound;
+            }
+
             if (!member.Lobby.Members.Contains(member))
+            {
                 return Failures.MemberNotFound;
+            }
+
             if (!member.Lobby.State.MemberInvites)
+            {
                 return Failures.InvitesHostOnly;
+            }
+
             return new InviteResponse(Secrets.FormatInviteCode(member.Lobby.InviteCode));
         }
     }
@@ -825,7 +1044,9 @@ public sealed class MatchmakingStore
     {
         long version = member.Lobby.EventVersion;
         if (member.Outcome is { } outcome)
+        {
             return new MigrationStatus(version, outcome, member.Handoff, member.Reservation);
+        }
 
         return member.Lobby.Migration?.Stage switch
         {
@@ -842,11 +1063,17 @@ public sealed class MatchmakingStore
         HashSet<string> roster = new(ids, StringComparer.Ordinal);
         foreach (Member member in lobby.Members.Concat(lobby.SettledMembers.Where(m => m.Outcome == MigrationState.HostAlive))
             .Where(m => !roster.Contains(m.Id)).ToList())
+        {
             RemoveMemberLocked(member);
+        }
+
         foreach (string id in roster)
         {
             if (_members.TryGetValue(id, out Member? current) && current.Lobby == lobby)
+            {
                 continue;
+            }
+
             if (_reservations.TryGetValue(id, out Reservation? admitted) && admitted.Lobby == lobby && admitted.ExpiresAt > now)
             {
                 RecordJoinSuccessLocked(admitted, now);
@@ -877,7 +1104,9 @@ public sealed class MatchmakingStore
         // the lobby closes, so a long-lived lobby keeps at most this many.
         int maxMembers = 2 * _options.MaxPlayersCeiling;
         if (lobby.Members.Count >= maxMembers)
+        {
             RemoveMemberLocked(lobby.Members[0]);
+        }
 
         lobby.Members.Add(member);
         _members[member.Id] = member;
@@ -905,7 +1134,9 @@ public sealed class MatchmakingStore
         // The lobby must outlive the check and the report window, whatever its lease says.
         DateTimeOffset needed = lobby.Migration.ChallengeDeadline.AddSeconds(_options.MigrationReportSeconds + 1);
         if (lobby.ExpiresAt < needed)
+        {
             lobby.ExpiresAt = needed;
+        }
         // Completes the host's pending long-poll: a host that is still there polls again at once.
         SignalLocked(lobby);
     }
@@ -918,11 +1149,16 @@ public sealed class MatchmakingStore
         migration.ReportDeadline = now.AddSeconds(_options.MigrationReportSeconds);
         DateTimeOffset needed = migration.ReportDeadline.AddSeconds(1);
         if (lobby.ExpiresAt < needed)
+        {
             lobby.ExpiresAt = needed;
+        }
 
         lobby.ReplacedHostKeyHashes.Add(lobby.HostKeyHash);
         if (lobby.ReplacedHostKeyHashes.Count > 4)
+        {
             lobby.ReplacedHostKeyHashes.RemoveAt(0);
+        }
+
         lobby.HostKeyHash = Secrets.Hash(Secrets.NewKey());
         SignalLocked(lobby);
         _logger.LogInformation("Lobby {LobbyId}: the host {How}; waiting for {Count} member(s) to report.",
@@ -932,14 +1168,19 @@ public sealed class MatchmakingStore
     void AdvanceMigrationLocked(Lobby lobby, DateTimeOffset now)
     {
         if (lobby.Migration is not { } migration)
+        {
             return;
+        }
 
         if (migration.Stage == MigrationStage.Checking)
         {
             if (lobby.HostLastSeen > migration.StartedAt)
             {
                 foreach (Member reporter in lobby.Members.Where(m => m.ReportedLostAt is not null).ToList())
+                {
                     SettleLocked(reporter, MigrationState.HostAlive, now);
+                }
+
                 lobby.Migration = null;
                 lobby.HostConfirmedAliveAt = now;
                 SignalLocked(lobby);
@@ -947,7 +1188,10 @@ public sealed class MatchmakingStore
                 return;
             }
             if (now < migration.ChallengeDeadline)
+            {
                 return;
+            }
+
             DeclareHostLostLocked(lobby, now, "stopped answering");
         }
 
@@ -969,9 +1213,14 @@ public sealed class MatchmakingStore
             .ThenBy(m => m.JoinedAt)
             .ThenBy(m => m.Id, StringComparer.Ordinal)];
         foreach (Member silent in lobby.Members.Except(reporters).ToList())
+        {
             RemoveMemberLocked(silent);
+        }
+
         foreach (Reservation stale in lobby.Reservations.ToList())
+        {
             RemoveReservationLocked(stale);
+        }
 
         if (reporters.Count == 0)
         {
@@ -1000,13 +1249,29 @@ public sealed class MatchmakingStore
         InheritHostFailuresLocked(lobby, now);
 
         // Settling takes the reporters off the member list; each joins the new host as a new member.
-        newHost.Handoff = new HostHandoff(lobby.Id, hostKey, Secrets.FormatInviteCode(lobby.InviteCode), lobby.State.Revision,
-            lobby.ExpiresAt, _options.HeartbeatSeconds, udpTicket, reporters.Count, lobby.State);
+        newHost.Handoff = new HostHandoff
+        {
+            LobbyId = lobby.Id,
+            HostKey = hostKey,
+            InviteCode = Secrets.FormatInviteCode(lobby.InviteCode),
+            Revision = lobby.State.Revision,
+            ExpiresAt = lobby.ExpiresAt,
+            HeartbeatSeconds = _options.HeartbeatSeconds,
+            UdpTicket = udpTicket,
+            ExpectedPlayers = reporters.Count,
+            State = lobby.State,
+        };
         SettleLocked(newHost, MigrationState.NewHost, now);
         foreach (Member joiner in reporters.Skip(1))
         {
-            joiner.Reservation = CreateReservationLocked(lobby, joiner.SourceKey, joiner.PublicAddress, now, out _,
-                _options.MigrationJoinSeconds, migration: true);
+            joiner.Reservation = CreateReservationLocked(new NewReservation
+            {
+                Lobby = lobby,
+                SourceKey = joiner.SourceKey,
+                JoinerPublicAddress = joiner.PublicAddress,
+                LifetimeSeconds = _options.MigrationJoinSeconds,
+                Migration = true,
+            }, now, out _);
             SettleLocked(joiner, MigrationState.JoinNewHost, now);
         }
         SignalLocked(lobby);
@@ -1023,7 +1288,10 @@ public sealed class MatchmakingStore
         member.ReportedLostAt = null;
         member.Lobby.Members.Remove(member);
         if (member.Lobby.SettledMembers.Count >= 2 * _options.MaxPlayersCeiling)
+        {
             RemoveMemberLocked(member.Lobby.SettledMembers[0]);
+        }
+
         member.Lobby.SettledMembers.Add(member);
     }
 
@@ -1042,24 +1310,34 @@ public sealed class MatchmakingStore
 
         IPEndPoint observed = new(sourceAddress, source.Port);
         if (!_discoveryWork.TryEnter(NetworkAddresses.AccountingKey(sourceAddress)))
+        {
             return 0;
+        }
+
         DateTimeOffset now = _time.GetUtcNow();
         UdpTicketRecord? ticket;
         lock (_lock)
         {
             if (!_udpTickets.TryGetValue(request.TicketId, out ticket) || !CanAcceptDiscovery(ticket, request.Sequence, now))
+            {
                 return 0;
+            }
         }
         // The secret is immutable. Expiry/removal/another packet may race verification,
         // so recheck the record and all acceptance conditions before committing it.
         if (!DiscoveryPacket.VerifyRequestTag(packet, ticket.Secret))
+        {
             return 0;
+        }
+
         lock (_lock)
         {
             now = _time.GetUtcNow();
             if (!_udpTickets.TryGetValue(request.TicketId, out UdpTicketRecord? current) || current != ticket
                 || !CanAcceptDiscovery(ticket, request.Sequence, now))
+            {
                 return 0;
+            }
 
             ticket.LastSequence = request.Sequence;
             ticket.LastAcceptedAt = now;
@@ -1095,27 +1373,40 @@ public sealed class MatchmakingStore
         lock (_lock)
         {
             if (!TryGetReservation(reservationId, joinKey, now, out Reservation? reservation))
+            {
                 return Failures.ReservationNotFound;
+            }
 
             RemoveReservationLocked(reservation);
             return null;
         }
     }
 
-    JoinReservation CreateReservationLocked(Lobby lobby, string sourceKey, IPAddress? joinerPublicAddress,
-        DateTimeOffset now, out Reservation record, int? lifetimeSeconds = null, bool migration = false)
+    // What CreateReservationLocked needs to know about the joiner and the reservation it gets.
+    sealed class NewReservation
     {
+        public required Lobby Lobby { get; init; }
+        public required string SourceKey { get; init; }
+        public required IPAddress? JoinerPublicAddress { get; init; }
+        // ReservationSeconds when null.
+        public int? LifetimeSeconds { get; init; }
+        public bool Migration { get; init; }
+    }
+
+    JoinReservation CreateReservationLocked(NewReservation request, DateTimeOffset now, out Reservation record)
+    {
+        Lobby lobby = request.Lobby;
         string joinKey = Secrets.NewKey();
         record = new Reservation
         {
             Id = NewUniqueId(_reservations),
             JoinKeyHash = Secrets.Hash(joinKey),
             Lobby = lobby,
-            SourceKey = sourceKey,
-            PublicAddress = joinerPublicAddress,
+            SourceKey = request.SourceKey,
+            PublicAddress = request.JoinerPublicAddress,
             TraversalKey = Secrets.NewKey(),
-            ExpiresAt = now.AddSeconds(lifetimeSeconds ?? _options.ReservationSeconds),
-            Migration = migration,
+            ExpiresAt = now.AddSeconds(request.LifetimeSeconds ?? _options.ReservationSeconds),
+            Migration = request.Migration,
         };
         _reservations.Add(record.Id, record);
         lobby.Reservations.Add(record);
@@ -1124,10 +1415,28 @@ public sealed class MatchmakingStore
         SignalLocked(lobby);
 
         LobbySnapshot state = lobby.State;
-        LobbySummary summary = new(lobby.Id, state.MapId, state.EnemyModeId, state.DifficultyId,
-            state.PlayerCount, state.MaxPlayers, state.Phase, state.WaveNumber);
-        return new JoinReservation(record.Id, joinKey, summary, HostCandidates(lobby, record), SamePublicAddress(lobby, record),
-            record.ExpiresAt, udpTicket, record.TraversalKey);
+        LobbySummary summary = new()
+        {
+            LobbyId = lobby.Id,
+            MapId = state.MapId,
+            EnemyModeId = state.EnemyModeId,
+            DifficultyId = state.DifficultyId,
+            PlayerCount = state.PlayerCount,
+            MaxPlayers = state.MaxPlayers,
+            Phase = state.Phase,
+            WaveNumber = state.WaveNumber,
+        };
+        return new JoinReservation
+        {
+            ReservationId = record.Id,
+            JoinKey = joinKey,
+            Lobby = summary,
+            HostCandidates = HostCandidates(lobby, record),
+            SamePublicAddress = SamePublicAddress(lobby, record),
+            ExpiresAt = record.ExpiresAt,
+            UdpTicket = udpTicket,
+            TraversalKey = record.TraversalKey,
+        };
     }
 
     // Observed mapping first, then the unverified forward guess if it differs, then LAN.
@@ -1140,17 +1449,28 @@ public sealed class MatchmakingStore
         LobbySnapshot state = lobby.State;
         List<EndpointCandidate> candidates = [];
         if (lobby.Migration is not null)
+        {
             return candidates;
+        }
+
         if (lobby.ObservedEndpoint is { } observed)
+        {
             candidates.Add(new EndpointCandidate(observed.Address.ToString(), observed.Port, CandidateKind.PublicObserved));
+        }
+
         if (lobby.PublicAddress is not null
             && !(lobby.PublicAddress.Equals(lobby.ObservedEndpoint?.Address) && state.GamePort == lobby.ObservedEndpoint.Port))
         {
             candidates.Add(new EndpointCandidate(lobby.PublicAddress.ToString(), state.GamePort, CandidateKind.PublicReported));
         }
         if (CanShareLanCandidates(lobby.ObservedEndpoint?.Address ?? lobby.PublicAddress, peerAddress))
+        {
             foreach (string lanAddress in state.LanAddresses ?? [])
+            {
                 candidates.Add(new EndpointCandidate(lanAddress, state.GamePort, CandidateKind.Lan));
+            }
+        }
+
         return candidates;
     }
 
@@ -1428,7 +1748,10 @@ public sealed class MatchmakingStore
         lock (_lock)
         {
             if (_stats is null || now - _stats.GeneratedAt >= TimeSpan.FromSeconds(_options.Stats.CacheSeconds))
+            {
                 _stats = BuildStatsLocked(now);
+            }
+
             return _stats;
         }
     }
@@ -1439,22 +1762,31 @@ public sealed class MatchmakingStore
         int publicLobbies = 0, friendsLobbies = 0, privateLobbies = 0, openLobbies = 0;
         int waiting = 0, inProgress = 0, migrations = 0, suspect = 0, unreachable = 0;
         Dictionary<string, int> versions = new(StringComparer.Ordinal);
+        Dictionary<int, int> sizes = [];
+        Dictionary<int, (int Lobbies, int Players)> publicFill = [];
         foreach (Lobby lobby in _lobbies.Values)
         {
             // Not IsLive: that removes an expired lobby, which this loop cannot allow.
             if (lobby.Removed || lobby.ExpiresAt <= now)
+            {
                 continue;
+            }
 
             LobbySnapshot state = lobby.State;
             lobbies++;
             players += state.PlayerCount;
+            sizes[state.PlayerCount] = sizes.GetValueOrDefault(state.PlayerCount) + 1;
             capacity += state.MaxPlayers;
             if (!state.IsPrivate)
             {
                 publicLobbies++;
+                (int Lobbies, int Players) fill = publicFill.GetValueOrDefault(state.MaxPlayers);
+                publicFill[state.MaxPlayers] = (fill.Lobbies + 1, fill.Players + state.PlayerCount);
                 // What a search can match, whatever it asks for (IsOpenTo).
-                if (state.Joinable && lobby.Migration is null && Occupancy(lobby, now) < state.MaxPlayers)
+                if (state.Joinable && lobby.Migration is null && IsSearchableSize(state) && Occupancy(lobby, now) < state.MaxPlayers)
+                {
                     openLobbies++;
+                }
             }
             else if (state.MemberInvites)
             {
@@ -1465,11 +1797,19 @@ public sealed class MatchmakingStore
                 privateLobbies++;
             }
             if (state.Phase == MatchPhase.Lobby)
+            {
                 waiting++;
+            }
             else
+            {
                 inProgress++;
+            }
+
             if (lobby.Migration is not null)
+            {
                 migrations++;
+            }
+
             LobbyReachability reachability = ReachabilityOf(lobby, now, out _);
             if (reachability == LobbyReachability.Suspect)
             {
@@ -1487,28 +1827,54 @@ public sealed class MatchmakingStore
 
         int searching = _searches.Values.Count(s => s.State == SearchState.Searching && s.Deadline > now);
         int? idle = _options.Stats.Presence ? _presence.Values.Count(p => p.ExpiresAt > now) : null;
-        StatsDetails details = new(
-            _startedAt,
-            (long)(now - _startedAt).TotalSeconds,
-            lobbies,
-            friendsLobbies,
-            privateLobbies,
-            waiting,
-            inProgress,
-            capacity,
-            _reservations.Values.Count(r => r.JoinedAt is null && r.ExpiresAt > now),
-            migrations,
-            _peakPlayers,
-            _peakLobbies,
-            new StatsTotals(_lobbiesCreated, _lobbiesExpired, _searchesStarted, _searchesMatched, _invitesRedeemed,
-                _joinsCompleted, _hostMigrationsStarted, _hostMigrationsCompleted, _hostMigrationsFailed, _joinsFailed,
-                Interlocked.Read(ref _blockedVersionRequests)),
-            versions.OrderByDescending(v => v.Value).ThenBy(v => v.Key, StringComparer.Ordinal).Take(20)
+        StatsTotals totals = new()
+        {
+            LobbiesCreated = _lobbiesCreated,
+            LobbiesExpired = _lobbiesExpired,
+            SearchesStarted = _searchesStarted,
+            SearchesMatched = _searchesMatched,
+            InvitesRedeemed = _invitesRedeemed,
+            JoinsCompleted = _joinsCompleted,
+            HostMigrationsStarted = _hostMigrationsStarted,
+            HostMigrationsCompleted = _hostMigrationsCompleted,
+            HostMigrationsFailed = _hostMigrationsFailed,
+            JoinsFailed = _joinsFailed,
+            BlockedVersionRequests = Interlocked.Read(ref _blockedVersionRequests),
+        };
+        StatsDetails details = new()
+        {
+            StartedAt = _startedAt,
+            UptimeSeconds = (long)(now - _startedAt).TotalSeconds,
+            Lobbies = lobbies,
+            FriendsLobbies = friendsLobbies,
+            PrivateLobbies = privateLobbies,
+            LobbiesWaiting = waiting,
+            LobbiesInProgress = inProgress,
+            PlayerCapacity = capacity,
+            PendingJoins = _reservations.Values.Count(r => r.JoinedAt is null && r.ExpiresAt > now),
+            HostMigrations = migrations,
+            PeakPlayers = _peakPlayers,
+            PeakLobbies = _peakLobbies,
+            Totals = totals,
+            GameVersions = versions.OrderByDescending(v => v.Value).ThenBy(v => v.Key, StringComparer.Ordinal).Take(20)
                 .ToDictionary(v => v.Key, v => v.Value),
-            suspect,
-            unreachable);
-        return new ServerStats(now, players, searching, publicLobbies, openLobbies, idle,
-            idle is null ? null : players + searching + idle, details);
+            SuspectLobbies = suspect,
+            UnreachableLobbies = unreachable,
+            LobbiesByPlayers = sizes.OrderBy(s => s.Key).ToDictionary(s => s.Key, s => s.Value),
+            PublicFillBySize = publicFill.OrderBy(f => f.Key).ToDictionary(f => f.Key, f => new LobbySizeFill(f.Value.Lobbies,
+                f.Value.Players, f.Key * f.Value.Lobbies, Math.Round(100.0 * f.Value.Players / (f.Key * f.Value.Lobbies), 1))),
+        };
+        return new ServerStats
+        {
+            GeneratedAt = now,
+            Players = players,
+            Searching = searching,
+            PublicLobbies = publicLobbies,
+            OpenLobbies = openLobbies,
+            Idle = idle,
+            Online = idle is null ? null : players + searching + idle,
+            Details = details,
+        };
     }
 
     // Peaks are sampled with the sweep, so they do not depend on anyone asking for statistics.
@@ -1518,7 +1884,10 @@ public sealed class MatchmakingStore
         foreach (Lobby lobby in _lobbies.Values)
         {
             if (lobby.Removed || lobby.ExpiresAt <= now)
+            {
                 continue;
+            }
+
             lobbies++;
             players += lobby.State.PlayerCount;
         }
@@ -1532,9 +1901,14 @@ public sealed class MatchmakingStore
     public Failure? ReportPresence(string clientId, IPAddress? source)
     {
         if (!_options.Stats.Presence)
+        {
             return Failures.PresenceDisabled;
+        }
+
         if (!IsPresenceId(clientId))
+        {
             return Failures.Invalid("The presence ID must be 16 to 64 characters of A-Z, a-z, 0-9, '-' and '_'.");
+        }
 
         DateTimeOffset now = _time.GetUtcNow();
         DateTimeOffset expiresAt = now.AddSeconds(2 * _options.Stats.PresenceSeconds + 30);
@@ -1566,7 +1940,9 @@ public sealed class MatchmakingStore
         lock (_lock)
         {
             if (_presence.Remove(clientId, out PresenceRecord? record))
+            {
                 ReleasePresenceSourceLocked(record.SourceKey);
+            }
         }
     }
 
@@ -1583,9 +1959,13 @@ public sealed class MatchmakingStore
     {
         int left = _presenceBySource.GetValueOrDefault(sourceKey) - 1;
         if (left > 0)
+        {
             _presenceBySource[sourceKey] = left;
+        }
         else
+        {
             _presenceBySource.Remove(sourceKey);
+        }
     }
 
     static bool IsPresenceId(string clientId) =>
@@ -1608,25 +1988,34 @@ public sealed class MatchmakingStore
         }
 
         if (expiredLobbies > 0)
+        {
             _logger.LogInformation("Expired {Count} lobbies after missed heartbeats.", expiredLobbies);
+        }
     }
 
     int SweepLocked(DateTimeOffset now)
     {
         // Checks and report windows end on time even when no member is polling.
         foreach (Lobby lobby in _lobbies.Values.Where(l => l.Migration is not null).ToList())
+        {
             AdvanceMigrationLocked(lobby, now);
+        }
 
         List<Lobby> expiredLobbies = [.. _lobbies.Values.Where(l => l.ExpiresAt <= now)];
         foreach (Lobby lobby in expiredLobbies)
+        {
             RemoveLobbyLocked(lobby);
+        }
 
         // Unconfirmed reservations expire regardless of a joiner's claimed success. One that never
         // claimed it is a failed join
         foreach (Reservation reservation in _reservations.Values.Where(r => r.ExpiresAt <= now).ToList())
         {
             if (CouldBeFailedJoin(reservation))
+            {
                 RecordJoinFailureLocked(reservation.Lobby, reservation.SourceKey, now, "its reservation ran out");
+            }
+
             RemoveReservationLocked(reservation);
         }
         SweepReachabilityLocked(now);
@@ -1640,9 +2029,248 @@ public sealed class MatchmakingStore
         }
 
         foreach (Search search in _searches.Values.Where(s => s.Deadline + SearchRetention <= now).ToList())
+        {
             _searches.Remove(search.Id);
+        }
 
         return expiredLobbies.Count;
+    }
+
+    #endregion
+
+    #region Restart state (StoreStateFile)
+
+    // True once StopForRestart ran; Program.cs then refuses /v1 requests with server_restarting.
+    public bool IsStopped => _stopped;
+
+    // Takes the lobbies to carry across a restart and releases waiting long-polls. Lobbies changing
+    // hosts are left out, because the handoff holds the new host's key in plain form.
+    internal SavedStore StopForRestart()
+    {
+        SavedStore saved;
+        lock (_lock)
+        {
+            _stopped = true;
+            DateTimeOffset now = _time.GetUtcNow();
+            List<SavedLobby> lobbies = [];
+            foreach (Lobby lobby in _lobbies.Values)
+            {
+                if (!lobby.Removed && lobby.ExpiresAt > now && lobby.Migration is null)
+                {
+                    lobbies.Add(SaveLobbyLocked(lobby, now));
+                }
+            }
+            saved = new SavedStore(SavedStore.CurrentFormat, now, _nextLobbySequence, lobbies);
+        }
+        _stopping.Cancel();
+        return saved;
+    }
+
+    SavedLobby SaveLobbyLocked(Lobby lobby, DateTimeOffset now)
+    {
+        return new SavedLobby
+        {
+            Id = lobby.Id,
+            Sequence = lobby.Sequence,
+            HostKeyHash = lobby.HostKeyHash,
+            ReplacedHostKeyHashes = [.. lobby.ReplacedHostKeyHashes],
+            GameVersion = lobby.GameVersion,
+            SourceKey = lobby.SourceKey,
+            InviteCode = lobby.InviteCode,
+            State = lobby.State,
+            WaitingSince = lobby.WaitingSince,
+            PublicAddress = lobby.PublicAddress?.ToString(),
+            ExpiresAt = lobby.ExpiresAt,
+            UdpTicket = SaveTicketLocked(lobby.UdpTicketId),
+            ObservedEndpoint = lobby.ObservedEndpoint?.ToString(),
+            EventVersion = lobby.EventVersion,
+            HostLastSeen = lobby.HostLastSeen,
+            HostConfirmedAliveAt = lobby.HostConfirmedAliveAt,
+            JoinFailures = new Dictionary<string, DateTimeOffset>(lobby.JoinFailures, StringComparer.Ordinal),
+            Abandoned = new Dictionary<string, DateTimeOffset>(lobby.Abandoned, StringComparer.Ordinal),
+            LastJoinedAt = lobby.LastJoinedAt,
+            LastProbeAt = lobby.LastProbeAt,
+            Members = [.. lobby.Members.Select(SaveMember)],
+            // Other outcomes belong to a migration, and migrations are not saved.
+            SettledMembers = [.. lobby.SettledMembers.Where(m => m.Outcome == MigrationState.HostAlive).Select(SaveMember)],
+            Reservations = [.. lobby.Reservations.Where(r => r.ExpiresAt > now).Select(SaveReservationLocked)],
+        };
+    }
+
+    SavedReservation SaveReservationLocked(Reservation reservation)
+    {
+        return new SavedReservation
+        {
+            Id = reservation.Id,
+            JoinKeyHash = reservation.JoinKeyHash,
+            SourceKey = reservation.SourceKey,
+            PublicAddress = reservation.PublicAddress?.ToString(),
+            TraversalKey = reservation.TraversalKey,
+            ExpiresAt = reservation.ExpiresAt,
+            Migration = reservation.Migration,
+            JoinedAt = reservation.JoinedAt,
+            UdpTicket = SaveTicketLocked(reservation.UdpTicketId),
+            ObservedEndpoint = reservation.ObservedEndpoint?.ToString(),
+            GamePort = reservation.GamePort,
+            LanAddresses = [.. reservation.LanAddresses],
+        };
+    }
+
+    static SavedMember SaveMember(Member member)
+    {
+        return new SavedMember
+        {
+            Id = member.Id,
+            KeyHash = member.KeyHash,
+            SourceKey = member.SourceKey,
+            PublicAddress = member.PublicAddress?.ToString(),
+            JoinedAt = member.JoinedAt,
+            SettledAt = member.SettledAt,
+        };
+    }
+
+    SavedUdpTicket? SaveTicketLocked(UInt128 id) =>
+        _udpTickets.TryGetValue(id, out UdpTicketRecord? ticket) ? new SavedUdpTicket(id, ticket.Secret, ticket.LastSequence) : null;
+
+    // At startup, before any request. Every time moves on by the downtime, so hosts are not dropped
+    // for the reports they could not send. Returns how many lobbies were restored.
+    internal int Restore(SavedStore saved)
+    {
+        DateTimeOffset now = _time.GetUtcNow();
+        TimeSpan down = now > saved.SavedAt ? now - saved.SavedAt : TimeSpan.Zero;
+        DateTimeOffset Shift(DateTimeOffset time) => time == DateTimeOffset.MinValue ? time : time + down;
+        DateTimeOffset? ShiftOptional(DateTimeOffset? time) => time is { } value ? Shift(value) : null;
+        static IPAddress? Address(string? text) => text is null ? null : IPAddress.Parse(text);
+        static IPEndPoint? Endpoint(string? text) => text is null ? null : IPEndPoint.Parse(text);
+
+        // Everything is built before anything is added, so a damaged file leaves the store empty.
+        List<(Lobby Lobby, List<(UInt128 Id, UdpTicketRecord Record)> Tickets)> restored = [];
+        foreach (SavedLobby s in saved.Lobbies)
+        {
+            if (!Secrets.IsId(s.Id) || !Secrets.TryNormalizeInviteCode(s.InviteCode, out string code) || code != s.InviteCode
+                || Shift(s.ExpiresAt) <= now)
+            {
+                continue;
+            }
+
+            Lobby lobby = new()
+            {
+                Id = s.Id,
+                Sequence = s.Sequence,
+                HostKeyHash = s.HostKeyHash,
+                GameVersion = s.GameVersion,
+                SourceKey = s.SourceKey,
+                InviteCode = s.InviteCode,
+                State = s.State,
+                WaitingSince = Shift(s.WaitingSince),
+                PublicAddress = Address(s.PublicAddress),
+                ExpiresAt = Shift(s.ExpiresAt),
+                ObservedEndpoint = Endpoint(s.ObservedEndpoint),
+                EventVersion = s.EventVersion,
+                HostLastSeen = Shift(s.HostLastSeen),
+                HostConfirmedAliveAt = ShiftOptional(s.HostConfirmedAliveAt),
+                LastJoinedAt = ShiftOptional(s.LastJoinedAt),
+                LastProbeAt = Shift(s.LastProbeAt),
+            };
+            lobby.ReplacedHostKeyHashes.AddRange(s.ReplacedHostKeyHashes);
+            foreach ((string joiner, DateTimeOffset at) in s.JoinFailures)
+            {
+                lobby.JoinFailures[joiner] = Shift(at);
+            }
+
+            foreach ((string joiner, DateTimeOffset at) in s.Abandoned)
+            {
+                lobby.Abandoned[joiner] = Shift(at);
+            }
+
+            List<(UInt128 Id, UdpTicketRecord Record)> tickets = [];
+            if (s.UdpTicket is { } lobbyTicket)
+            {
+                lobby.UdpTicketId = lobbyTicket.Id;
+                tickets.Add((lobbyTicket.Id, new UdpTicketRecord { Secret = lobbyTicket.Secret, Lobby = lobby, Reservation = null, LastSequence = lobbyTicket.LastSequence }));
+            }
+            foreach (SavedMember m in s.Members)
+            {
+                lobby.Members.Add(RestoreMember(m, lobby, null));
+            }
+
+            foreach (SavedMember m in s.SettledMembers)
+            {
+                lobby.SettledMembers.Add(RestoreMember(m, lobby, MigrationState.HostAlive));
+            }
+
+            foreach (SavedReservation r in s.Reservations)
+            {
+                if (Shift(r.ExpiresAt) <= now)
+                {
+                    continue;
+                }
+
+                Reservation reservation = new()
+                {
+                    Id = r.Id,
+                    JoinKeyHash = r.JoinKeyHash,
+                    Lobby = lobby,
+                    SourceKey = r.SourceKey,
+                    PublicAddress = Address(r.PublicAddress),
+                    TraversalKey = r.TraversalKey,
+                    ExpiresAt = Shift(r.ExpiresAt),
+                    Migration = r.Migration,
+                    JoinedAt = ShiftOptional(r.JoinedAt),
+                    ObservedEndpoint = Endpoint(r.ObservedEndpoint),
+                    GamePort = r.GamePort,
+                    LanAddresses = [.. r.LanAddresses],
+                };
+                if (r.UdpTicket is { } ticket)
+                {
+                    reservation.UdpTicketId = ticket.Id;
+                    tickets.Add((ticket.Id, new UdpTicketRecord { Secret = ticket.Secret, Lobby = lobby, Reservation = reservation, LastSequence = ticket.LastSequence }));
+                }
+                lobby.Reservations.Add(reservation);
+            }
+            restored.Add((lobby, tickets));
+        }
+
+        Member RestoreMember(SavedMember m, Lobby lobby, MigrationState? outcome) => new()
+        {
+            Id = m.Id,
+            KeyHash = m.KeyHash,
+            Lobby = lobby,
+            SourceKey = m.SourceKey,
+            PublicAddress = Address(m.PublicAddress),
+            JoinedAt = Shift(m.JoinedAt),
+            Outcome = outcome,
+            SettledAt = Shift(m.SettledAt),
+        };
+
+        int count = 0;
+        lock (_lock)
+        {
+            foreach ((Lobby lobby, List<(UInt128 Id, UdpTicketRecord Record)> tickets) in restored)
+            {
+                if (_lobbies.ContainsKey(lobby.Id) || _lobbiesByInvite.ContainsKey(lobby.InviteCode))
+                {
+                    continue;
+                }
+
+                _lobbies.Add(lobby.Id, lobby);
+                _lobbiesByInvite.Add(lobby.InviteCode, lobby);
+                lobby.Reservations.RemoveAll(r => !_reservations.TryAdd(r.Id, r));
+                lobby.Members.RemoveAll(m => !_members.TryAdd(m.Id, m));
+                lobby.SettledMembers.RemoveAll(m => !_members.TryAdd(m.Id, m));
+                foreach ((UInt128 id, UdpTicketRecord record) in tickets)
+                {
+                    if (record.Reservation is null || lobby.Reservations.Contains(record.Reservation))
+                    {
+                        _udpTickets.TryAdd(id, record);
+                    }
+                }
+                _nextLobbySequence = Math.Max(_nextLobbySequence, lobby.Sequence);
+                count++;
+            }
+            _nextLobbySequence = Math.Max(_nextLobbySequence, saved.NextLobbySequence);
+        }
+        return count;
     }
 
     #endregion
@@ -1664,7 +2292,10 @@ public sealed class MatchmakingStore
         if (!Secrets.Matches(lobby.HostKeyHash, hostKey))
         {
             if (lobby.ReplacedHostKeyHashes.Any(hash => Secrets.Matches(hash, hostKey)))
+            {
                 failure = Failures.HostReplaced;
+            }
+
             lobby = null;
             return false;
         }
@@ -1691,7 +2322,10 @@ public sealed class MatchmakingStore
     bool TryGetActiveMember(string id, string? key, DateTimeOffset now, [NotNullWhen(true)] out Member? member)
     {
         if (TryGetMember(id, key, now, out member) && member.Lobby.Members.Contains(member))
+        {
             return true;
+        }
+
         member = null;
         return false;
     }
@@ -1724,7 +2358,9 @@ public sealed class MatchmakingStore
     bool IsLive(Lobby lobby, DateTimeOffset now)
     {
         if (lobby.ExpiresAt > now)
+        {
             return true;
+        }
 
         RemoveLobbyLocked(lobby);
         return false;
@@ -1753,10 +2389,16 @@ public sealed class MatchmakingStore
         }
         lobby.Reservations.Clear();
         foreach (Member member in lobby.Members)
+        {
             _members.Remove(member.Id);
+        }
+
         lobby.Members.Clear();
         foreach (Member member in lobby.SettledMembers)
+        {
             _members.Remove(member.Id);
+        }
+
         lobby.SettledMembers.Clear();
         // Wakes long-polls so they observe the removal.
         SignalLocked(lobby);
@@ -1767,7 +2409,9 @@ public sealed class MatchmakingStore
         _reservations.Remove(reservation.Id);
         _udpTickets.Remove(reservation.UdpTicketId);
         if (reservation.Lobby.Reservations.Remove(reservation))
+        {
             SignalLocked(reservation.Lobby);
+        }
     }
 
     static void SignalLocked(Lobby lobby)
@@ -1782,7 +2426,9 @@ public sealed class MatchmakingStore
     {
         (UInt128 id, byte[] secret) = Secrets.NewUdpTicket();
         while (_udpTickets.ContainsKey(id))
+        {
             (id, secret) = Secrets.NewUdpTicket();
+        }
 
         _udpTickets.Add(id, new UdpTicketRecord { Secret = secret, Lobby = lobby, Reservation = reservation });
         ticketId = id;
@@ -1812,7 +2458,10 @@ public sealed class MatchmakingStore
     internal static Failure? ValidateGameVersion(string? version)
     {
         if (string.IsNullOrEmpty(version) || version.Length > MaxGameVersionLength || version.Any(c => c is < '!' or > '~'))
+        {
             return Failures.Invalid($"GameVersion must be 1-{MaxGameVersionLength} printable ASCII characters without spaces.");
+        }
+
         return null;
     }
 
@@ -1834,7 +2483,9 @@ public sealed class MatchmakingStore
         normalized = state;
 
         if (state.Revision < 0)
+        {
             return Failures.Invalid("Revision must not be negative.");
+        }
         // Hosted settings are concrete IDs; the Any sentinels are only valid in searches.
         if (state.MapId < 0 || state.EnemyModeId < 0 || state.EnemyModeId == GameSettingIds.AnyEnemy
             || state.DifficultyId < 0 || state.DifficultyId == GameSettingIds.AnyDifficulty)
@@ -1842,25 +2493,47 @@ public sealed class MatchmakingStore
             return Failures.Invalid("Map, enemy, and difficulty must be concrete setting IDs.");
         }
         if (state.ResolvedMapId < 0 || state.ResolvedEnemyId < 0)
+        {
             return Failures.Invalid("Resolved setting IDs must not be negative.");
+        }
+
         if (state.MaxPlayers < 1 || state.MaxPlayers > _options.MaxPlayersCeiling)
+        {
             return Failures.Invalid($"MaxPlayers must be between 1 and {_options.MaxPlayersCeiling}.");
+        }
+
         if (state.PlayerCount < 1 || state.PlayerCount > state.MaxPlayers)
+        {
             return Failures.Invalid("PlayerCount must include the host and not exceed MaxPlayers.");
+        }
+
         if (state.WaveNumber < 0 || state.WaveNumber > MaxWaveNumber)
+        {
             return Failures.Invalid($"WaveNumber must be between 0 and {MaxWaveNumber}.");
+        }
+
         if (state.GamePort is < 1 or > 65535)
+        {
             return Failures.Invalid("GamePort must be between 1 and 65535.");
+        }
+
         if (!Enum.IsDefined(state.Phase))
+        {
             return Failures.Invalid("Phase is not a known match phase.");
+        }
 
         if (ValidateLanAddresses(state.LanAddresses, out List<string> lanAddresses) is { } lanFailure)
+        {
             return lanFailure;
+        }
+
         IReadOnlyList<string> ids = state.MemberIds ?? [];
         if (ids.Count > _options.MaxPlayersCeiling - 1
             || ids.Any(id => !Secrets.IsId(id))
             || ids.Distinct(StringComparer.Ordinal).Count() != ids.Count)
+        {
             return Failures.Invalid("MemberIds must be distinct reservation IDs, with at most MaxPlayersCeiling - 1 members.");
+        }
 
         normalized = state with { LanAddresses = lanAddresses, MemberIds = ids.Order(StringComparer.Ordinal).ToList() };
         return null;
@@ -1871,13 +2544,21 @@ public sealed class MatchmakingStore
         distinct = [];
         IReadOnlyList<string> lanAddresses = input ?? [];
         if (lanAddresses.Count > MaxLanAddresses)
+        {
             return Failures.Invalid($"At most {MaxLanAddresses} LAN addresses may be reported.");
+        }
+
         foreach (string lanAddress in lanAddresses)
         {
             if (!NetworkAddresses.TryParseLanAddress(lanAddress, out _))
+            {
                 return Failures.Invalid("LAN addresses must be canonical RFC1918 or CGNAT IPv4 addresses; link-local addresses are not allowed.");
+            }
+
             if (!distinct.Contains(lanAddress))
+            {
                 distinct.Add(lanAddress);
+            }
         }
         return null;
     }
@@ -2025,6 +2706,8 @@ public sealed class MatchmakingStore
         public DateTimeOffset InProgressFrom { get; set; }
         // Last stage seen by a poll, so each widening is logged once.
         public SearchStage Stage { get; set; }
+        // Whether lobbies this joiner would push past PreferredPartySize are candidates yet.
+        public bool PastPartySize { get; set; }
         public SearchState State { get; set; } = SearchState.Searching;
         public SearchStatus? Result { get; set; }
         public Reservation? Reservation { get; set; }

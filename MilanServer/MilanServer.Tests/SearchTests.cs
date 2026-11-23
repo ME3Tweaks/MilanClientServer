@@ -203,6 +203,101 @@ public sealed class SearchTests : StoreTestBase
     }
 
     [Fact]
+    public void Ranking_FillsLobbiesUnderPartySizeFirst()
+    {
+        // The large lobby has waited longest, but a fifth player would join it.
+        CreateLobbyResponse oversized = Host(State(players: 4, maxPlayers: 8));
+        Advance(5);
+        CreateLobbyResponse normal = Host(State(players: 3), from: OtherJoinerIp);
+        Assert.Equal(normal.LobbyId, StartSearch().Status.Reservation?.Lobby.LobbyId);
+
+        // With nothing else open, the large lobby still matches once the search widens past party size.
+        Assert.Null(Store.DeleteLobby(normal.LobbyId, normal.HostKey));
+        CreateSearchResponse search = StartSearch(from: OtherJoinerIp);
+        Assert.Equal(SearchState.Searching, search.Status.State);
+        Advance(Options.PartySizeWidenSeconds - 1);
+        Assert.Equal(SearchState.Searching, Poll(search).State);
+        Advance(1);
+        Assert.Equal(oversized.LobbyId, Poll(search).Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void PartySizeWiden_AppliesWithWideningOff()
+    {
+        CreateLobbyResponse oversized = Host(State(players: 4, maxPlayers: 8));
+
+        CreateSearchResponse search = StartSearch(map: 5, enemy: 3, difficulty: 2, widen: false);
+        Assert.Equal(SearchState.Searching, search.Status.State);
+        Advance(Options.PartySizeWidenSeconds);
+        Assert.Equal(oversized.LobbyId, Poll(search).Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void PartySizeWiden_NormalLobbyArrivingWhileWaitingWins()
+    {
+        Host(State(players: 4, maxPlayers: 8));
+        CreateSearchResponse search = StartSearch();
+        Advance(Options.PartySizeWidenSeconds - 1);
+        CreateLobbyResponse normal = Host(State(players: 1), from: OtherJoinerIp);
+
+        Assert.Equal(normal.LobbyId, Poll(search).Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void Ranking_SmallerOverflowPastPartySizeFillsFirst()
+    {
+        Options.PartySizeWidenSeconds = 0;
+        // Joiners would make these lobbies 8, 6, and 5 players; the oldest overflows most.
+        CreateLobbyResponse eight = Host(State(players: 7, maxPlayers: 8));
+        Advance(5);
+        CreateLobbyResponse six = Host(State(players: 5, maxPlayers: 8), from: JoinerIp);
+        Advance(5);
+        CreateLobbyResponse five = Host(State(players: 4, maxPlayers: 8), from: OtherJoinerIp);
+
+        Assert.Equal(five.LobbyId, StartSearch().Status.Reservation?.Lobby.LobbyId);
+        Assert.Null(Store.DeleteLobby(five.LobbyId, five.HostKey));
+        Assert.Equal(six.LobbyId, StartSearch(from: OtherJoinerIp).Status.Reservation?.Lobby.LobbyId);
+        Assert.Null(Store.DeleteLobby(six.LobbyId, six.HostKey));
+        Assert.Equal(eight.LobbyId, StartSearch(from: HostIp).Status.Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void Ranking_LargeLobbyUnderPartySizeIsNotDeprioritized()
+    {
+        CreateLobbyResponse large = Host(State(players: 2, maxPlayers: 8));
+        Advance(5);
+        Host(State(players: 1), from: OtherJoinerIp);
+
+        Assert.Equal(large.LobbyId, StartSearch().Status.Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void Ranking_CountsPendingReservationsTowardPartySize()
+    {
+        // Reachability would hold the lobby to one pending joiner at a time.
+        Options.Reachability.Enabled = false;
+        CreateLobbyResponse large = Host(State(players: 3, maxPlayers: 8));
+        Advance(5);
+        CreateLobbyResponse normal = Host(State(players: 2), from: OtherJoinerIp);
+
+        Assert.Equal(large.LobbyId, StartSearch().Status.Reservation?.Lobby.LobbyId);
+        // The large lobby now holds four, so the next joiner goes to the normal lobby.
+        Assert.Equal(normal.LobbyId, StartSearch(from: OtherJoinerIp).Status.Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
+    public void Ranking_PartySizeZeroTurnsOffDeprioritization()
+    {
+        // With no party size there is nothing to wait for, whatever the widen time.
+        Options.PreferredPartySize = 0;
+        CreateLobbyResponse oversized = Host(State(players: 4, maxPlayers: 8));
+        Advance(5);
+        Host(State(players: 3), from: OtherJoinerIp);
+
+        Assert.Equal(oversized.LobbyId, StartSearch().Status.Reservation?.Lobby.LobbyId);
+    }
+
+    [Fact]
     public void ExcludedLobbies_AreSkipped()
     {
         CreateLobbyResponse failed = Host();
@@ -240,7 +335,7 @@ public sealed class SearchTests : StoreTestBase
         Options.MaxSearchesPerAddress = 1;
         StartSearch();
 
-        Assert.Equal(Failures.AddressLimit, Store.CreateSearch(new SearchRequest(Version), JoinerIp).Failure);
+        Assert.Equal(Failures.AddressLimit, Store.CreateSearch(new SearchRequest { GameVersion = Version }, JoinerIp).Failure);
     }
 
     [Theory]

@@ -21,6 +21,14 @@ public sealed class MilanServerOptions
     // matches already in progress join its candidates this long afterwards, so the
     // lobbies get the first chance. With no such lobby, they are candidates straight away.
     public int InProgressAfterSeconds { get; set; } = 10;
+    // Quick match fills lobbies a joiner would keep at or under this many players before any it
+    // would push past it, and those by how far past. 0 turns this off.
+    public int PreferredPartySize { get; set; } = 4;
+    // Lobbies a joiner would push past PreferredPartySize only become candidates this long after
+    // the search starts. Unlike map and enemy widening, this applies with widening off too.
+    public int PartySizeWidenSeconds { get; set; } = 15;
+    // Lobbies with more slots than this never get quick-match joiners, only invites. 0 means no limit.
+    public int MaxSearchLobbySize { get; set; } = 8;
     public int SearchPollMilliseconds { get; set; } = 2000;
 
     // Host migration. When a member reports its host lost, the host has this long to show
@@ -80,6 +88,12 @@ public sealed class MilanServerOptions
     // X-Milan-Access-Key header. Players enter it as the server password in the game's
     // Multiplayer Settings. Printable ASCII without spaces, at most 256 characters.
     public string AccessKey { get; set; } = "";
+
+    // Lobbies are written to this file on shutdown and read back at the next start, relative to
+    // the server's folder. It holds invite codes and UDP secrets. Empty turns it off.
+    public string StateFile { get; set; } = "";
+    // A state file older than this at startup is ignored.
+    public int StateMaxAgeSeconds { get; set; } = 120;
 
     // GET /v1/stats and the presence reports that feed it. Both are off by default.
     public MilanStatsOptions Stats { get; set; } = new();
@@ -202,11 +216,20 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
         List<string> errors = [];
 
         if (options.HeartbeatSeconds < 1)
+        {
             errors.Add("HeartbeatSeconds must be at least 1.");
+        }
+
         if (options.LobbyLeaseSeconds <= options.HeartbeatSeconds)
+        {
             errors.Add("LobbyLeaseSeconds must exceed HeartbeatSeconds.");
+        }
+
         if (options.ReservationSeconds < 1)
+        {
             errors.Add("ReservationSeconds must be at least 1.");
+        }
+
         if (options.MapWidenSeconds < 0
             || options.EnemyWidenSeconds < options.MapWidenSeconds
             || options.SearchSeconds < options.EnemyWidenSeconds
@@ -215,19 +238,59 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
             errors.Add("Search timings must satisfy 0 <= MapWidenSeconds <= EnemyWidenSeconds <= SearchSeconds, with SearchSeconds >= 1.");
         }
         if (options.InProgressAfterSeconds < 0 || options.InProgressAfterSeconds > options.SearchSeconds)
+        {
             errors.Add("InProgressAfterSeconds must be between 0 and SearchSeconds.");
+        }
+
+        if (options.PreferredPartySize < 0 || options.PreferredPartySize > options.MaxPlayersCeiling)
+        {
+            errors.Add("PreferredPartySize must be between 0 and MaxPlayersCeiling.");
+        }
+
+        if (options.PartySizeWidenSeconds < 0 || options.PartySizeWidenSeconds > options.SearchSeconds)
+        {
+            errors.Add("PartySizeWidenSeconds must be between 0 and SearchSeconds.");
+        }
+
+        if (options.MaxSearchLobbySize < 0 || options.MaxSearchLobbySize > options.MaxPlayersCeiling)
+        {
+            errors.Add("MaxSearchLobbySize must be between 0 and MaxPlayersCeiling.");
+        }
+
         if (options.SearchPollMilliseconds < 100)
+        {
             errors.Add("SearchPollMilliseconds must be at least 100.");
+        }
+
         if (options.HostChallengeSeconds < 1 || options.MigrationReportSeconds < 1 || options.MigrationJoinSeconds < 1)
+        {
             errors.Add("HostChallengeSeconds, MigrationReportSeconds, and MigrationJoinSeconds must be at least 1.");
+        }
+
         if (options.LongPollSeconds is < 1 or > 120)
+        {
             errors.Add("LongPollSeconds must be between 1 and 120.");
+        }
+
         if (options.UdpPort is < 0 or > 65535)
+        {
             errors.Add("UdpPort must be between 0 and 65535.");
+        }
+
         if (options.DiscoveryMinIntervalMilliseconds < 0)
+        {
             errors.Add("DiscoveryMinIntervalMilliseconds must not be negative.");
+        }
+
         if (options.MaxPlayersCeiling is < 1 or > 64)
+        {
             errors.Add("MaxPlayersCeiling must be between 1 and 64.");
+        }
+
+        if (options.StateMaxAgeSeconds is < 1 or > 3600)
+        {
+            errors.Add("StateMaxAgeSeconds must be between 1 and 3600.");
+        }
 
         if (options.MaxLobbies < 1 || options.MaxSearches < 1
             || options.MaxLobbiesPerAddress < 1 || options.MaxSearchesPerAddress < 1
@@ -236,26 +299,45 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
             errors.Add("Lobby, search, and reservation limits must be at least 1.");
         }
         if (options.RequestsPerMinute < 1 || options.CreatesPerMinute < 1 || options.InviteRedeemsPerMinute < 1)
+        {
             errors.Add("Rate limits must be at least 1 per minute.");
+        }
+
         if (options.InviteCodeLength is < Secrets.MinInviteCodeLength or > Secrets.MaxInviteCodeLength)
+        {
             errors.Add($"InviteCodeLength must be between {Secrets.MinInviteCodeLength} and {Secrets.MaxInviteCodeLength}.");
+        }
         // New codes are drawn until one is unused, so at least half of them must stay free.
         else if (options.MaxLobbies > Secrets.InviteCodeCount(options.InviteCodeLength) / 2)
+        {
             errors.Add($"MaxLobbies must be at most {Secrets.InviteCodeCount(options.InviteCodeLength) / 2} with {options.InviteCodeLength}-character invite codes.");
+        }
+
         if (options.TotalRequestsPerSecond < 1 || options.RequestBurst < 1
             || options.MaxConcurrentRequests < 1 || options.MaxConcurrentRequestsPerAddress < 1
             || options.MaxConcurrentConnections < 1 || options.DiscoveryPacketsPerSecond < 1
             || options.MaxConcurrentLongPolls < 1 || options.MaxConcurrentLongPollsPerAddress < 1
             || options.DiscoveryPacketsPerSecondPerAddress < 1)
+        {
             errors.Add("Concurrency and UDP work limits must be at least 1.");
+        }
 
         MilanStatsOptions stats = options.Stats;
         if (stats.CacheSeconds is < 0 or > 3600)
+        {
             errors.Add("Stats:CacheSeconds must be between 0 and 3600.");
+        }
+
         if (stats.Token.Length is > 0 and < 16)
+        {
             errors.Add("Stats:Token must be at least 16 characters, or empty.");
+        }
+
         if (stats.PresenceSeconds is < 30 or > 3600)
+        {
             errors.Add("Stats:PresenceSeconds must be between 30 and 3600.");
+        }
+
         if (stats.MaxPresence < 1 || stats.MaxPresencePerAddress < 1)
         {
             errors.Add("Stats:MaxPresence and Stats:MaxPresencePerAddress must be at least 1.");
@@ -275,12 +357,16 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
         }
         // The game only sends keys it can put in an HTTP header unchanged.
         if (options.AccessKey.Length > 256 || options.AccessKey.Any(c => c is <= ' ' or >= '\x7F'))
+        {
             errors.Add("AccessKey must be printable ASCII without spaces, at most 256 characters.");
+        }
 
         foreach (string proxy in options.TrustedProxies)
         {
             if (!ProxyTrust.IsValidEntry(proxy))
+            {
                 errors.Add($"TrustedProxies entry '{proxy}' is not an IP address or CIDR range.");
+            }
         }
 
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);

@@ -34,7 +34,10 @@ public sealed class ServerNotice : IDisposable
             Snapshot built = Build(next, logger);
             // File watchers often report one save twice.
             if (built.Signature == _current.Signature)
+            {
                 return;
+            }
+
             _current = built;
             Describe(built);
         });
@@ -64,9 +67,13 @@ public sealed class ServerNotice : IDisposable
         {
             // A blocked version must update, whatever its number says.
             if (current.Blocked.Contains(gameVersion))
+            {
                 outdated = true;
+            }
             else if (CompareVersions(gameVersion, latest) is int order)
+            {
                 outdated = order < 0;
+            }
         }
 
         NoticeText? notice = null;
@@ -88,12 +95,17 @@ public sealed class ServerNotice : IDisposable
     {
         List<int>? left = NumericParts(a), right = NumericParts(b);
         if (left is null || right is null)
+        {
             return null;
+        }
+
         for (int i = 0; i < Math.Max(left.Count, right.Count); i++)
         {
             int x = i < left.Count ? left[i] : 0, y = i < right.Count ? right[i] : 0;
             if (x != y)
+            {
                 return x < y ? -1 : 1;
+            }
         }
         return 0;
     }
@@ -104,7 +116,10 @@ public sealed class ServerNotice : IDisposable
         foreach (string part in version.Split('.'))
         {
             if (part.Length is 0 or > 9 || !part.All(char.IsAsciiDigit))
+            {
                 break;
+            }
+
             parts.Add(int.Parse(part, System.Globalization.CultureInfo.InvariantCulture));
         }
         return parts.Count > 0 ? parts : null;
@@ -113,7 +128,10 @@ public sealed class ServerNotice : IDisposable
     static string? NormalizeLanguage(string? language)
     {
         if (string.IsNullOrEmpty(language) || language.Length > 8 || !language.All(char.IsAsciiLetter))
+        {
             return null;
+        }
+
         return language.ToUpperInvariant();
     }
 
@@ -159,12 +177,17 @@ public sealed class ServerNotice : IDisposable
                 continue;
             }
             if (text.Length > 0)
+            {
                 texts[language] = text;
+            }
         }
 
         StringBuilder all = new();
         foreach ((string language, string text) in texts)
+        {
             all.Append(language).Append('=').Append(text).Append('\0');
+        }
+
         string textHash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(all.ToString())))[..16];
 
         string id = options.Notice.Id.Trim();
@@ -174,7 +197,9 @@ public sealed class ServerNotice : IDisposable
             id = "";
         }
         if (id.Length == 0)
+        {
             id = textHash;
+        }
 
         return new Snapshot(expected, blocked, id, texts, $"{expected}|{string.Join(',', blocked)}|{id}|{textHash}");
     }
@@ -188,7 +213,9 @@ public sealed class ServerNotice : IDisposable
         foreach (char c in normalized)
         {
             if (c == '\n' || !char.IsControl(c))
+            {
                 clean.Append(c);
+            }
         }
         return clean.ToString().Trim();
     }

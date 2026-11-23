@@ -13,7 +13,10 @@ public sealed class MigrationTests : StoreTestBase
         JoinReservation reservation = Redeem(lobby, from).Value;
         Assert.Null(Store.MarkReservationJoined(reservation.ReservationId, reservation.JoinKey));
         if (!_confirmed.TryGetValue(lobby.LobbyId, out List<string>? roster))
+        {
             _confirmed[lobby.LobbyId] = roster = [];
+        }
+
         roster.Add(reservation.ReservationId);
         Report(lobby, State(revision, players: players) with { MemberIds = roster.ToArray() });
         return reservation;
