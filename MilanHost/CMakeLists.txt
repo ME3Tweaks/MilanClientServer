@@ -58,8 +58,13 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Engine/DLCConfigReload.hpp
   ${PROJ_FOLDER}/Engine/ExtObject.cpp
   ${PROJ_FOLDER}/Engine/ExtObject.hpp
+  ${PROJ_FOLDER}/Engine/GuiMovieGuard.cpp
+  ${PROJ_FOLDER}/Engine/GuiMovieGuard.hpp
   ${PROJ_FOLDER}/Engine/Hooks.cpp
   ${PROJ_FOLDER}/Engine/Hooks.hpp
+  ${PROJ_FOLDER}/Engine/InputActionGroup.cpp
+  ${PROJ_FOLDER}/Engine/InputActionGroup.hpp
+  ${PROJ_FOLDER}/Engine/InputGroupPolicy.hpp
   ${PROJ_FOLDER}/Engine/InputPromptFix.cpp
   ${PROJ_FOLDER}/Engine/InputPromptFix.hpp
   ${PROJ_FOLDER}/Engine/InputPromptPolicy.hpp
@@ -93,6 +98,7 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/Online/LocalPlayerIds.hpp
   ${PROJ_FOLDER}/Online/MPProfile.cpp
   ${PROJ_FOLDER}/Online/MPProfile.hpp
+  ${PROJ_FOLDER}/Online/PlayerNamePolicy.hpp
   ${PROJ_FOLDER}/Online/Rendezvous.cpp
   ${PROJ_FOLDER}/Online/Rendezvous.hpp
   ${PROJ_FOLDER}/Online/SFXOnlineComponentBlazeGame.cpp
