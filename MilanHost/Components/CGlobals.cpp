@@ -2,6 +2,7 @@
 #include "Components/CImgui.hpp"
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
+#include "Engine/GuiMovieGuard.hpp"
 #include "Engine/InputActionGroup.hpp"
 #include "Engine/InputPromptFix.hpp"
 #include "Engine/DLCConfigReload.hpp"
@@ -129,6 +130,7 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
 
     InputPromptFix::Initialize(Context);
     InputActionGroup::Initialize(Context);
+    GuiMovieGuard::Initialize(Context);
     // Never uninstalled, so shutdown profile saves stay blocked too.
     AchievementGuard::Initialize(Context);
     LinkerPatcher::Initialize(Context);
