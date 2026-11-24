@@ -117,6 +117,11 @@ namespace
         // Todo: matchmaking server
     };
 
+    struct MilanNetConfigBridge_SetQuickMatchExpandedLobbies_Parms final
+    {
+        int IncludeExpanded;
+    };
+
     struct MilanNetConfigBridge_ApplySettings_Parms final
     {
         FString PlayerName;
@@ -225,6 +230,7 @@ namespace
         static SFXName const k_getServerPassword{ L"GetServerPassword", 0 };
         static SFXName const k_applySettings{ L"ApplySettings", 0 };
         static SFXName const k_joinByCode{ L"JoinByCode", 0 };
+        static SFXName const k_setQuickMatchExpandedLobbies{ L"SetQuickMatchExpandedLobbies", 0 };
 
         auto const ReturnBool = [Result](bool const bValue) { if (Result != nullptr) *static_cast<UBOOL*>(Result) = bValue ? TRUE : FALSE; };
         auto const ReturnString = [Result](FString const& Value) { if (Result != nullptr) *static_cast<FString*>(Result) = Value; };
@@ -266,6 +272,13 @@ namespace
                 // Set result value
                 *static_cast<int*>(Result) = static_cast<int>(Joined);
             }
+        }
+        else if (Function == k_setQuickMatchExpandedLobbies)
+        {
+            // Hooked method to set MilanHost's transient value for expanded lobbies
+            // This method is called by unrealscript before all matchmaking searches
+            auto const& Params = *reinterpret_cast<MilanNetConfigBridge_SetQuickMatchExpandedLobbies_Parms const*>(Stack->Locals);
+            COMPONENT(CMatchmaking).SetQuickMatchExpandedLobbies(Params.IncludeExpanded != 0);
         }
         else
             return false;

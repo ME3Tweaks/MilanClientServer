@@ -1616,7 +1616,7 @@ namespace
     }
 
     void StartSearch(MatchmakingState& S, int const MapId, int const EnemyModeId, int const DifficultyId,
-        std::function<void(QuickMatchOutcome)> Done)
+        bool const ExpandedLobbies, std::function<void(QuickMatchOutcome)> Done)
     {
         // An empty URL is matchmaking turned off (Multiplayer Settings or mm.server off); an unknown mod version disables it too.
         if (S.BaseUrl.empty() || S.ModVersion.empty())
@@ -1645,14 +1645,16 @@ namespace
             Excluded.push_back(Skips[i].second);
         }
 
-        MILAN_INFOW(ELOG_Matchmaking, L"quick match search: map %d, enemy %d, difficulty %d, skipping %zu unreachable lobbies", MapId, EnemyModeId, DifficultyId, Excluded.size());
-        FetchInfo(S, [MapId, EnemyModeId, DifficultyId, Excluded = std::move(Excluded)](MatchmakingState& State) {
+        MILAN_INFOW(ELOG_Matchmaking, L"quick match search: map %d, enemy %d, difficulty %d, expanded lobbies %s, skipping %zu unreachable lobbies",
+            MapId, EnemyModeId, DifficultyId, ExpandedLobbies ? L"included" : L"excluded", Excluded.size());
+        FetchInfo(S, [MapId, EnemyModeId, DifficultyId, ExpandedLobbies, Excluded = std::move(Excluded)](MatchmakingState& State) {
                 json Request{
                     { "gameVersion", State.ModVersion },
                     { "mapId", MapId },
                     { "enemyModeId", EnemyModeId },
                     { "difficultyId", DifficultyId },
-                    { "widen", true },
+                    { "widen", true }, // Todo: When client has matchmaking setting smenu
+                    { "expandedLobbies", ExpandedLobbies },
                 };
                 if (!Excluded.empty()) {
                     // Do not match against these lobbies
@@ -3507,8 +3509,13 @@ bool CMatchmaking::StartQuickMatch(int const MapId, int const EnemyModeId, int c
     if (mp_state == nullptr || !Done)
         return false;
     Leave(*mp_state);
-    StartSearch(*mp_state, MapId, EnemyModeId, DifficultyId, std::move(Done));
+    StartSearch(*mp_state, MapId, EnemyModeId, DifficultyId, m_quickMatchExpandedLobbies, std::move(Done));
     return true;
+}
+
+void CMatchmaking::SetQuickMatchExpandedLobbies(bool const ExpandedLobbies) noexcept
+{
+    m_quickMatchExpandedLobbies = ExpandedLobbies;
 }
 
 void CMatchmaking::CancelQuickMatch()

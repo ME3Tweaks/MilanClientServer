@@ -107,6 +107,8 @@ public:
     bool StartQuickMatch(int MapId, int EnemyModeId, int DifficultyId, std::function<void(EQuickMatchOutcome)> Done);
     void CancelQuickMatch();
     std::wstring QuickMatchConnectString() const;
+    /** Expanded lobby preference for Quick Match search (MilanNetConfigBridge) */
+    void SetQuickMatchExpandedLobbies(bool ExpandedLobbies) noexcept;
 
 private:
 
@@ -115,6 +117,7 @@ private:
 
     MatchmakingState* mp_state{ nullptr };
     UNetConnection* mp_lostHost{ nullptr };  // Server connection already reported as closed.
+    bool m_quickMatchExpandedLobbies{ false };  // Classic lobbies only unless the player opts in
 };
 
 static_assert(ComponentType<CMatchmaking>);
