@@ -9,6 +9,7 @@
 #include "Engine/LinkerPatcher.hpp"
 #include "Misc/GuidCacheUtils.hpp"
 #include "NetProf/NetProfDecls.hpp"
+#include "Online/AchievementCache.hpp"
 #include "Online/AchievementGuard.hpp"
 #include "Online/SFXOnlineHijacks.hpp"
 
@@ -49,6 +50,7 @@ void CGlobals::PostInitialize(::LESDK::Initializer& Context)
 void CGlobals::UninstallSomeHooks(::LESDK::Initializer& Context)
 {
     GuiMovieGuard::Uninstall(Context);
+    AchievementCache::Uninstall(Context);
     InputActionGroup::Uninstall(Context);
     InputPromptFix::Uninstall(Context);
     Context.UninstallHook("UWorld::Tick");
@@ -133,6 +135,7 @@ void CGlobals::InitGlobals(::LESDK::Initializer& Context)
     GuiMovieGuard::Initialize(Context);
     // Never uninstalled, so shutdown profile saves stay blocked too.
     AchievementGuard::Initialize(Context);
+    AchievementCache::Initialize(Context);
     LinkerPatcher::Initialize(Context);
 #ifndef _FINAL_RELEASE
     DLCConfigReload::Initialize(Context);
