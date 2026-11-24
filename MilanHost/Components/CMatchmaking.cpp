@@ -395,6 +395,10 @@ struct MatchmakingState
     std::vector<std::string>        LanAddresses{};
     std::map<std::string, PeerPath> Joiners{};
     std::map<std::string, AdmittedPeer> AdmittedMembers{};
+    // Populated from server heartbeat
+    std::string                     Reachability{};
+    int                             FailedJoins{ 0 };
+    int                             NatWarningShownAt{ 0 };
     // A new host after migration: its lobby may still be loading until AdoptUntil. The UDP
     // ticket is used once the listen socket exists, and the first report waits (until
     // AdoptReportBy at most) for discovery so the members see the observed endpoint.
@@ -713,6 +717,7 @@ namespace
         constexpr LocalizedText InvitesHostOnly{ 49875717, L"Only the host can invite players to a private lobby." };
         constexpr LocalizedText AccessKeyRejected{ 49875718, L"The matchmaking server's password is missing or wrong. Check it in Options > Network." };
         constexpr LocalizedText UpdateAvailable{ 49875721, L"Legendary Edition Multiplayer {0} is available. Update to find more players." };
+        constexpr LocalizedText StrictNat{ 724659, L"Players may experience difficulties connecting to your game due to network configuration restrictions." };
     }
 
     // Looks @p Text up in the loaded TLKs the way script does (SFXGame.GetSimpleString).
@@ -1328,6 +1333,29 @@ namespace
             }, Delay);
     }
 
+    // If lobby heartbeat has marked this lobby as likely unreachable by others
+    bool PlayersCannotConnect(MatchmakingState const& S)
+    {
+        // We use Suspect cause unreachable can take several minutes to reach
+        return S.Reachability == "Suspect" || S.Reachability == "Unreachable";
+    }
+
+    // Applies reachability information from the heartbeat data
+    void ApplyReachability(MatchmakingState& S, json const& Reply)
+    {
+        std::string Reachability = Reply.value("reachability", std::string{});
+        int const FailedJoins = Reply.value("failedJoins", 0);
+        if (Reachability != S.Reachability || FailedJoins != S.FailedJoins)
+        {
+            // Updating failed joins count
+            MILAN_INFOW(ELOG_Matchmaking, L"matchmaker: lobby is %S; %d player(s) from other networks recently could not connect", Reachability.empty() ? "not rated" : Reachability.c_str(), FailedJoins);
+        }
+        S.Reachability = std::move(Reachability);
+        S.FailedJoins = FailedJoins;
+        // Failures age out
+        S.NatWarningShownAt = PlayersCannotConnect(S) ? std::min(S.NatWarningShownAt, FailedJoins) : 0;
+    }
+
     void SendHeartbeat(MatchmakingState& S)
     {
         json State = BuildLobbyState(S);
@@ -1354,7 +1382,10 @@ namespace
                     HandleReplaced(Session);
                     return;
                 }
-                SuccessJson(Result, "lobby heartbeat");
+                if (std::optional<json> const Reply = SuccessJson(Result, "lobby heartbeat"))
+                {
+                    ApplyReachability(Session, *Reply);
+                }
             });
     }
 
@@ -2824,6 +2855,27 @@ namespace
         StartHost(S);
     }
 
+    // Tell host that players are having isses connecting
+    void TickNatWarning(MatchmakingState& S)
+    {
+        constexpr float k_hintSeconds = 6.f; // SFXGameInfoMP_Lobby.NatWarningShowDuration
+        if (!PlayersCannotConnect(S) || S.FailedJoins <= S.NatWarningShownAt) {
+            return;
+        }
+
+        std::wstring const Message = Localize(Text::StrictNat);
+        bool const InLobby = HostIsInLobby();
+        // Stall while there isn't a UI to show things
+        if (!(InLobby ? ShowMessageBox(Message, L"MilanStrictNatMsg") : ShowHint(Message, k_hintSeconds)))
+        {
+            return;
+        }
+
+        // Mark when we showed the NAT warning
+        S.NatWarningShownAt = S.FailedJoins;
+        MILAN_WARNW(ELOG_Matchmaking, L"%d player(s) from other networks could not connect to this lobby, showed the strict NAT %s", S.FailedJoins, InLobby ? L"dialog" : L"hint");
+    }
+
     // Host traffic for a listening game. Nothing goes out while it is not listening, so a game
     // that stopped hosting cannot answer a migration check; TickHosting ends the lobby if that lasts.
     void TickHostedLobby(MatchmakingState& S, Clock::time_point const Now)
@@ -2864,10 +2916,13 @@ namespace
             S.NextStateCheck = Now + k_stateCheckInterval;
             Due = BuildLobbyState(S).dump() != S.LastStateBody;
         }
-        if (Due)
+        if (Due) {
             SendHeartbeat(S);
-        for (auto& [Id, Path] : S.Joiners)
+        }
+        for (auto& [Id, Path] : S.Joiners) {
             TickProbes(S, Path, Rendezvous::EDirection::HostToJoiner, Now);
+    }
+        TickNatWarning(S);
     }
 
     // The host writes each player's round trip into that player's replicated PRI.Ping, which
@@ -3698,6 +3753,9 @@ void CMatchmaking::RegisterCommands()
             if (S.Role == EMatchmakingRole::Host)
             {
                 MILAN_INFOW(ELOG_Matchmaking, L"  lobby %S, invite %S, revision %lld", S.LobbyId.c_str(), S.InviteCode.c_str(), S.Revision);
+                if (S.FailedJoins > 0) {
+                    MILAN_INFOW(ELOG_Matchmaking, L"  %d player(s) from other networks recently could not connect (%S)", S.FailedJoins, S.Reachability.c_str());
+                }
                 for (auto const& [Id, Path] : S.Joiners)
                     MILAN_INFOW(ELOG_Matchmaking, L"  joiner %S: %zu candidates, verified %S, joined %d", Id.c_str(), Path.Candidates.size(),
                         Path.Verified ? Path.Verified->ToString().c_str() : "no", Path.Joined ? 1 : 0);
