@@ -88,10 +88,13 @@ set (PROJ_SOURCES
   ${PROJ_FOLDER}/NetProf/NetProfHandlers.cpp
   ${PROJ_FOLDER}/NetProf/NetProfStream.cpp
   ${PROJ_FOLDER}/NetProf/NetProfStream.hpp
+  ${PROJ_FOLDER}/Online/AchievementCache.cpp
+  ${PROJ_FOLDER}/Online/AchievementCache.hpp
   ${PROJ_FOLDER}/Online/AchievementGuard.cpp
   ${PROJ_FOLDER}/Online/AchievementGuard.hpp
   ${PROJ_FOLDER}/Online/ChallengeStorage.cpp
   ${PROJ_FOLDER}/Online/ChallengeStorage.hpp
+  ${PROJ_FOLDER}/Online/GalaxyStats.hpp
   ${PROJ_FOLDER}/Online/MatchmakingNet.cpp
   ${PROJ_FOLDER}/Online/MatchmakingNet.hpp
   ${PROJ_FOLDER}/Online/ModVersion.hpp
