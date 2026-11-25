@@ -44,6 +44,7 @@ builder.Services.AddSingleton<IValidateOptions<MilanServerOptions>, MilanServerO
 builder.Services.AddOptions<MilanLiveOptions>().Bind(builder.Configuration.GetSection(MilanServerOptions.SectionName));
 builder.Services.AddSingleton(liveConfig);
 builder.Services.AddSingleton<ServerNotice>();
+builder.Services.AddSingleton<GalaxySettings>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<MatchmakingStore>();
 builder.Services.AddSingleton<StoreStateFile>();

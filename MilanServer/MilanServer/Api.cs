@@ -46,7 +46,7 @@ public static class Api
         RouteGroupBuilder v1 = app.MapGroup("/v1");
 
         // Clients can send a game version and langauge to learn if its out of day and get message of the day
-        v1.MapGet("/info", (IOptions<MilanServerOptions> options, DiscoveryEndpoint discovery, ServerNotice notice,
+        v1.MapGet("/info", (IOptions<MilanServerOptions> options, DiscoveryEndpoint discovery, ServerNotice notice, GalaxySettings galaxy,
             string? gameVersion, string? language) =>
         {
             MilanServerOptions o = options.Value;
@@ -65,15 +65,14 @@ public static class Api
                 LatestGameVersion = latest,
                 Outdated = outdated,
                 Notice = text,
-                GalaxyStatsUrl = o.Stats.Galaxy.Enabled ? (o.Stats.Galaxy.Url.Length > 0 ? o.Stats.Galaxy.Url : GalaxyStatsPath) : null,
+                GalaxyStatsUrl = galaxy.Current.AdvertisedUrl,
             };
         });
 
         // Current battleground stats for one game version. Clients append their version to galaxyStatsUrl
-        v1.MapGet("/stats/galaxy/{gameVersion}", (string gameVersion, HttpContext http, IOptions<MilanServerOptions> options, MatchmakingStore store, TimeProvider time) =>
+        v1.MapGet("/stats/galaxy/{gameVersion}", (string gameVersion, HttpContext http, GalaxySettings galaxy, MatchmakingStore store, TimeProvider time) =>
         {
-            MilanGalaxyStatsOptions o = options.Value.Stats.Galaxy;
-            if (!o.Enabled)
+            if (!galaxy.Current.Enabled)
             {
                 // This endpoint is not enabled
                 return Error(Failures.StatsUnavailable);
@@ -87,7 +86,7 @@ public static class Api
             GalaxyStats stats = store.GetGalaxyStats(gameVersion);
             // Set cache control on this endpoint
             int age = (int)Math.Max(0, (time.GetUtcNow() - stats.GeneratedAt).TotalSeconds);
-            http.Response.Headers.CacheControl = $"public, max-age={Math.Max(0, o.CacheSeconds - age)}";
+            http.Response.Headers.CacheControl = $"public, max-age={Math.Max(0, stats.RefreshSeconds - age)}";
             return Results.Ok(stats);
         });
 

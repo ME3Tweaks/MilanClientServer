@@ -26,6 +26,7 @@ public sealed class MatchmakingStore
     readonly Lock _lock = new();
     readonly MilanServerOptions _options;
     readonly ServerNotice? _notice;
+    readonly GalaxySettings? _galaxy;
     readonly TimeProvider _time;
     readonly ILogger<MatchmakingStore> _logger;
 
@@ -69,10 +70,11 @@ public sealed class MatchmakingStore
     long _blockedVersionRequests;
 
     public MatchmakingStore(IOptions<MilanServerOptions> options, TimeProvider time, ILogger<MatchmakingStore> logger,
-        ServerNotice? notice = null)
+        ServerNotice? notice = null, GalaxySettings? galaxy = null)
     {
         _options = options.Value;
         _notice = notice;
+        _galaxy = galaxy;
         _time = time;
         _logger = logger;
         _startedAt = time.GetUtcNow();
@@ -1767,18 +1769,19 @@ public sealed class MatchmakingStore
     /// <summary>
     /// Snapshot of lobby data for a specific game version
     /// </summary>
-    sealed record GalaxySnapshot(DateTimeOffset GeneratedAt, IReadOnlyDictionary<string, GalaxyStats> Versions, GalaxyStats Empty);
+    sealed record GalaxySnapshot(DateTimeOffset GeneratedAt, GalaxySettings.Values Settings, IReadOnlyDictionary<string, GalaxyStats> Versions, GalaxyStats Empty);
 
     /// <summary>
-    /// Gets the galaxy stats for one game version, rebuilding them when stale, otherwise returning the cached version
+    /// Gets the galaxy stats for one game version, rebuilding them when stale or the live settings changed,
+    /// otherwise returning the cached version
     /// </summary>
     public GalaxyStats GetGalaxyStats(string gameVersion)
     {
         DateTimeOffset now = _time.GetUtcNow();
-        MilanGalaxyStatsOptions options = _options.Stats.Galaxy;
+        GalaxySettings.Values options = _galaxy?.Current ?? GalaxySettings.DefaultValues;
         lock (_lock)
         {
-            if (_galaxyStats is null || now - _galaxyStats.GeneratedAt >= TimeSpan.FromSeconds(options.CacheSeconds))
+            if (_galaxyStats is null || _galaxyStats.Settings != options || now - _galaxyStats.GeneratedAt >= TimeSpan.FromSeconds(options.CacheSeconds))
             {
                 _galaxyStats = BuildGalaxyStatsLocked(now, options);
             }
@@ -1790,7 +1793,7 @@ public sealed class MatchmakingStore
     /// <summary>
     /// Builds galaxy stats. Must run within a lock so we don't get a race condition
     /// </summary>
-    GalaxySnapshot BuildGalaxyStatsLocked(DateTimeOffset now, MilanGalaxyStatsOptions options)
+    GalaxySnapshot BuildGalaxyStatsLocked(DateTimeOffset now, GalaxySettings.Values options)
     {
         Dictionary<string, (int Players, SortedDictionary<int, (int Lobbies, int Players)> Maps)> versions = new(StringComparer.Ordinal);
         foreach (Lobby lobby in _lobbies.Values)
@@ -1829,7 +1832,7 @@ public sealed class MatchmakingStore
             Tint = tint,
         };
 
-        return new GalaxySnapshot(now, versions.ToDictionary(v => v.Key, v => Stats(v.Value.Players, v.Value.Maps), StringComparer.Ordinal), Stats(0, []));
+        return new GalaxySnapshot(now, options, versions.ToDictionary(v => v.Key, v => Stats(v.Value.Players, v.Value.Maps), StringComparer.Ordinal), Stats(0, []));
     }
 
     ServerStats BuildStatsLocked(DateTimeOffset now)
@@ -1839,6 +1842,7 @@ public sealed class MatchmakingStore
         int waiting = 0, inProgress = 0, migrations = 0, suspect = 0, unreachable = 0;
         Dictionary<string, int> versions = new(StringComparer.Ordinal);
         Dictionary<int, int> sizes = [];
+        Dictionary<int, int> difficulties = [];
         Dictionary<int, (int Lobbies, int Players)> publicFill = [];
         foreach (Lobby lobby in _lobbies.Values)
         {
@@ -1852,6 +1856,7 @@ public sealed class MatchmakingStore
             lobbies++;
             players += state.PlayerCount;
             sizes[state.PlayerCount] = sizes.GetValueOrDefault(state.PlayerCount) + 1;
+            difficulties[state.DifficultyId] = difficulties.GetValueOrDefault(state.DifficultyId) + 1;
             capacity += state.MaxPlayers;
             if (!state.IsPrivate)
             {
@@ -1944,6 +1949,7 @@ public sealed class MatchmakingStore
             SuspectLobbies = suspect,
             UnreachableLobbies = unreachable,
             LobbiesByPlayers = sizes.OrderBy(s => s.Key).ToDictionary(s => s.Key, s => s.Value),
+            LobbiesByDifficulty = difficulties.OrderBy(d => d.Key).ToDictionary(d => d.Key, d => d.Value),
             PublicFillBySize = publicFill.OrderBy(f => f.Key).ToDictionary(f => f.Key, f => new LobbySizeFill(f.Value.Lobbies,
                 f.Value.Players, f.Key * f.Value.Lobbies, Math.Round(100.0 * f.Value.Players / (f.Key * f.Value.Lobbies), 1))),
         };

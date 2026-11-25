@@ -275,6 +275,7 @@ public sealed record ServerInfo
     // Clients look at this URL to fetch galaxy stats. This lets you
     // move galaxy stats off the server and to a CDN or something else.
     // Clients append "/{gameVersion}" to it
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public string? GalaxyStatsUrl { get; init; }
 }
 
@@ -324,6 +325,8 @@ public sealed record StatsDetails
     public int SuspectLobbies { get; init; }
     public int UnreachableLobbies { get; init; }
     public IReadOnlyDictionary<int, int>? LobbiesByPlayers { get; init; }
+    // All lobbies keyed by DifficultyId (0 is Bronze)
+    public IReadOnlyDictionary<int, int>? LobbiesByDifficulty { get; init; }
     // Public lobbies keyed by MaxPlayers, with how full that set is right now
     public IReadOnlyDictionary<int, LobbySizeFill>? PublicFillBySize { get; init; }
 }
