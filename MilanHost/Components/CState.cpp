@@ -5,6 +5,7 @@
 #include "Components/CState.hpp"
 #include "Engine/Intercept.hpp"
 #include "Online/ChallengeStorage.hpp"
+#include "Online/GalaxyStats.hpp"
 #include "Online/MatchmakingNet.hpp"
 #include "Online/MPProfile.hpp"
 #include "Shell/ClientConfig.hpp"
@@ -122,6 +123,11 @@ namespace
         int IncludeExpanded;
     };
 
+    struct MilanNetConfigBridge_GalaxyMap_Parms final
+    {
+        int MapId;
+    };
+
     struct MilanNetConfigBridge_ApplySettings_Parms final
     {
         FString PlayerName;
@@ -231,9 +237,48 @@ namespace
         static SFXName const k_applySettings{ L"ApplySettings", 0 };
         static SFXName const k_joinByCode{ L"JoinByCode", 0 };
         static SFXName const k_setQuickMatchExpandedLobbies{ L"SetQuickMatchExpandedLobbies", 0 };
+        static SFXName const k_getModVersion{ L"GetModVersion", 0 };
+        static SFXName const k_requestGalaxyStats{ L"RequestGalaxyStats", 0 };
+        static SFXName const k_getGalaxyPlayers{ L"GetGalaxyPlayers", 0 };
+        static SFXName const k_getGalaxyMapLobbies{ L"GetGalaxyMapLobbies", 0 };
+        static SFXName const k_getGalaxyMapPlayers{ L"GetGalaxyMapPlayers", 0 };
+        static SFXName const k_getGalaxyFullPopulation{ L"GetGalaxyFullPopulation", 0 };
+        static SFXName const k_getGalaxyMaxBaseTint{ L"GetGalaxyMaxBaseTint", 0 };
 
         auto const ReturnBool = [Result](bool const bValue) { if (Result != nullptr) *static_cast<UBOOL*>(Result) = bValue ? TRUE : FALSE; };
         auto const ReturnString = [Result](FString const& Value) { if (Result != nullptr) *static_cast<FString*>(Result) = Value; };
+        auto const ReturnInt = [Result](int const Value)
+            {
+                if (Result != nullptr)
+                {
+                    *static_cast<int*>(Result) = Value;
+                }
+            };
+        auto const ReturnFloat = [Result](float const Value)
+            {
+                if (Result != nullptr)
+                {
+                    *static_cast<float*>(Result) = Value;
+                }
+            };
+        // -1: no counts for this map (or none at all)
+        auto const MapCount = [Stack](bool const bLobbies)
+            {
+                auto const& Params = *reinterpret_cast<MilanNetConfigBridge_GalaxyMap_Parms const*>(Stack->Locals);
+                GalaxyStats::Snapshot const* const Stats = COMPONENT(CMatchmaking).GalaxySnapshot();
+                if (Stats == nullptr)
+                {
+                    return -1;
+                }
+                for (GalaxyStats::MapCount const& Map : Stats->Maps)
+                {
+                    if (Map.MapId == Params.MapId)
+                    {
+                        return bLobbies ? Map.Lobbies : Map.Players;
+                    }
+                }
+                return 0;
+            };
 
         SFXName const& Function = Node->Name;
         ClientConfig const* const Config = gp_clientConfig;
@@ -279,6 +324,37 @@ namespace
             // This method is called by unrealscript before all matchmaking searches
             auto const& Params = *reinterpret_cast<MilanNetConfigBridge_SetQuickMatchExpandedLobbies_Parms const*>(Stack->Locals);
             COMPONENT(CMatchmaking).SetQuickMatchExpandedLobbies(Params.IncludeExpanded != 0);
+        }
+        else if (Function == k_getModVersion)
+        {
+            ReturnString(FromUtf8(game::string{ COMPONENT(CMatchmaking).DisplayVersion().c_str() }));
+        }
+        else if (Function == k_requestGalaxyStats)
+        {
+            ReturnInt(COMPONENT(CMatchmaking).RequestGalaxyStats());
+        }
+        else if (Function == k_getGalaxyPlayers)
+        {
+            GalaxyStats::Snapshot const* const Stats = COMPONENT(CMatchmaking).GalaxySnapshot();
+            ReturnInt(Stats != nullptr ? Stats->Players : -1);
+        }
+        else if (Function == k_getGalaxyMapLobbies)
+        {
+            ReturnInt(MapCount(true));
+        }
+        else if (Function == k_getGalaxyMapPlayers)
+        {
+            ReturnInt(MapCount(false));
+        }
+        else if (Function == k_getGalaxyFullPopulation)
+        {
+            GalaxyStats::Snapshot const* const Stats = COMPONENT(CMatchmaking).GalaxySnapshot();
+            ReturnInt(Stats != nullptr ? Stats->FullPopulation : 0);
+        }
+        else if (Function == k_getGalaxyMaxBaseTint)
+        {
+            GalaxyStats::Snapshot const* const Stats = COMPONENT(CMatchmaking).GalaxySnapshot();
+            ReturnFloat(Stats != nullptr ? Stats->MaxBaseTint : 0.f);
         }
         else
             return false;

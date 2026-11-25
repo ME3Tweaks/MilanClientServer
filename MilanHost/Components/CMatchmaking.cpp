@@ -26,6 +26,7 @@
 #include "Engine/Hooks.hpp"
 #include "Engine/Intercept.hpp"
 #include "Engine/MenuScenes.hpp"
+#include "Online/GalaxyStats.hpp"
 #include "Online/MatchmakingNet.hpp"
 #include "Online/Rendezvous.hpp"
 #include "Online/PeerSecurity.hpp"
@@ -346,6 +347,21 @@ struct PresenceState
     Clock::time_point               Next{};
 };
 
+// Container for the GAW system
+struct GalaxyState
+{
+    std::string                     Matchmaker{};
+    std::string                     Version{};          
+    bool                            TargetKnown{ false };   // Set when matchamker has been reached
+    Clock::time_point               InfoExpires{};      // Expiry time of server info
+    bool                            LastFailed{ false };    // The last fetch failed, for retry
+    std::optional<GalaxyStats::Target> Target{};        // Null once we connect to matchmaker
+    bool                            Pending{ false };
+    Clock::time_point               Next{};
+    int                             Revision{ 0 };      // Changes whenever Data does
+    std::optional<GalaxyStats::Snapshot> Data{};
+};
+
 struct MatchmakingState
 {
     std::shared_ptr<Mailbox>        Box{ std::make_shared<Mailbox>() };
@@ -369,6 +385,7 @@ struct MatchmakingState
     int                             HeartbeatSeconds{ 20 };
     int                             ServerMaxPlayersCeiling{ 0 };   // 0 until known.
     PresenceState                   Presence{};
+    GalaxyState                     Galaxy{};
 
     // Current UE3 game socket.
     FSocket* Socket{ nullptr };
@@ -1009,6 +1026,7 @@ namespace
         Next.PendingKicks = std::move(S.PendingKicks);
         Next.PendingKickWorld = S.PendingKickWorld;
         Next.Presence = S.Presence;
+        Next.Galaxy = std::move(S.Galaxy);
         if (KeepServerInfo)
         {
             Next.ServerMaxPlayersCeiling = S.ServerMaxPlayersCeiling;
@@ -2921,7 +2939,7 @@ namespace
         }
         for (auto& [Id, Path] : S.Joiners) {
             TickProbes(S, Path, Rendezvous::EDirection::HostToJoiner, Now);
-    }
+        }
         TickNatWarning(S);
     }
 
@@ -3235,6 +3253,153 @@ namespace
                 }
             });
     }
+
+    constexpr std::chrono::seconds k_galaxyRetry{ 60 };
+    constexpr std::chrono::minutes k_galaxyInfoRefresh{ 10 };
+
+    // Asynchronously requests GAW info from the matchmaker. Runs on its own
+    // thread cause people like frames
+    void RequestGalaxyStats(MatchmakingState& S, Clock::time_point const Now)
+    {
+        GalaxyState& G = S.Galaxy;
+        if (G.Matchmaker != S.BaseUrl || G.Version != S.ModVersion)
+        {
+            // Somehow we got different version or matchmaker, handle this case
+            int const Revision = G.Revision + (G.Data ? 1 : 0);
+            G = {};
+            G.Matchmaker = S.BaseUrl;
+            G.Version = S.ModVersion;
+            G.Revision = Revision;
+        }
+        if (S.BaseUrl.empty() || S.ModVersion.empty() || G.Pending || Now < G.Next)
+        {
+            return;
+        }
+
+        G.Pending = true;
+        G.Next = Now + k_galaxyRetry;
+        std::string const Matchmaker = S.BaseUrl;
+        std::string const Version = S.ModVersion;
+        std::string const EncodedVersion = PercentEncode(S.ModVersion);
+        bool const NeedInfo = !G.TargetKnown || G.LastFailed || Now >= G.InfoExpires;
+        std::optional<GalaxyStats::Target> const Known = G.Target;
+
+        Job Work = [=]() -> Completion
+            {
+                std::optional<GalaxyStats::Target> Target = Known;
+                bool InfoRead = false;
+                bool Off = false;
+                if (NeedInfo)
+                {
+                    // Fetch GAW info from endpoint
+                    MatchmakingNet::HttpResult const Info = MatchmakingNet::Request(Matchmaker, L"GET", "/v1/info", "", "", k_requestTimeoutMs);
+                    json const Body = Info.Status >= 200 && Info.Status < 300 ? json::parse(Info.Body, nullptr, false) : json{};
+                    if (Body.is_object())
+                    {
+                        InfoRead = true;
+                        // Get GAW URL
+                        auto const Url = Body.find("galaxyStatsUrl");
+                        Off = Url != Body.end() && Url->is_null();
+                        std::optional<std::string> const Advertised = Url != Body.end() && Url->is_string() ? std::optional{ Url->get<std::string>() } : std::nullopt;
+                        Target = Off ? std::nullopt : GalaxyStats::Resolve(Matchmaker, Advertised ? std::optional<std::string_view>{ *Advertised } : std::nullopt);
+                        if (Target && !MatchmakingNet::IsValidBaseUrl(Target->Origin))
+                        {
+                            Target.reset();
+                        }
+                    }
+                }
+
+                std::optional<GalaxyStats::Snapshot> Data{};
+                std::string Failure{};
+                bool NotFound = false;
+                // Get URL to fetch from
+                std::optional<std::string> const Path = Target ? GalaxyStats::VersionPath(Target->Path, EncodedVersion) : std::nullopt;
+                if (Target && !Path)
+                {
+                    Failure = "the game version can't be used in a URL";
+                }
+                else if (Path)
+                {
+                    // Request the GAW info 
+                    MatchmakingNet::HttpResult const Result = MatchmakingNet::Request(Target->Origin, L"GET", *Path, "", "", k_requestTimeoutMs);
+                    NotFound = Result.Status == 404;
+                    if (Result.Status >= 200 && Result.Status < 300)
+                    {
+                        Data = GalaxyStats::Parse(json::parse(Result.Body, nullptr, false));
+                        if (!Data)
+                        {
+                            Failure = "invalid response";
+                        }
+                    }
+                    else
+                    {
+                        Failure = DescribeFailure(Result);
+                    }
+                }
+
+                return [=](MatchmakingState& State)
+                    {
+                        GalaxyState& G = State.Galaxy;
+                        if (G.Matchmaker != Matchmaker || G.Version != Version)
+                        {
+                            return;
+                        }
+                        G.Pending = false;
+                        Clock::time_point const Done = Clock::now();
+                        if (InfoRead)
+                        {
+                            G.TargetKnown = true;
+                            G.InfoExpires = Done + k_galaxyInfoRefresh;
+                            G.Target = Target;
+                            if (!Target)
+                            {
+                                if (Off)
+                                {
+                                    MILAN_DEBUGW(ELOG_Matchmaking, L"the matchmaker has galaxy stats turned off");
+                                }
+                                else
+                                {
+                                    MILAN_WARNW(ELOG_Matchmaking, L"the matchmaker's galaxy stats URL is unusable");
+                                }
+                                // Stats are now off or inaccessible
+                                G.Next = Done + k_galaxyInfoRefresh;
+                                if (G.Data)
+                                {
+                                    G.Data.reset();
+                                    ++G.Revision;
+                                }
+                            }
+                        }
+                        if (Data)
+                        {
+                            // New data received!
+                            G.Data = Data;
+                            ++G.Revision;
+                            G.LastFailed = false;
+                            G.Next = Done + std::chrono::seconds{ Data->RefreshSeconds };
+                        }
+                        else if (!Failure.empty())
+                        {
+                            G.LastFailed = true;
+                            if (NotFound)
+                            {
+                                G.Next = Done + k_galaxyInfoRefresh;
+                            }
+                            MILAN_DEBUGW(ELOG_Matchmaking, L"galaxy stats fetch failed: %S", Failure.c_str());
+                        }
+                    };
+            };
+
+        std::thread{ [Box = S.Box, Work = std::move(Work)]
+            {
+                Completion Done = Work();
+                std::lock_guard Lock{ Box->Mutex };
+                if (!Box->Stop)
+                {
+                    Box->Completions.push_back(std::move(Done));
+                }
+            } }.detach();
+    }
 }
 
 
@@ -3258,6 +3423,15 @@ bool CMatchmaking::Initialize(::LESDK::Initializer& Context)
         executable.resize(executableLength);
     }
     auto version = ModVersion::Resolve(std::filesystem::path{ executable }, gp_clientConfig != nullptr ? std::string_view{ gp_clientConfig->ModVersion.c_str() } : std::string_view{}, CommandLineValue(L"-mmversion="));
+    // The lobby shows the installed version, never a matchmaking override, read once here.
+    if (version.From == ModVersion::Source::Metadata)
+    {
+        m_displayVersion = version.Version;
+    }
+    else
+    {
+        m_displayVersion = ModVersion::Resolve(std::filesystem::path{ executable }, {}).Version;
+    }
     if (!version.Version.empty())
     {
         mp_state->ModVersion = std::move(version.Version);
@@ -3571,6 +3745,26 @@ bool CMatchmaking::StartQuickMatch(int const MapId, int const EnemyModeId, int c
 void CMatchmaking::SetQuickMatchExpandedLobbies(bool const ExpandedLobbies) noexcept
 {
     m_quickMatchExpandedLobbies = ExpandedLobbies;
+}
+
+int CMatchmaking::RequestGalaxyStats()
+{
+    if (mp_state == nullptr)
+    {
+        return 0;
+    }
+    ::RequestGalaxyStats(*mp_state, Clock::now());
+    return mp_state->Galaxy.Revision;
+}
+
+GalaxyStats::Snapshot const* CMatchmaking::GalaxySnapshot() const
+{
+    if (mp_state == nullptr || !mp_state->Galaxy.Data || mp_state->Galaxy.Matchmaker != mp_state->BaseUrl
+        || mp_state->Galaxy.Version != mp_state->ModVersion)
+    {
+        return nullptr;
+    }
+    return &*mp_state->Galaxy.Data;
 }
 
 void CMatchmaking::CancelQuickMatch()

@@ -26,6 +26,7 @@
 
 
 struct MatchmakingState;
+namespace GalaxyStats { struct Snapshot; }
 
 
 class CMatchmaking final : public NonCopyable
@@ -110,6 +111,14 @@ public:
     /** Expanded lobby preference for Quick Match search (MilanNetConfigBridge) */
     void SetQuickMatchExpandedLobbies(bool ExpandedLobbies) noexcept;
 
+    /** Installed mod version from _metacmm.txt, read once at startup, empty if unreadable. */
+    std::string const& DisplayVersion() const noexcept { return m_displayVersion; }
+
+    /** Starts a Galaxy at War stats fetch when one is due. Returns a revision that changes whenever GalaxySnapshot does. */
+    int RequestGalaxyStats();
+    /** The current GAW data */
+    GalaxyStats::Snapshot const* GalaxySnapshot() const;
+
 private:
 
     void RegisterCommands();
@@ -118,6 +127,7 @@ private:
     MatchmakingState* mp_state{ nullptr };
     UNetConnection* mp_lostHost{ nullptr };  // Server connection already reported as closed.
     bool m_quickMatchExpandedLobbies{ false };  // Classic lobbies only unless the player opts in
+    std::string m_displayVersion{};
 };
 
 static_assert(ComponentType<CMatchmaking>);
