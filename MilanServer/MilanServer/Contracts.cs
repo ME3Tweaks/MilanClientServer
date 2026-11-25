@@ -273,7 +273,8 @@ public sealed record ServerInfo
     // MOTD
     public NoticeText? Notice { get; init; }
     // Clients look at this URL to fetch galaxy stats. This lets you
-    // move galaxy stats off the server and to a CDN or something else
+    // move galaxy stats off the server and to a CDN or something else.
+    // Clients append "/{gameVersion}" to it
     public string? GalaxyStatsUrl { get; init; }
 }
 
@@ -347,7 +348,7 @@ public sealed record StatsTotals
     public long BlockedVersionRequests { get; init; }
 }
 
-// GET /v1/stats/galaxy
+// GET /v1/stats/galaxy/{gameVersion} data for that game version
 public sealed record GalaxyStats
 {
     public required DateTimeOffset GeneratedAt { get; init; }

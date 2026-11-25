@@ -69,8 +69,8 @@ public static class Api
             };
         });
 
-        // Current battleground stats
-        v1.MapGet("/stats/galaxy", (HttpContext http, IOptions<MilanServerOptions> options, MatchmakingStore store, TimeProvider time) =>
+        // Current battleground stats for one game version. Clients append their version to galaxyStatsUrl
+        v1.MapGet("/stats/galaxy/{gameVersion}", (string gameVersion, HttpContext http, IOptions<MilanServerOptions> options, MatchmakingStore store, TimeProvider time) =>
         {
             MilanGalaxyStatsOptions o = options.Value.Stats.Galaxy;
             if (!o.Enabled)
@@ -79,7 +79,12 @@ public static class Api
                 return Error(Failures.StatsUnavailable);
             }
 
-            GalaxyStats stats = store.GetGalaxyStats();
+            if (MatchmakingStore.ValidateGameVersion(gameVersion) is { } versionFailure)
+            {
+                return Error(versionFailure);
+            }
+
+            GalaxyStats stats = store.GetGalaxyStats(gameVersion);
             // Set cache control on this endpoint
             int age = (int)Math.Max(0, (time.GetUtcNow() - stats.GeneratedAt).TotalSeconds);
             http.Response.Headers.CacheControl = $"public, max-age={Math.Max(0, o.CacheSeconds - age)}";
