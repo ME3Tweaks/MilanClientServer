@@ -208,7 +208,7 @@ public sealed class MilanStatsOptions
     public int MaxPresence { get; set; } = 100_000;
     public int MaxPresencePerAddress { get; set; } = 16;
 
-    // GET /v1/stats/galaxy for the lobby's Galaxy at War map
+    // GET /v1/stats/galaxy/{gameVersion} for the lobby's Galaxy at War map
     public MilanGalaxyStatsOptions Galaxy { get; set; } = new();
 }
 
@@ -224,7 +224,8 @@ public sealed class MilanGalaxyStatsOptions
 
     /// <summary>
     /// Advertised in /v1/info instead of the server's /v1/stats/galaxy endpoint, which lets you redirect
-    /// what users use to fetch data. Empty replaces with /v1/stats/galaxy which is the server version
+    /// what users use to fetch data. Empty replaces with /v1/stats/galaxy which is the server version.
+    /// Clients append "/{gameVersion}" to it, so a CDN must serve one file per version
     /// </summary>
     public string Url { get; set; } = "";
 
@@ -391,7 +392,7 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
 
         if (!IsValidGalaxyUrl(galaxy.Url))
         {
-            errors.Add("Stats:Galaxy:Url must be empty, a path starting with '/', or an absolute http(s) URL.");
+            errors.Add("Stats:Galaxy:Url must be empty, a path starting with '/', or an absolute http(s) URL, without a query or fragment.");
         }
         MilanReachabilityOptions reachability = options.Reachability;
         if (reachability.SuspectAfterFailures < 1 || reachability.UnreachableAfterFailures < reachability.SuspectAfterFailures)
@@ -430,7 +431,8 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
             return true;
         }
 
-        if (url.Length > 512 || url.Any(c => c is <= ' ' or >= '\x7F'))
+        // Clients append "/<game version>", so no query or fragment
+        if (url.Length > 512 || url.Any(c => c is <= ' ' or >= '\x7F' or '?' or '#'))
         {
             return false;
         }
