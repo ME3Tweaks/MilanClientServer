@@ -146,7 +146,7 @@ app.UseRateLimiter();
 app.Use(async (http, next) =>
 {
     // Prevent storing capabilities in HTTP caches; stats supplies its own cache policy.
-    if (http.Request.Path.StartsWithSegments("/v1") && http.Request.Path != "/v1/stats")
+    if (http.Request.Path.StartsWithSegments("/v1") && !http.Request.Path.StartsWithSegments("/v1/stats"))
     {
         http.Response.Headers.CacheControl = "no-store";
     }

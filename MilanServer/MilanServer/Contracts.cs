@@ -272,6 +272,9 @@ public sealed record ServerInfo
     public bool? Outdated { get; init; }
     // MOTD
     public NoticeText? Notice { get; init; }
+    // Clients look at this URL to fetch galaxy stats. This lets you
+    // move galaxy stats off the server and to a CDN or something else
+    public string? GalaxyStatsUrl { get; init; }
 }
 
 // Id changes whenever the game should show the message again
@@ -344,6 +347,21 @@ public sealed record StatsTotals
     public long BlockedVersionRequests { get; init; }
 }
 
+// GET /v1/stats/galaxy
+public sealed record GalaxyStats
+{
+    public required DateTimeOffset GeneratedAt { get; init; }
+    public required int RefreshSeconds { get; init; }
+    public required int Players { get; init; }
+    public required IReadOnlyList<GalaxyMapStats> Maps { get; init; }
+    // Null turns the map's tint off
+    public GalaxyTint? Tint { get; init; }
+}
+
+public sealed record GalaxyMapStats(int MapId, int Lobbies, int Players);
+
+public sealed record GalaxyTint(int FullPopulation, double MaxBaseTint);
+
 public sealed record ServerError(string Code, string Message);
 
 // Source-generated JSON metadata: the published server is trimmed, which turns off
@@ -367,6 +385,7 @@ public sealed record ServerError(string Code, string Message);
 [JsonSerializable(typeof(ReservationStatus))]
 [JsonSerializable(typeof(ServerInfo))]
 [JsonSerializable(typeof(ServerStats))]
+[JsonSerializable(typeof(GalaxyStats))]
 [JsonSerializable(typeof(HostLostReport))]
 [JsonSerializable(typeof(MigrationStatus))]
 [JsonSerializable(typeof(ServerError))]

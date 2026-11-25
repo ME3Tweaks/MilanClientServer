@@ -53,6 +53,7 @@ public sealed class MatchmakingStore
     readonly Dictionary<string, int> _presenceBySource = new(StringComparer.Ordinal);
     readonly DateTimeOffset _startedAt;
     ServerStats? _stats;
+    GalaxyStats? _galaxyStats;
     int _peakPlayers;
     int _peakLobbies;
     long _lobbiesCreated;
@@ -1761,6 +1762,64 @@ public sealed class MatchmakingStore
 
             return _stats;
         }
+    }
+
+    /// <summary>
+    /// Gets the galaxy stats if it's stale, otherwise returning cached version
+    /// </summary>
+    /// <returns></returns>
+    public GalaxyStats GetGalaxyStats()
+    {
+        DateTimeOffset now = _time.GetUtcNow();
+        MilanGalaxyStatsOptions options = _options.Stats.Galaxy;
+        lock (_lock)
+        {
+            if (_galaxyStats is null || now - _galaxyStats.GeneratedAt >= TimeSpan.FromSeconds(options.CacheSeconds))
+            {
+                _galaxyStats = BuildGalaxyStatsLocked(now, options);
+            }
+
+            return _galaxyStats;
+        }
+    }
+
+    /// <summary>
+    /// Builds galaxy stats. Must run within a lock so we don't get a race condition
+    /// </summary>
+    /// <param name="now"></param>
+    /// <param name="options"></param>
+    /// <returns></returns>
+    GalaxyStats BuildGalaxyStatsLocked(DateTimeOffset now, MilanGalaxyStatsOptions options)
+    {
+        int players = 0;
+        SortedDictionary<int, (int Lobbies, int Players)> maps = [];
+        foreach (Lobby lobby in _lobbies.Values)
+        {
+            // Ignore removed or expired lobbies
+            if (lobby.Removed || lobby.ExpiresAt <= now)
+            {
+                continue;
+            }
+
+            LobbySnapshot state = lobby.State;
+            players += state.PlayerCount;
+            // Random map doesn't have a zone until match becomes in-progress
+            int mapId = state.ResolvedMapId is > 0 ? state.ResolvedMapId.Value : state.MapId;
+            if (mapId > 0)
+            {
+                (int Lobbies, int Players) count = maps.GetValueOrDefault(mapId);
+                maps[mapId] = (count.Lobbies + 1, count.Players + state.PlayerCount);
+            }
+        }
+
+        return new GalaxyStats
+        {
+            GeneratedAt = now,
+            RefreshSeconds = options.CacheSeconds,
+            Players = players,
+            Maps = maps.Select(m => new GalaxyMapStats(m.Key, m.Value.Lobbies, m.Value.Players)).ToArray(),
+            Tint = options.FullPopulation > 0 ? new GalaxyTint(options.FullPopulation, options.MaxBaseTint) : null,
+        };
     }
 
     ServerStats BuildStatsLocked(DateTimeOffset now)

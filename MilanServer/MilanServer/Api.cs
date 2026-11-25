@@ -9,6 +9,7 @@ public static class Api
     public const string CreatePolicy = "create";
     public const string RedeemPolicy = "redeem";
     public const string AccessKeyHeader = "X-Milan-Access-Key";
+    public const string GalaxyStatsPath = "/v1/stats/galaxy";
 
     /// <summary>
     /// Checks if the milan access key is used by this request and errors out if it is missing
@@ -64,7 +65,25 @@ public static class Api
                 LatestGameVersion = latest,
                 Outdated = outdated,
                 Notice = text,
+                GalaxyStatsUrl = o.Stats.Galaxy.Enabled ? (o.Stats.Galaxy.Url.Length > 0 ? o.Stats.Galaxy.Url : GalaxyStatsPath) : null,
             };
+        });
+
+        // Current battleground stats
+        v1.MapGet("/stats/galaxy", (HttpContext http, IOptions<MilanServerOptions> options, MatchmakingStore store, TimeProvider time) =>
+        {
+            MilanGalaxyStatsOptions o = options.Value.Stats.Galaxy;
+            if (!o.Enabled)
+            {
+                // This endpoint is not enabled
+                return Error(Failures.StatsUnavailable);
+            }
+
+            GalaxyStats stats = store.GetGalaxyStats();
+            // Set cache control on this endpoint
+            int age = (int)Math.Max(0, (time.GetUtcNow() - stats.GeneratedAt).TotalSeconds);
+            http.Response.Headers.CacheControl = $"public, max-age={Math.Max(0, o.CacheSeconds - age)}";
+            return Results.Ok(stats);
         });
 
         // Counts for a dashboard or a "players online" display

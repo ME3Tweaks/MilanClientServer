@@ -207,6 +207,36 @@ public sealed class MilanStatsOptions
     // Reports past either cap are dropped, so the count cannot be inflated without limit.
     public int MaxPresence { get; set; } = 100_000;
     public int MaxPresencePerAddress { get; set; } = 16;
+
+    // GET /v1/stats/galaxy for the lobby's Galaxy at War map
+    public MilanGalaxyStatsOptions Galaxy { get; set; } = new();
+}
+
+// The "Milan:Stats:Galaxy" section of the options file
+public sealed class MilanGalaxyStatsOptions
+{
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// How long between stat updates are recomputed by the server
+    /// </summary>
+    public int CacheSeconds { get; set; } = 120;
+
+    /// <summary>
+    /// Advertised in /v1/info instead of the server's /v1/stats/galaxy endpoint, which lets you redirect
+    /// what users use to fetch data. Empty replaces with /v1/stats/galaxy which is the server version
+    /// </summary>
+    public string Url { get; set; } = "";
+
+    /// <summary>
+    /// Population that changes low population tinting, 0 turns the base tint off
+    /// </summary>
+    public int FullPopulation { get; set; } = 200;
+
+    /// <summary>
+    /// The tint of the low-population color
+    /// </summary>
+    public double MaxBaseTint { get; set; } = 0.4;
 }
 
 public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOptions>
@@ -342,6 +372,27 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
         {
             errors.Add("Stats:MaxPresence and Stats:MaxPresencePerAddress must be at least 1.");
         }
+
+        MilanGalaxyStatsOptions galaxy = stats.Galaxy;
+        if (galaxy.CacheSeconds is < 30 or > 3600)
+        {
+            errors.Add("Stats:Galaxy:CacheSeconds must be between 30 and 3600.");
+        }
+
+        if (galaxy.FullPopulation < 0)
+        {
+            errors.Add("Stats:Galaxy:FullPopulation must not be negative.");
+        }
+
+        if (galaxy.MaxBaseTint is < 0 or > 1 || double.IsNaN(galaxy.MaxBaseTint))
+        {
+            errors.Add("Stats:Galaxy:MaxBaseTint must be between 0 and 1.");
+        }
+
+        if (!IsValidGalaxyUrl(galaxy.Url))
+        {
+            errors.Add("Stats:Galaxy:Url must be empty, a path starting with '/', or an absolute http(s) URL.");
+        }
         MilanReachabilityOptions reachability = options.Reachability;
         if (reachability.SuspectAfterFailures < 1 || reachability.UnreachableAfterFailures < reachability.SuspectAfterFailures)
         {
@@ -370,5 +421,26 @@ public sealed class MilanServerOptionsValidator : IValidateOptions<MilanServerOp
         }
 
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
+    }
+
+    static bool IsValidGalaxyUrl(string url)
+    {
+        if (url.Length == 0)
+        {
+            return true;
+        }
+
+        if (url.Length > 512 || url.Any(c => c is <= ' ' or >= '\x7F'))
+        {
+            return false;
+        }
+
+        if (url.StartsWith('/'))
+        {
+            return !url.StartsWith("//", StringComparison.Ordinal);
+        }
+
+        // URL must match or upgrade the client connection. e.g. https server can't have stats on http
+        return Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) && uri.Host.Length > 0;
     }
 }
